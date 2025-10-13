@@ -5,6 +5,7 @@ library(rmarkdown)
 library(knitr)
 library(dplyr)
 library(glue)
+library(limma)
 
 # Function to generate automated R Markdown report
 # source("report_generator.R"); generate_report('analysis.rds', output_dir = getwd())

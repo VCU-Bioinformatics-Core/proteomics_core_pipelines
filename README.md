@@ -1,3 +1,8 @@
+---
+output:
+  pdf_document: default
+  html_document: default
+---
 # Proteomics Core Analyses
 BISR analyses to process proteomics data to generate standard first-pass deliverables.
 

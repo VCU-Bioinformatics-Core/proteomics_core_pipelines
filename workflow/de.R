@@ -1,9 +1,11 @@
 # Package installation and loading
+# 
+# options(repos = c(CRAN = "https://cran.r-project.org"))
+# 
+# if (!requireNamespace("BiocManager"))
+#     install.packages("BiocManager")
 
-options(repos = c(CRAN = "https://cran.r-project.org"))
-
-if (!requireNamespace("BiocManager"))
-    install.packages("BiocManager")
+library(limma)
 
 if (!require("pacman"))
   install.packages("pacman")
@@ -34,54 +36,57 @@ pacman::p_load(here,
                htmlwidgets
 )
 
-# Define command-line flags.
-option_list = list(
-  make_option(c("-c", "--counts"), type = "character", default = NULL,
-              help = "Required. A path for the merged counts.tsv file"),
-
-  make_option(c("-s", "--samplesheet"), type = "character", default = NULL,
-              help = "Required. A path for the samplesheet.csv file"),
-
-  make_option(c("-o", "--outdir"), type = "character", default = "./output",
-              help = "path for the output directory to store results. \
-                    A new directory will be created with the given path and \
-                    name, otherwise a default directory will be created in \
-                    the current directory: [default= %default]"),
-
-  make_option(c("-r", "--runid"), type = "character", default = NULL,
-              help = "Required. A unique name for this analysis.",
-              metavar = "character"),
-
-  make_option(c("-a", "--annotation"), type = "character", default = "mouse",
-              help = "Specify genome for annotation: 'mouse' or 'human' [default= %default]")
-);
+# # Define command-line flags.
+# option_list = list(
+#   make_option(c("-c", "--counts"), type = "character", default = NULL,
+#               help = "Required. A path for the merged counts.tsv file"),
+# 
+#   make_option(c("-s", "--samplesheet"), type = "character", default = NULL,
+#               help = "Required. A path for the samplesheet.csv file"),
+# 
+#   make_option(c("-o", "--outdir"), type = "character", default = "./output",
+#               help = "path for the output directory to store results. \
+#                     A new directory will be created with the given path and \
+#                     name, otherwise a default directory will be created in \
+#                     the current directory: [default= %default]"),
+# 
+#   make_option(c("-r", "--runid"), type = "character", default = NULL,
+#               help = "Required. A unique name for this analysis.",
+#               metavar = "character"),
+# 
+#   make_option(c("-a", "--annotation"), type = "character", default = "mouse",
+#               help = "Specify genome for annotation: 'mouse' or 'human' [default= %default]")
+# );
 
 # Parse the arguments
-opt_parser = OptionParser(option_list=option_list);
-opt = parse_args(opt_parser);
-runID <- opt$runid
-countData <- opt$counts
-samplesheetData <- opt$samplesheet
-outDir <- opt$outdir
-annotation <- opt$annotation
+# opt_parser = OptionParser(option_list=option_list);
+# opt = parse_args(opt_parser);
+# runID <- opt$runid
+# countData <- opt$counts
+# samplesheetData <- opt$samplesheet
+# outDir <- opt$outdir
+# annotation <- opt$annotation
+
+
+
 
 # Implementing all hard-coded files here for debugging.
 #### Debug Options
-debug <- FALSE
+debug <- TRUE
 if (debug){
-  runID <- "test_run"
-  countData <- "./rsem.merged.gene_counts.tsv"
-  samplesheetData <- "./samplesheet.csv"
-  outDir <- "./test_output"
-  annotation <- "mouse" # or "human"
+  runID <- 'Test'
+  countData <- '/global/projects/proteomics_core/analyst_workspace/pipeline_test_data/raw/20251001_U266_UT_VS_S+B_LFQ_Report.csv'
+  samplesheetData <- '/global/projects/proteomics_core/analyst_workspace/pipeline_test_data/raw/20251001_U266_UT_VS_S+B_LFQ_Report.samplesheet.csv'
+  outDir <- '/global/projects/proteomics_core/analyst_workspace/pipeline_test_data/analysis/'
+  annotation <- 'human'
 }
 
 # Load appropriate annotation package based on annotation selection
-if (opt$annotation == "human") {
+if (annotation == "human") {
   if (!require("org.Hs.eg.db"))
     BiocManager::install("org.Hs.eg.db")
   annotation_db <- org.Hs.eg.db
-} else if (opt$annotation == "mouse") {
+} else if (annotation == "mouse") {
   if (!require("org.Mm.eg.db"))
     BiocManager::install("org.Mm.eg.db")
   annotation_db <- org.Mm.eg.db
@@ -153,6 +158,56 @@ export_plotly_to_html <- function(plotly_obj, file_path) {
 
 
 # ANALYSIS FUNCTIONS
+#' @description Perform differential expression analysis using limma
+#'
+#' @param df dataframe setup for analysis
+#' @param col 
+#' @param exp Experimental group name
+#' @param ctrl Control group name
+#' @return Data frame containing DESeq2 results
+#' @details This function performs differential expression analysis between two groups
+#' using DESeq2. It includes error checking for group existence and proper re-leveling
+#' of the condition factor.
+#' @export
+perform_limma_analysis <- function(dds, exp, ctrl) {
+  tryCatch({
+    print(paste("Performing DESeq2 analysis for", exp, "vs", ctrl))
+    print("Current condition levels:")
+    print(levels(dds$condition))
+    
+    # Verify groups exist in the data
+    if(!(exp %in% levels(dds$condition))) {
+      stop(paste("Experimental group", exp, "not found in condition levels"))
+    }
+    if(!(ctrl %in% levels(dds$condition))) {
+      stop(paste("Control group", ctrl, "not found in condition levels"))
+    }
+    
+    # Make sure the reference level is set correctly
+    dds$condition <- relevel(dds$condition, ref = ctrl)
+    
+    # Run DESeq
+    print("Running DESeq...")
+    dds <- DESeq(dds)
+    
+    # Get results
+    print("Getting results...")
+    res <- results(dds, contrast = c("condition", exp, ctrl),
+                   cooksCutoff = TRUE, independentFiltering = FALSE)
+    
+    print(paste("Analysis complete. Number of results:", nrow(res)))
+    return(as.data.frame(res))
+  }, error = function(e) {
+    print(paste("Error in DESeq2 analysis:", e$message))
+    stop(e)
+  })
+}
+
+
+
+
+
+
 
 #' @description Perform differential expression analysis using DESeq2
 #'
@@ -404,6 +459,10 @@ create_dotplot <- function(gse, title) {
 #' - GSEA analysis and visualization
 #' @export
 run_analysis <- function(comparison, dds, normalized_counts, out_dirs) {
+  
+  
+  
+  
   tryCatch({
     print(paste("\nStarting analysis for comparison:", comparison$name))
     print(paste("Experimental group:", comparison$exp))
@@ -527,88 +586,115 @@ cat("annotation:", annotation, "\n")
 out_dirs <- setup_directories(outDir)
 
 # Read in raw merged counts, samplesheet
-counts <- data.frame(read_tsv(countData, col_names = TRUE), row.names = 1) %>% 
-  # attempting to re-write this line to only read in numeric columns, and the *first* column
-  dplyr::select(where(is.numeric)) 
-  
-# select only numeric columns
-rownames(counts) <- rownames(counts) %>% str_remove("\\..*")
+counts <- data.frame(read_csv(countData, col_names = TRUE)) # %>% 
+expr <- counts[, 5:10]
+expr <- as.matrix(expr)
+mode(expr) <- "numeric"
+rownames(expr) <- counts$PG.Genes  # or PG.ProteinGroups if you prefer
 
-contrasts_raw <- read.delim(samplesheetData, sep = ",", header = TRUE,
-                            stringsAsFactors = FALSE)
+#  design
+group <- factor(c(rep("B", 3), rep("UT", 3)))
+design <- model.matrix(~ 0 + group)
+colnames(design) <- levels(group)
 
-# Get all contrast columns (columns after GroupID)
-contrast_cols <- colnames(contrasts_raw)[3:ncol(contrasts_raw)]
-print("Contrast columns found:")
-print(contrast_cols)
+# run the linear model and get results
+fit <- lmFit(expr, design)
+contrast.matrix <- makeContrasts(B_vs_UT = B - UT, levels = design)
+fit2 <- contrasts.fit(fit, contrast.matrix)
+fit2 <- eBayes(fit2)
+dds <- topTable(fit2, coef = "B_vs_UT", number = Inf, adjust.method = "BH")
+head(dds)
+view(dds)
 
-# Create the comparisons list
-comparisons <- list()
-for(i in seq_along(contrast_cols)) {
-  contrast_name <- contrast_cols[i]
-  contrast_data <- contrasts_raw[[contrast_name]]
 
-  print(paste("\nProcessing contrast:", contrast_name))
-  print("Contrast data:")
-  print(table(contrast_data, useNA="ifany"))
 
-  # Find unique groups for exp (1) and ctrl (0)
-  exp_group <- unique(contrasts_raw$GroupID[contrast_data == 1 &
-                                              !is.na(contrast_data)])
-  ctrl_group <- unique(contrasts_raw$GroupID[contrast_data == 0 &
-                                               !is.na(contrast_data)])
 
-  print(paste("exp_group found:", paste(exp_group, collapse = ", ")))
-  print(paste("ctrl_group found:", paste(ctrl_group, collapse = ", ")))
 
-  # Add to comparisons list if both exp and ctrl are found
-  if (length(exp_group) > 0 && length(ctrl_group) > 0) {
-    comparisons[[length(comparisons) + 1]] <- list(
-      name = contrast_name,
-      exp = exp_group,
-      ctrl = ctrl_group
-    )
-  }
-}
 
-# Print the results to verify
-print("\nFinal comparisons list:")
-str(comparisons)
 
-# clean counts to make sure the columns are just samples
-countsdf <- counts %>%
-  mutate(across(where(is.numeric), ~ as.integer(round(.))))
 
-# NORMALIZE DATA
-x <- DGEList(counts = countsdf)
-dge <- calcNormFactors(x, method = "TMM")
-tmm <- cpm(dge)
-write.csv(tmm, str_c(out_dirs$de_data, "normalizedCounts_tmm",
-                     Sys.Date(), ".csv"))
 
-# DESEQ2 SETUP
-sample_info <- data.frame(sample = contrasts_raw$SampleID,
-                          condition = contrasts_raw$GroupID)
 
-dds <- DESeqDataSetFromMatrix(
-  countData = countsdf,
-  colData = sample_info,
-  design = ~ condition
-)
 
-# Pre-filtering
-smallestGroupSize <- 3
-keep <- rowSums(counts(dds) >= 10) >= smallestGroupSize
-dds <- dds[keep, ]
+# 
+# contrasts_raw <- read.delim(samplesheetData, sep = ",", header = TRUE,
+#                             stringsAsFactors = FALSE)
+# 
+# # Get all contrast columns (columns after GroupID)
+# contrast_cols <- colnames(contrasts_raw)[3:ncol(contrasts_raw)]
+# print("Contrast columns found:")
+# print(contrast_cols)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# # Create the comparisons list
+# comparisons <- list()
+# for(i in seq_along(contrast_cols)) {
+#   contrast_name <- contrast_cols[i]
+#   contrast_data <- contrasts_raw[[contrast_name]]
+#   
+#   print(paste("\nProcessing contrast:", contrast_name))
+#   print("Contrast data:")
+#   print(table(contrast_data, useNA="ifany"))
+#   
+#   # Find unique groups for exp (1) and ctrl (0)
+#   exp_group <- unique(contrasts_raw$GroupID[contrast_data == 1 &
+#                                               !is.na(contrast_data)])
+#   ctrl_group <- unique(contrasts_raw$GroupID[contrast_data == 0 &
+#                                                !is.na(contrast_data)])
+#   
+#   print(paste("exp_group found:", paste(exp_group, collapse = ", ")))
+#   print(paste("ctrl_group found:", paste(ctrl_group, collapse = ", ")))
+#   
+#   # Add to comparisons list if both exp and ctrl are found
+#   if (length(exp_group) > 0 && length(ctrl_group) > 0) {
+#     comparisons[[length(comparisons) + 1]] <- list(
+#       name = contrast_name,
+#       exp = exp_group,
+#       ctrl = ctrl_group
+#     )
+#   }
+# }
+
+
+
+
+
 
 # Run analysis for all comparisons
 #results <- map(comparisons, ~run_analysis(., dds, tmm, out_dirs))
-print("Verifying DDS setup...")
-print("Condition levels in DDS:")
-print(levels(dds$condition))
+# print("Verifying DDS setup...")
+# print("Condition levels in DDS:")
+# print(levels(dds$condition))
 
-print("\nVerifying comparisons:")
-str(comparisons)
+# print("\nVerifying comparisons:")
+# str(comparisons)
+comparisons <- list()
+contrast_name <- 'Condition'
+exp_group <- 'B'
+ctrl_group <- 'UT'
+comparisons[[1]] <- list(
+  name = contrast_name,
+  exp = exp_group,
+  ctrl = ctrl_group
+)
+
+
+
 
 results <- list()
 for (i in seq_along(comparisons)) {
