@@ -8,8 +8,8 @@ library(glue)
 library(limma)
 
 # Function to generate automated R Markdown report
-# source("report_generator.R"); generate_report('analysis.rds', output_dir = getwd())
-generate_report <- function(analysis_results_path, output_dir = "./", report_prefix = "rnaseq_analysis", analyst="Mikail Bala") {
+# source("report_generator.R"); generate_report('analysis.rds', output_dir = getwd()) # test below
+generate_report <- function(analysis_results_path, output_dir = "./", report_prefix = "proteomics_analysis", analyst="Joaquin Reyna") {
   
   # Validate inputs
   if (!file.exists(analysis_results_path)) {
@@ -23,7 +23,8 @@ generate_report <- function(analysis_results_path, output_dir = "./", report_pre
   
   # Generate unique filename with timestamp
   timestamp <- format(Sys.time(), "%Y%m%d_%H%M%S")
-  output_file <- file.path(output_dir, paste0(report_prefix, "_", timestamp, ".html"))
+  #output_file <- file.path(output_dir, paste0(report_prefix, "_", timestamp, ".html"))
+  output_file <- file.path(output_dir, glue("{report_prefix}.html"))
   
   # Load results
   rds_data <- readRDS(analysis_results_path)
@@ -33,16 +34,16 @@ generate_report <- function(analysis_results_path, output_dir = "./", report_pre
   comparisons <- rds_data[[2]]
   out_dirs <- rds_data[[3]]
   pca_plot <- rds_data[[4]]
-  pca_plotly <- rds_data[[5]]
-  pca_3d <- rds_data[[6]]
-  annotation <- rds_data[[7]]
+  #pca_plotly <- rds_data[[5]]
+  #pca_3d <- rds_data[[6]]
+  #annotation <- rds_data[[7]]
   
   # calculate the current date
   date <- format(Sys.time(), "%B %d, %Y")
   
   # Create R Markdown template (beginning section)
   rmd_content <- glue('---
-title: "RNA-Seq Differential Expression Analysis Report"
+title: "Proteomics Differential Abundance Analysis Report"
 author: "Bioinformatics Shared Resources at VCU"
 date: "{date}"
 output: 
@@ -70,9 +71,9 @@ results <- rds_data[[1]]
 comparisons <- rds_data[[2]]
 out_dirs <- rds_data[[3]]
 pca_plot <- rds_data[[4]]
-pca_plotly <- rds_data[[5]]
-pca_3d <- rds_data[[6]]
-annotation <- rds_data[[7]]
+#pca_plotly <- rds_data[[5]]
+#pca_3d <- rds_data[[6]]
+#annotation <- rds_data[[7]]
 ```
 
 ## Overview
@@ -152,13 +153,13 @@ summary_table <- data.frame(
 
 for (i in seq_along(comparisons)) {{
   if (!is.null(results[[i]])) {{
-    res_df <- results[[i]]$deseq
+    res_df <- results[[i]]$limma
     
     # Count DEGs (padj < 0.05 & |log2FC| >= 0.58)
     if (!is.null(res_df)) {{
-      total_degs <- sum(!is.na(res_df$padj) & res_df$padj < 0.05 & abs(res_df$log2FoldChange) >= 0.58)
-      up_degs <- sum(!is.na(res_df$padj) & res_df$padj < 0.05 & res_df$log2FoldChange >= 0.58)
-      down_degs <- sum(!is.na(res_df$padj) & res_df$padj < 0.05 & res_df$log2FoldChange <= -0.58)
+      total_degs <- sum(!is.na(res_df$adj.P.Val) & res_df$adj.P.Val < 0.05 & abs(res_df$logFC) >= 0.58)
+      up_degs <- sum(!is.na(res_df$adj.P.Val) & res_df$adj.P.Val < 0.05 & res_df$logFC >= 0.58)
+      down_degs <- sum(!is.na(res_df$adj.P.Val) & res_df$adj.P.Val < 0.05 & res_df$logFC <= -0.58)
       
       gsea_status <- ifelse(!is.null(results[[i]]$gsea), "Yes", "No")
       
@@ -271,20 +272,20 @@ and adjusted pvalues (**padj**).
 # Display top DEGs table
 
 deg_flags = c(0,0)
-if (!is.null(results[[{i}]]) && !is.null(results[[{i}]]$deseq)) {{
-  top_up <- results[[{i}]]$deseq %>%
-    filter(!is.na(padj) & padj < 0.05 & log2FoldChange >= 0.58) %>%
-    mutate(log2FoldChange = round(log2FoldChange, 2),
-           pvalue = formatC(pvalue, format = "e", digits = 2),
-           padj = formatC(padj, format = "e", digits = 2)) %>%
+if (!is.null(results[[{i}]]) && !is.null(results[[{i}]]$limma)) {{
+  top_up <- results[[{i}]]$limma %>%
+    filter(!is.na(adj.P.Val) & adj.P.Val < 0.05 & logFC >= 0.58) %>%
+    mutate(logFC = round(logFC, 2),
+           pvalue = formatC(P.Value, format = "e", digits = 2),
+           padj = formatC(adj.P.Val, format = "e", digits = 2)) %>%
     arrange(padj) %>%
     head(20)
   
-  top_down <- results[[{i}]]$deseq %>%
-    filter(!is.na(padj) & padj < 0.05 & log2FoldChange <= -0.58) %>%
-    mutate(log2FoldChange = round(log2FoldChange, 2),
-           pvalue = formatC(pvalue, format = "e", digits = 2),
-           padj = formatC(padj, format = "e", digits = 2)) %>%
+  top_down <- results[[{i}]]$limma %>%
+    filter(!is.na(adj.P.Val) & adj.P.Val < 0.05 & logFC <= -0.58) %>%
+    mutate(logFC = round(logFC, 2),
+           pvalue = formatC(P.Value, format = "e", digits = 2),
+           padj = formatC(adj.P.Val, format = "e", digits = 2)) %>%
     arrange(padj) %>%
     head(20)
   
@@ -309,10 +310,13 @@ if (sum(deg_flags) == 0) {{
 ```{{r top-up-degs-{i} }}
 
 if (deg_flags[1] > 0){{
-    DT::datatable(top_up %>% select(ENSEMBL_ID, SYMBOL, log2FoldChange, pvalue, padj, GENENAME),
+    #DT::datatable(top_up %>% select(ENSEMBL_ID, SYMBOL, log2FoldChange, pvalue, padj, GENENAME),
+    #           caption = "Top Up Regulated Genes")
+    
+    DT::datatable(top_up %>% dplyr::select(ensembl_gene_id, uniprotswissprot, logFC, pvalue, padj, uniprotswissprot),
                caption = "Top Up Regulated Genes")
 }} else {{
-  cat("No upregulated genes found\\n\\n")
+  cat("No up regulated genes found\\n\\n")
 }}
   
 ```
@@ -320,10 +324,14 @@ if (deg_flags[1] > 0){{
 ```{{r top-down-degs-{i} }}
 
 if (deg_flags[2] > 0){{
-  DT::datatable(top_down %>% select(ENSEMBL_ID, SYMBOL, log2FoldChange, pvalue, padj, GENENAME),
-               caption = "Top Down Regulated Genes")
+  # DT::datatable(top_down %>% select(ENSEMBL_ID, SYMBOL, log2FoldChange, pvalue, padj, GENENAME),
+  #             caption = "Top Down Regulated Genes")
+  
+  DT::datatable(top_down %>% dplyr::select(ensembl_gene_id, uniprotswissprot, logFC, pvalue, padj, uniprotswissprot),
+                caption = "Top Down Regulated Genes")
+  
 }} else {{
-  cat("No upregulated genes found\\n\\n")
+  cat("No down regulated genes found\\n\\n")
 }}
   
 ```
@@ -358,7 +366,7 @@ if (!is.null(results[[{i}]]) && !is.null(results[[{i}]]$gsea)) {{
              qvalue=formatC(qvalue, format="e", digits=2))
   if (nrow(gsea_results) > 0) {{
     DT::datatable(gsea_results %>%
-                 select(ID, Description, setSize, enrichmentScore, NES, pvalue, p.adjust, qvalue) %>%
+                 dplyr::select(ID, Description, setSize, enrichmentScore, NES, pvalue, p.adjust, qvalue) %>%
                  head(20),
                  caption = "Top enriched gene sets")
   }} else {{
@@ -425,9 +433,10 @@ Please include the following statements in your acknowledgements manuscript sect
 '
   rmd_content <- paste0(rmd_content, extra_content)
   
-
   # Write the R Markdown file
-  fn <- glue('{report_prefix}_{timestamp}.Rmd')
+  #fn <- glue('{report_prefix}_{timestamp}.Rmd')
+  fn <- glue('{report_prefix}.Rmd')
+  
   rmd_file <- file.path(output_dir, fn)
   writeLines(rmd_content, rmd_file)
   
@@ -436,4 +445,11 @@ Please include the following statements in your acknowledgements manuscript sect
   
   # Return the path to the generated report
   return(output_file)
+}
+
+debug = TRUE
+if (debug == TRUE){
+  rds_fn = '/global/projects/proteomics_core/analyst_workspace/pipeline_test_data/analyses/data/analysis_results.rds'
+  output_dir = '/global/home/reynaj/Projects/proteomics_core/analyst_workspace/pipeline_test_data/analyses/data/'
+  generate_report(rds_fn, output_dir = output_dir)
 }
