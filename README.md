@@ -1,10 +1,10 @@
 # Proteomics Core Analyses
 Process proteomics data to generate standard first-pass deliverables.
 
-## Differential Expression Analysis
+## Differential abundance Analysis
 
 ### Introduction
-This is a bioinformatics pipeline that performs differential gene expression analysis of proteomics intensity values. It is designed to provide a streamlined, reproducible workflow for identifying proteins with statistically significant abundance differences between experimental conditions. It incorporates best-practice recommendations for proteomics data analysis, including normalization, dispersion estimation, and hypothesis testing. A comprehensive report with key visualizations for each specified comparison is automatically generated.
+This is a bioinformatics pipeline that performs differential protein abundance analysis of proteomics intensity values. It is designed to provide a streamlined, reproducible workflow for identifying proteins with statistically significant abundance differences between experimental conditions. It incorporates best-practice recommendations for proteomics data analysis, including normalization, dispersion estimation, and hypothesis testing. A comprehensive report with key visualizations for each specified comparison is automatically generated.
 
 ### Table of Contents
 - [Pipeline](#pipeline)
@@ -42,7 +42,7 @@ This is a bioinformatics pipeline that performs differential gene expression ana
 
 1. The input Samplesheet is parsed to generate contrasts definitions in the form of a comparisons list.
 2. Runs differential analysis over all contrasts specified using [DESeq2 R package 1.44.0](https://doi.org/10.1186/s13059-014-0550-8).
-3. Annotates genes in limma results dataframe. 
+3. Annotates proteins in limma results dataframe. 
 4. Optionally runs [Gene Set Enrichment Analysis (Gene Ontology)](https://www.gsea-msigdb.org/gsea/index.jsp).
 5. Generates exploratory and differential analysis plots.
 6. Automatically builds an HTML report based on R markdown, with plots and tables.
@@ -78,11 +78,11 @@ Two input files are required in specific formats: the **Raw Merged Count Matrix*
 
 ##### 1. Raw Merged Count Matrix
 **Required format:** Tab-Separated Values (`.tsv`)
-This file contains the gene ids and raw merged gene expression counts. The columns must be organized as follows:
-- **gene_id:** The first column must contain gene identifiers.
-- **Subsequent Columns:** All subsequent columns should contain the raw count data for each sample. The `header` values for these sample columns must match the sample identifiers (`SampleID`) used in the samplesheet. The pipeline expects integer counts, as is typical for RNA-seq data. While the script has the functionality to automatically parse and handle count data from various quantification tools, the users are still responsible for removing any additional columns besides the gene IDs and sample counts. It currently works best with the merged counts output from pipelines like [`nf-core's rnaseq Nextflow pipeline`](https://nf-co.re/rnaseq).
+This file contains the protein ids and raw merged protein levels. The columns must be organized as follows:
+- **protein_id:** The first column must contain protein identifiers.
+- **Subsequent Columns:** All subsequent columns should contain the raw count data for each sample. The `header` values for these sample columns must match the sample identifiers (`SampleID`) used in the samplesheet. The pipeline expects integer counts, as is typical for RNA-seq data. While the script has the functionality to automatically parse and handle count data from various quantification tools, the users are still responsible for removing any additional columns besides the protein IDs and sample counts. It currently works best with the merged counts output from pipelines like [`nf-core's rnaseq Nextflow pipeline`](https://nf-co.re/rnaseq).
 
-| gene_id            | sample1_r1 | sample1_r2 | sample1_r3 | sample2_r1 | sample2_r2 | sample2_r3 | sample3_r1 | sample3_r2 | sample3_r3 | sample4_r1 | sample4_r2 | sample4_r3 |
+| protein_id            | sample1_r1 | sample1_r2 | sample1_r3 | sample2_r1 | sample2_r2 | sample2_r3 | sample3_r1 | sample3_r2 | sample3_r3 | sample4_r1 | sample4_r2 | sample4_r3 |
 | ------------------ | ---------- | ---------- | ---------- | ---------- | ---------- | ---------- | ---------- | ---------- | ---------- | ---------- | ---------- | ---------- |
 | ENSMUSG00000000001 | 1234 | 2345 | 3456 | 4567 | 5678 | 6789 | 2345 | 3456 | 4567 | 5678 | 3456 | 4567 |
 | ENSMUSG00000000002 | 1234 | 2345 | 3456 | 4567 | 5678 | 6789 | 2345 | 3456 | 4567 | 5678 | 3456 | 4567 |
@@ -187,9 +187,9 @@ The pipeline generates an output directory (specified by `--outdir`) containing 
 This directory contains analysis output organized into subdirectories for DE and GSE-GO Analysis results.
 
 ##### de_data
-DESeq_[comparison].csv: Contains the differential expression results from DESeq2 for each specified comparison. The columns include:
+DESeq_[comparison].csv: Contains the differential abundance results from DESeq2 for each specified comparison. The columns include:
 
-| Gene ID      | baseMean  | log2FoldChange | lfcSE   | stat      | pvalue   | padj     |
+| protein ID      | baseMean  | log2FoldChange | lfcSE   | stat      | pvalue   | padj     |
 |--------------|-----------|----------------|---------|-----------|----------|----------|
 | ENSG001  | 95.28865  | 0.00399148     | 0.225010| 0.0177391 | 0.9858470| 0.996699 |
 | ENSG002  | 4359.09632| -0.23842494    | 0.127094| -1.8759764| 0.0606585| 0.289604 |
@@ -198,18 +198,18 @@ DESeq_[comparison].csv: Contains the differential expression results from DESeq2
 | ENSG00N  | 4863.807  | 0.0179729      | 0.194137| 0.0925784 | 0.9262385| 0.986726 |
 
 Where:
-- `gene_id`:  The unique gene identifier.
-- `baseMean`: The average normalized expression count for the gene across all samples.
-- `log2FoldChange`: The log2 of the fold change in expression between the two groups being compared.  A positive value indicates higher expression in the experimental group, while a negative value indicates higher expression in the control group.
+- `protein_id`:  The unique protein identifier.
+- `baseMean`: The average normalized intensity for the protein across all samples.
+- `log2FoldChange`: The log2 of the fold change in intensity between the two groups being compared.  A positive value indicates higher intensity in the experimental group, while a negative value indicates higher intensity in the control group.
 - `lfcSE`: The standard error of the log2 fold change estimate.
-- `stat`: The Wald statistic used for testing the null hypothesis of no differential expression.
+- `stat`: The Wald statistic used for testing the null hypothesis of no differential abundance.
 - `pvalue`: The raw p-value associated with the Wald statistic.
 - `padj`: The Benjamini-Hochberg adjusted p-value, which corrects for multiple testing.
 
 ##### Normalized Counts:
 Contains the read counts normalized using the Trimmed Mean of M-values (TMM) method. TMM normalization is performed using the edgeR package (Robinson et al., 2010) to account for differences in library size and RNA composition between samples. The date is appended to the filename for version control. These counts are used to produce the heatmap visualizations for each comparison.
 
-| gene_id            | sample1_r1 | sample1_r2 | sample1_r3 | sample2_r1 | sample2_r2 | sample2_r3 | sample3_r1 | sample3_r2 | sample3_r3 | sample4_r1 | sample4_r2 | sample4_r3 |
+| protein_id            | sample1_r1 | sample1_r2 | sample1_r3 | sample2_r1 | sample2_r2 | sample2_r3 | sample3_r1 | sample3_r2 | sample3_r3 | sample4_r1 | sample4_r2 | sample4_r3 |
 | ------------------ | ---------- | ---------- | ---------- | ---------- | ---------- | ---------- | ---------- | ---------- | ---------- | ---------- | ---------- | ---------- |
 | ENSMUSG00000000001 | 233.57 | 235.04 | 235.99 | 234.16 | 234.168 | 235.62 | 185.51 | 187.64 | 4567 | 5678 | 3456 | 4567 |
 | ENSMUSG00000000002 | 0 | 0.13 | 0.19 | 0 | 0.15 | 0.17 | 0 | 0. | 0.10 | 0.13 | 0 | 0.05 |
@@ -219,7 +219,7 @@ Contains the read counts normalized using the Trimmed Mean of M-values (TMM) met
   
 
 ##### gsea_data
-**GO_Analysis_[comparison].csv:** Contains the results of the Gene Set Enrichment Analysis (GSEA) using Gene Ontology (GO) terms for each comparison. GSEA is performed using a suitable R package (e.g., clusterProfiler) to identify enriched GO terms among the differentially expressed genes. This analysis is skipped for a comparison if the Gene Set identified doesnot have enough genes. 
+**GO_Analysis_[comparison].csv:** Contains the results of the Gene Set Enrichment Analysis (GSEA) using Gene Ontology (GO) terms for each comparison. GSEA is performed using a suitable R package (e.g., clusterProfiler) to identify enriched GO terms among the differentially expressed proteins. This analysis is skipped for a comparison if the Gene Set identified doesnot have enough proteins. 
 
 |       | ONTOLOGY | ID | Description | setSize | enrichmentScore | NES | pvalue | p.adjust | qvalue | rank | leading_edge | core_enrichment |
 | ----- | ---- | ----- | ---- | ----- | ---- | ----- | ---- | ----- | ---- | ----- | ---- | ----- |
@@ -231,11 +231,11 @@ Contains the read counts normalized using the Trimmed Mean of M-values (TMM) met
 This directory contains various visualizations generated for each comparison.
 
 ##### Volcano
-**[comparison]volcano.png:** A volcano plot displaying the log2 fold change against the negative logarithm (base 10) of the adjusted p-value for each gene in the differential expression results. This plot allows for a quick visual assessment of both the magnitude of differential expression and its statistical significance. Genes with large log2 fold changes and low adjusted p-values (i.e., in the upper corners of the plot) are considered as the most interesting candidates.
+**[comparison]volcano.png:** A volcano plot displaying the log2 fold change against the negative logarithm (base 10) of the adjusted p-value for each protein in the differential abundance results. This plot allows for a quick visual assessment of both the magnitude of differential abundance and its statistical significance. Proteins with large log2 fold changes and low adjusted p-values (i.e., in the upper corners of the plot) are considered as the most interesting candidates.
 <img src="https://github.com/user-attachments/assets/d836815e-2ce3-498a-886e-cf8aaa2321e0" alt="volcano.png" width="71%">
 
 ##### Heatmap
-**[comparison]heatmap.png:** A heatmap visualizing the expression patterns of the top differentially expressed genes (based on adjusted p-value) across samples. The expression values are typically represented as Z-scores, which normalize the expression of each gene across samples to have a mean of 0 and a standard deviation of 1. This helps to visualize relative expression differences for each gene. The heatmap provides a visual overview of how gene expression varies across different experimental conditions. Heatmaps use the Normalized TMM count data.
+**[comparison]heatmap.png:** A heatmap visualizing the intensity patterns of the top differentially expressed proteins (based on adjusted p-value) across samples. The intensity values are typically represented as Z-scores, which normalize the intensity of each protein across samples to have a mean of 0 and a standard deviation of 1. This helps to visualize relative intensity differences for each protein. The heatmap provides a visual overview of how protein intensity varies across different experimental conditions. Heatmaps use the Normalized TMM count data.
 <img src="https://github.com/user-attachments/assets/ca974706-7d28-4647-95dd-3ecfb59a93db" alt="heatmap.png" width="71%">
 
 ##### GSEA
@@ -243,7 +243,7 @@ This directory contains various visualizations generated for each comparison.
 <img src="https://github.com/user-attachments/assets/e8128497-2ef7-4d48-9ca3-249a50b25eef" alt="exp_vs_cntrl_GSEA" width="71%">
 
 ##### PCA
-**PCA Plots:** Principal Component Analysis (PCA) plots showing the relationships between samples based on their gene expression profiles. PCA is used to reduce the dimensionality of the data and visualize the primary sources of variation in gene expression. The pipeline generates:
+**PCA Plots:** Principal Component Analysis (PCA) plots showing the relationships between samples based on their protein intensity profiles. PCA is used to reduce the dimensionality of the data and visualize the primary sources of variation in protein intensity. The pipeline generates:
 
 - A static 2D plot
 <img src="https://github.com/user-attachments/assets/617de511-83a2-4b75-8085-65d084119e43" alt="pca.jpg" width="71%">
@@ -264,13 +264,13 @@ These plots help to assess the overall quality of the data, identify potential o
 
 ### Limitations
 - This pipeline currently supports only pairwise comparisons. Support for more complex designs with multiple comparisons with covariates and contrast matrices will be added in future versions. This is a limitation for experiments with more than two conditions.
-- The pipeline works best with merged count matrices generated from pipelines like [`nf-core's rnaseq Nextflow pipeline`](https://nf-co.re/rnaseq). While the script is being developed to handle count data from any source, users may need to pre-format their count matrices accordingly. Specifically, the matrix should have a `gene_id` column, with subsequent columns containing raw counts for each sample.
+- The pipeline works best with merged count matrices generated from pipelines like [`nf-core's rnaseq Nextflow pipeline`](https://nf-co.re/rnaseq). While the script is being developed to handle count data from any source, users may need to pre-format their count matrices accordingly. Specifically, the matrix should have a `protein_id` column, with subsequent columns containing raw counts for each sample.
 
 
 ### Utilizing IPA
 
-The CSV Differential Expression output from DESeq2 (available in the results directory
-provided alongside this report *./output/de_data/DESeq2_[comparison_name].csv*), can be
+The CSV Differential Abundance output from limma (available in the results directory
+provided alongside this report *./output/de_data/limma_[comparison_name].csv*), can be
 uploaded directly into **QIAGEN Ingenuity Pathway Analysis (IPA)** for self-exploration of
 pathways predicted to be enriched by this experimental condition. Massey’s BISR provides
 access to VCU’s license of IPA. If you do not already have an account associated with this
@@ -286,8 +286,9 @@ Videos” the **Qiagen Digital Insights Youtube** page.
 ### Manuscript-Ready Text
 
 #### Methods
-Raw RNA-Seq fastq files were processed by the VCU Massey Comprehensive Cancer Center Bioinformatics Shared Resource (BISR) using the NextFlow nf-core/rnaseq v3.18.0 pipeline [1]. Briefly, this pipeline assesses sequencing quality using FastQC v 0.12.1 [2] before and after trimming, performs adaptor trimming with Trim Galore! v0.6.10 [3], and aligns sequencing reads to the GRCh38 human primary assembly reference genome using STAR v 2.7.11b [4] with transcriptome quantification by Salmon v1.10.3 [5].  Pipeline output includes gene expression raw count data and a comprehensive QC report compiled by MultiQC v1.25.1 [6].
-Differential expression analysis was performed using DESeq2 v 1.44.0 [7]. Lowly expressed genes were filtered out per DESeq2 methods [7] prior to normalization and differential expression testing. Significance was calculated using the Wald-test and adjusted using Benjamini Hochberg False Discovery Rate (FDR). Volcano plots and heatmaps were generated using the EdgeR TMM normalized count data and visualized using R packages. Significant differentially expressed genes (DEGs) are defined as those with an FDR<0.05 and absolute fold-change of 1.5 (log2 fold-change = 0.58) or greater. Gene Set Enrichment Analysis (GSEA) [8] for Gene Ontology terms (GO) was performed using the clusterProfiler package [9] across all genes, regardless of significance. All computational analyses were performed on VCU’s High Performance Research Computing cluster.
+Raw RNA-Seq fastq files were processed by the VCU Massey Comprehensive Cancer Center Bioinformatics Shared Resource (BISR) using the NextFlow nf-core/rnaseq v3.18.0 pipeline [1]. Briefly, this pipeline assesses sequencing quality using FastQC v 0.12.1 [2] before and after trimming, performs adaptor trimming with Trim Galore! v0.6.10 [3], and aligns sequencing reads to the GRCh38 human primary assembly reference genome using STAR v 2.7.11b [4] with transcriptome quantification by Salmon v1.10.3 [5].  Pipeline output includes protein intensity data.
+
+Differential abundance analysis was performed using limma [7]. Lowly expressed proteins were filtered out per limma methods [7] prior to normalization and differential abundance testing. Significance was calculated using the Wald-test and adjusted using Benjamini Hochberg False Discovery Rate (FDR). Volcano plots and heatmaps were generated using the EdgeR TMM normalized count data and visualized using R packages. Significant differentially expressed proteins (DEGs) are defined as those with an FDR<0.05 and absolute fold-change of 1.5 (log2 fold-change = 0.58) or greater. Gene Set Enrichment Analysis (GSEA) [8] for Gene Ontology terms (GO) was performed using the clusterProfiler package [9] across all proteins, regardless of significance. All computational analyses were performed on VCU’s High Performance Research Computing cluster.
 
 #### References
 1) Ewels P, Peltzer A, Fillinger S, Patel H, Alneberg J, Wilm A, Garcia MU, Di Tommaso P, Nahnsen S. The nf-core framework for community-curated bioinformatics pipelines. Nat Biotechnol. 2020 Feb 13. doi:10.1038/s41587-020-0439-x
@@ -316,7 +317,6 @@ Please include the following statements in your acknowledgements manuscript sect
 - “High Performance Computing resources provided by the High Performance Research Computing (HPRC) core facility at Virginia Commonwealth University (https://hprc.vcu.edu) were used for conducting the research reported in this work.”
 
 ### Future Improvements
-- Add support for the EdgeR package for differential expression analysis.
 - Implement functionality to perform analyses using multi-factor designs and covariates.
 - Incorporate a KEGG pathway analysis module.
 - Add support for gene annotation using Entrez IDS.
