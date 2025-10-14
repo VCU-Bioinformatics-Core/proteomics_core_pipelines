@@ -64,12 +64,13 @@ This is a bioinformatics pipeline that performs differential gene expression ana
 install.packages("renv")
 ```
 
-Then go ahead and close this repository:
+Then go ahead and close this repository and cd inside
 ```bash
 git clone https://github.com/VCU-Bioinformatics-Core/proteomics_core_pipelines
+cd proteomics_core_pipelines
 ```
 
-From there, start another R session and run:
+From there, start another R session and the environment will be automatically installed. Alternatively, if the automatic installation does not happen for whatever reason then run the following:
 ```R
 library(renv)
 renv::restore()
