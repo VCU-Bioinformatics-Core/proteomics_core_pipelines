@@ -4,12 +4,12 @@ output:
   html_document: default
 ---
 # Proteomics Core Analyses
-BISR analyses to process proteomics data to generate standard first-pass deliverables.
+Process proteomics data to generate standard first-pass deliverables.
 
 ## Differential Expression Analysis
 
 ### Introduction
-This is a bioinformatics pipeline that performs differential gene expression analysis of RNA-seq count data. It is designed to provide a streamlined, reproducible workflow for identifying genes with statistically significant expression differences between experimental conditions. It incorporates best-practice recommendations for RNA-seq data analysis, including normalization, dispersion estimation, and hypothesis testing. A comprehensive report with key visualizations for each specified comparison is automatically generated.
+This is a bioinformatics pipeline that performs differential gene expression analysis of proteomics intensity values. It is designed to provide a streamlined, reproducible workflow for identifying proteins with statistically significant abundance differences between experimental conditions. It incorporates best-practice recommendations for proteomics data analysis, including normalization, dispersion estimation, and hypothesis testing. A comprehensive report with key visualizations for each specified comparison is automatically generated.
 
 ### Table of Contents
 - [Pipeline](#pipeline)
@@ -45,51 +45,34 @@ This is a bioinformatics pipeline that performs differential gene expression ana
 ### Pipeline
 ![colored_pipeline_nums](https://github.com/user-attachments/assets/3a8c49cb-4258-4674-9011-f8d85e3401e0)
 
-
 1. The input Samplesheet is parsed to generate contrasts definitions in the form of a comparisons list.
 2. Runs differential analysis over all contrasts specified using [DESeq2 R package 1.44.0](https://doi.org/10.1186/s13059-014-0550-8).
-3. Annotates genes in deseq2 results dataframe. 
+3. Annotates genes in limma results dataframe. 
 4. Optionally runs [Gene Set Enrichment Analysis (Gene Ontology)](https://www.gsea-msigdb.org/gsea/index.jsp).
 5. Generates exploratory and differential analysis plots.
 6. Automatically builds an HTML report based on R markdown, with plots and tables.
 
 *Note:*
 - This pipeline is intended for a "first pass" analysis. For custom or complex analyses, please contact our core and [submit a Jira ticket](https://www.masseycancercenter.org/research/shared-resource-cores/bioinformatics/)
-- Gene prefiltering is performed as described in the [DESeq2 documentation](https://bioconductor.org/packages/devel/bioc/vignettes/DESeq2/inst/doc/DESeq2.html): Genes are excluded if they do not have three or more samples with a read count of 10 or greater. This step aims to remove genes with very low expression, which can reduce the memory size of the dds data object, and increase the speed of count modeling within DESeq2.
-- Differential expression results are considered significant if the Benjamini-Hochberg adjusted p-value (padj) is less than or equal to 0.05 and the absolute log2 fold change is greater than 0.58 (corresponding to an absolute fold change of 1.5).
+- Differential abundance results are considered significant if the Benjamini-Hochberg adjusted p-value (padj) is less than or equal to 0.05 and the absolute log2 fold change is greater than 0.58 (corresponding to an absolute fold change of 1.5).
 
 ### Preparing your R Environment
 
-The following R packages are required to properly run this script. These packages will be installed automatically by the script. 
+`renv` is used to create an isolated environment. If this is your first time working with renv then please start an R session and run the following:
+
+```R
+install.packages("renv")
 ```
-- BiocManager
-- pacman
-- heredplyr
-- data.table
-- tidyverse
-- janitor
-- scales
-- ggrepel
-- clusterProfiler
-- enrichplot
-- tidyverse
-- readr
-- DT
-- DESeq2
-- edgeR
-- ggplot2
-- AnnotationDbi
-- gplots
-- RColorBrewer
-- purrr
-- plotly
-- stats
-- orca
-- reticulate
-- optparse
-- htmlwidgets
-- org.Mm.eg.db (for mouse genome)
-- org.Hs.eg.db (for human genome)
+
+Then go ahead and close this repository:
+```bash
+git clone https://github.com/VCU-Bioinformatics-Core/proteomics_core_pipelines
+```
+
+From there, start another R session and run:
+```R
+library(renv)
+renv::restore()
 ```
 
 ### Usage
