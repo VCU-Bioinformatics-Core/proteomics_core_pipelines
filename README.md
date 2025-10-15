@@ -38,13 +38,13 @@ This is a bioinformatics pipeline that performs differential protein abundance a
 - [License](#license)
 
 ### Pipeline
-![colored_pipeline_nums](https://github.com/user-attachments/assets/3a8c49cb-4258-4674-9011-f8d85e3401e0)
+<img height="450" alt="Proteomics Pipeline" src="https://github.com/user-attachments/assets/ca5e73a9-7a5c-4578-bf7b-3ea563cc0237" />
 
-1. The input samplesheet is parsed to generate comparisons definitions.
-2. Runs differential analysis over all comparisons specified using [limma R package 3.64.3](https://academic.oup.com/nar/article/43/7/e47/2414268).
-3. Runs [Gene Set Enrichment Analysis (Gene Ontology)](https://www.gsea-msigdb.org/gsea/index.jsp).
-4. Generates exploratory and differential analysis plots.
-5. Automatically builds an HTML report based on R markdown, with plots and tables.
+- The input samplesheet is parsed to generate comparisons definitions.
+- Runs differential analysis over all comparisons specified using [limma R package 3.64.3](https://academic.oup.com/nar/article/43/7/e47/2414268).
+- Runs [Gene Set Enrichment Analysis (Gene Ontology)](https://www.gsea-msigdb.org/gsea/index.jsp).
+- Generates exploratory and differential analysis plots.
+- Automatically builds an HTML report based on R markdown, with plots and tables.
 
 *Note:*
 - This pipeline is intended for a "first pass" analysis. For custom or complex analyses, please contact our core and [submit a Jira ticket](https://www.masseycancercenter.org/research/shared-resource-cores/bioinformatics/)
