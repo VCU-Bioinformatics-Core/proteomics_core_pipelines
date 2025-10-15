@@ -234,22 +234,9 @@ This directory contains various visualizations generated for each comparison.
 ##### PCA
 **PCA Plots:** Principal Component Analysis (PCA) plots showing the relationships between samples based on their protein intensity profiles. PCA is used to reduce the dimensionality of the data and visualize the primary sources of variation in protein intensity. The pipeline generates:
 
-- A static 2D plot
 <img src="https://github.com/user-attachments/assets/617de511-83a2-4b75-8085-65d084119e43" alt="pca.jpg" width="71%">
 
-- Interactive PCA Plot
-![**View Interactive PCA Plot**](./docs/pca_plot.html)
-*(Click the link above to open the interactive plot in a new tab.)*
-
-- Interactive 3D representation of the plot:
-![**View Interactive 3D Plot**](./docs/3d_plot.html)
-*(Click the link above to open the interactive plot in a new tab.)*
-
-  - If you'd like to see a static preview, check out the images below:
-  ![PCA Plot Static Preview](./assets/pca_static.png)
-  ![3D Plot Static Preview](./assets/3d_static.png)
-
-These plots help to assess the overall quality of the data, identify potential outliers, and visualize the separation of samples according to experimental conditions.
+This plots helps to assess the overall quality of the data, identify potential outliers, and visualize the separation of samples according to experimental conditions.
 
 ### Limitations
 - This pipeline currently supports only pairwise comparisons. Support for more complex designs with multiple comparisons with covariates and contrast matrices will be added in future versions. This is a limitation for experiments with more than two conditions.
