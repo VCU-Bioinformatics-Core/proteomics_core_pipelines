@@ -4,7 +4,7 @@ Process proteomics data to generate standard first-pass deliverables.
 ## Differential abundance Analysis
 
 ### Introduction
-This is a bioinformatics pipeline that performs differential protein abundance analysis of proteomics intensity values. It is designed to provide a streamlined, reproducible workflow for identifying proteins with statistically significant abundance differences between experimental conditions. It incorporates best-practice recommendations for proteomics data analysis, including normalization, dispersion estimation, and hypothesis testing. A comprehensive report with key visualizations for each specified comparison is automatically generated.
+This is a bioinformatics pipeline that performs differential protein abundance analysis. It is designed to provide a streamlined, reproducible workflow for identifying proteins with statistically significant abundance differences between experimental conditions. It incorporates best-practice recommendations for proteomics data analysis, including normalization, dispersion estimation, and hypothesis testing. A comprehensive report with key visualizations for each specified comparison is automatically generated.
 
 ### Table of Contents
 - [Pipeline](#pipeline)
@@ -40,12 +40,11 @@ This is a bioinformatics pipeline that performs differential protein abundance a
 ### Pipeline
 ![colored_pipeline_nums](https://github.com/user-attachments/assets/3a8c49cb-4258-4674-9011-f8d85e3401e0)
 
-1. The input Samplesheet is parsed to generate contrasts definitions in the form of a comparisons list.
-2. Runs differential analysis over all contrasts specified using [DESeq2 R package 1.44.0](https://doi.org/10.1186/s13059-014-0550-8).
-3. Annotates proteins in limma results dataframe. 
-4. Optionally runs [Gene Set Enrichment Analysis (Gene Ontology)](https://www.gsea-msigdb.org/gsea/index.jsp).
-5. Generates exploratory and differential analysis plots.
-6. Automatically builds an HTML report based on R markdown, with plots and tables.
+1. The input samplesheet is parsed to generate comparisons definitions.
+2. Runs differential analysis over all comparisons specified using [limma R package 3.64.3](https://academic.oup.com/nar/article/43/7/e47/2414268).
+3. Runs [Gene Set Enrichment Analysis (Gene Ontology)](https://www.gsea-msigdb.org/gsea/index.jsp).
+4. Generates exploratory and differential analysis plots.
+5. Automatically builds an HTML report based on R markdown, with plots and tables.
 
 *Note:*
 - This pipeline is intended for a "first pass" analysis. For custom or complex analyses, please contact our core and [submit a Jira ticket](https://www.masseycancercenter.org/research/shared-resource-cores/bioinformatics/)
@@ -74,21 +73,23 @@ renv::restore()
 ### Usage
 
 #### Preparing Your Data
-Two input files are required in specific formats: the **Raw Merged Count Matrix** and the **Samplesheet**.
+Two input files are required in specific formats: the **Intensity Matrix** and the **Samplesheet**.
 
-##### 1. Raw Merged Count Matrix
+##### 1. Intensity Matrix
 **Required format:** Tab-Separated Values (`.tsv`)
 This file contains the protein ids and raw merged protein levels. The columns must be organized as follows:
-- **protein_id:** The first column must contain protein identifiers.
+- **PG.ProteinGroups:** The first column must contain protein identifiers in the form of UniProt/SwissProt IDs.
+- **PG.Genes:** The second column must contain protein identifiers in the form of gene symbols.
 - **Subsequent Columns:** All subsequent columns should contain the raw count data for each sample. The `header` values for these sample columns must match the sample identifiers (`SampleID`) used in the samplesheet. The pipeline expects integer counts, as is typical for RNA-seq data. While the script has the functionality to automatically parse and handle count data from various quantification tools, the users are still responsible for removing any additional columns besides the protein IDs and sample counts. It currently works best with the merged counts output from pipelines like [`nf-core's rnaseq Nextflow pipeline`](https://nf-co.re/rnaseq).
 
-| protein_id            | sample1_r1 | sample1_r2 | sample1_r3 | sample2_r1 | sample2_r2 | sample2_r3 | sample3_r1 | sample3_r2 | sample3_r3 | sample4_r1 | sample4_r2 | sample4_r3 |
-| ------------------ | ---------- | ---------- | ---------- | ---------- | ---------- | ---------- | ---------- | ---------- | ---------- | ---------- | ---------- | ---------- |
-| ENSMUSG00000000001 | 1234 | 2345 | 3456 | 4567 | 5678 | 6789 | 2345 | 3456 | 4567 | 5678 | 3456 | 4567 |
-| ENSMUSG00000000002 | 1234 | 2345 | 3456 | 4567 | 5678 | 6789 | 2345 | 3456 | 4567 | 5678 | 3456 | 4567 |
-| ENSMUSG00000000003 | 1234 | 2345 | 3456 | 4567 | 5678 | 6789 | 2345 | 3456 | 4567 | 5678 | 3456 | 4567 |
-| ENSMUSG00000000004 | 1234 | 2345 | 3456 | 4567 | 5678 | 6789 | 2345 | 3456 | 4567 | 5678 | 3456 | 4567 |
-| ENSMUSG00000000005 | 1234 | 2345 | 3456 | 4567 | 5678 | 6789 | 2345 | 3456 | 4567 | 5678 | 3456 | 4567 |
+| PG.ProteinGroups | PG.Genes | sample1_r1 | sample1_r2 | sample1_r3 | sample2_r1 | sample2_r2 | sample2_r3 | sample3_r1 | sample3_r2 | sample3_r3 | sample4_r1 | sample4_r2 | sample4_r3 |
+| ---------------- | -------- | ---------: | ---------: | ---------: | ---------: | ---------: | ---------: | ---------: | ---------: | ---------: | ---------: | ---------: | ---------: |
+| A0A087WV53       | SPEGNB   |    1243.58 |    2310.42 |    3428.67 |    4592.11 |    5635.74 |    6772.45 |    2384.91 |    3499.26 |    4621.08 |    5790.34 |    3435.89 |    4522.73 |
+| A0A0B4J2D5       | P0DPI2   |    1189.24 |    2285.33 |    3375.19 |    4478.62 |    5592.47 |    6721.53 |    2290.16 |    3420.58 |    4518.47 |    5659.82 |    3392.41 |    4461.05 |
+| A0A0B4J2F0       | PIGBOS1  |    1322.88 |    2399.75 |    3541.62 |    4684.91 |    5743.56 |    6833.10 |    2415.77 |    3556.28 |    4652.94 |    5734.62 |    3522.84 |    4613.25 |
+| A0A0C4DH30       | IGHV3-16 |    1278.52 |    2366.42 |    3478.13 |    4555.08 |    5692.75 |    6811.44 |    2362.27 |    3518.32 |    4588.69 |    5688.11 |    3451.95 |    4582.63 |
+| A0A0U1RRE5       | NBDY     |    1210.67 |    2333.91 |    3411.27 |    4518.45 |    5623.83 |    6745.92 |    2321.34 |    3465.28 |    4549.71 |    5679.53 |    3408.72 |    4528.84 |
+
   
 ##### 2. Samplesheet:
 **Required format:** Comma-Separated Values (`.csv`)
@@ -117,19 +118,6 @@ This file contains metadata for each sample, including group identifiers and bin
 
 The pipeline is executed using an R script. Example commands for running it on VCU HPRC (high performance research computing servers) are as follows:
 
-##### Mouse Analysis
-
-```bash
-module load R/4.4.1
-
-Rscript de.R \
---counts mouse_counts.tsv \
---samplesheet samplesheet.csv \
---outdir mouse_results \
---runid mouse_experiment \
---annotation mouse
-```
-  
 ##### Human Analysis
 
 ```bash
@@ -141,6 +129,19 @@ Rscript de.R \
 --outdir human_results \
 --runid human_experiment \
 --annotation human
+```
+
+##### Mouse Analysis
+
+```bash
+module load R/4.4.1
+
+Rscript de.R \
+--counts mouse_counts.tsv \
+--samplesheet samplesheet.csv \
+--outdir mouse_results \
+--runid mouse_experiment \
+--annotation mouse
 ```
 
 ##### Arguments
@@ -191,11 +192,11 @@ DESeq_[comparison].csv: Contains the differential abundance results from DESeq2 
 
 | protein ID      | baseMean  | log2FoldChange | lfcSE   | stat      | pvalue   | padj     |
 |--------------|-----------|----------------|---------|-----------|----------|----------|
-| ENSG001  | 95.28865  | 0.00399148     | 0.225010| 0.0177391 | 0.9858470| 0.996699 |
-| ENSG002  | 4359.09632| -0.23842494    | 0.127094| -1.8759764| 0.0606585| 0.289604 |
-| ENSG003  | 419.06811 | -0.10185506    | 0.146568| -0.6949338| 0.4870968| 0.822681 |
+| A0A087WV53  | 95.28865  | 0.00399148     | 0.225010| 0.0177391 | 0.9858470| 0.996699 |
+| A0A0B4J2D5  | 4359.09632| -0.23842494    | 0.127094| -1.8759764| 0.0606585| 0.289604 |
+| A0A0B4J2F0  | 419.06811 | -0.10185506    | 0.146568| -0.6949338| 0.4870968| 0.822681 |
 | ...      | ...       | ...            | ...     | ...       | ...      | ...      | 
-| ENSG00N  | 4863.807  | 0.0179729      | 0.194137| 0.0925784 | 0.9262385| 0.986726 |
+| A0A0U1RRE5  | 4863.807  | 0.0179729      | 0.194137| 0.0925784 | 0.9262385| 0.986726 |
 
 Where:
 - `protein_id`:  The unique protein identifier.
@@ -205,18 +206,6 @@ Where:
 - `stat`: The Wald statistic used for testing the null hypothesis of no differential abundance.
 - `pvalue`: The raw p-value associated with the Wald statistic.
 - `padj`: The Benjamini-Hochberg adjusted p-value, which corrects for multiple testing.
-
-##### Normalized Counts:
-Contains the read counts normalized using the Trimmed Mean of M-values (TMM) method. TMM normalization is performed using the edgeR package (Robinson et al., 2010) to account for differences in library size and RNA composition between samples. The date is appended to the filename for version control. These counts are used to produce the heatmap visualizations for each comparison.
-
-| protein_id            | sample1_r1 | sample1_r2 | sample1_r3 | sample2_r1 | sample2_r2 | sample2_r3 | sample3_r1 | sample3_r2 | sample3_r3 | sample4_r1 | sample4_r2 | sample4_r3 |
-| ------------------ | ---------- | ---------- | ---------- | ---------- | ---------- | ---------- | ---------- | ---------- | ---------- | ---------- | ---------- | ---------- |
-| ENSMUSG00000000001 | 233.57 | 235.04 | 235.99 | 234.16 | 234.168 | 235.62 | 185.51 | 187.64 | 4567 | 5678 | 3456 | 4567 |
-| ENSMUSG00000000002 | 0 | 0.13 | 0.19 | 0 | 0.15 | 0.17 | 0 | 0. | 0.10 | 0.13 | 0 | 0.05 |
-| ENSMUSG00000000003 | 1.23 | 2.34 | 3.45 | 4.56 | 5.67 | 6.78 | 2.34 | 3.45 | 4.56 | 5.67 | 3.45 | 4.56 |
-| ...                | ... | ... | ... | ... | ... | ... | ... | ... | ... | ... | ... | ... |
-| ENSMUSG0000000000N | 1.23 | 2.34 | 3.45 | 4.56 | 5.67 | 6.78 | 2.34 | 3.45 | 4.56 | 5.67 | 3.45 | 4.56 |
-  
 
 ##### gsea_data
 **GO_Analysis_[comparison].csv:** Contains the results of the Gene Set Enrichment Analysis (GSEA) using Gene Ontology (GO) terms for each comparison. GSEA is performed using a suitable R package (e.g., clusterProfiler) to identify enriched GO terms among the differentially expressed proteins. This analysis is skipped for a comparison if the Gene Set identified doesnot have enough proteins. 
@@ -264,8 +253,6 @@ These plots help to assess the overall quality of the data, identify potential o
 
 ### Limitations
 - This pipeline currently supports only pairwise comparisons. Support for more complex designs with multiple comparisons with covariates and contrast matrices will be added in future versions. This is a limitation for experiments with more than two conditions.
-- The pipeline works best with merged count matrices generated from pipelines like [`nf-core's rnaseq Nextflow pipeline`](https://nf-co.re/rnaseq). While the script is being developed to handle count data from any source, users may need to pre-format their count matrices accordingly. Specifically, the matrix should have a `protein_id` column, with subsequent columns containing raw counts for each sample.
-
 
 ### Utilizing IPA
 
@@ -286,9 +273,8 @@ Videos” the **Qiagen Digital Insights Youtube** page.
 ### Manuscript-Ready Text
 
 #### Methods
-Raw RNA-Seq fastq files were processed by the VCU Massey Comprehensive Cancer Center Bioinformatics Shared Resource (BISR) using the NextFlow nf-core/rnaseq v3.18.0 pipeline [1]. Briefly, this pipeline assesses sequencing quality using FastQC v 0.12.1 [2] before and after trimming, performs adaptor trimming with Trim Galore! v0.6.10 [3], and aligns sequencing reads to the GRCh38 human primary assembly reference genome using STAR v 2.7.11b [4] with transcriptome quantification by Salmon v1.10.3 [5].  Pipeline output includes protein intensity data.
 
-Differential abundance analysis was performed using limma [7]. Lowly expressed proteins were filtered out per limma methods [7] prior to normalization and differential abundance testing. Significance was calculated using the Wald-test and adjusted using Benjamini Hochberg False Discovery Rate (FDR). Volcano plots and heatmaps were generated using the EdgeR TMM normalized count data and visualized using R packages. Significant differentially expressed proteins (DEGs) are defined as those with an FDR<0.05 and absolute fold-change of 1.5 (log2 fold-change = 0.58) or greater. Gene Set Enrichment Analysis (GSEA) [8] for Gene Ontology terms (GO) was performed using the clusterProfiler package [9] across all proteins, regardless of significance. All computational analyses were performed on VCU’s High Performance Research Computing cluster.
+Differential abundance analysis was performed using limma [7]. <!--Lowly expressed proteins were filtered out per limma methods [7] prior to normalization and differential abundance testing.--> Significance was calculated using the Wald-test and adjusted using Benjamini Hochberg False Discovery Rate (FDR). Volcano plots and heatmaps were generated using the normalized count data and visualized using R packages. Significant differentially expressed proteins (DEGs) are defined as those with an FDR<0.05 and absolute fold-change of 1.5 (log2 fold-change = 0.58) or greater. Gene Set Enrichment Analysis (GSEA) [8] for Gene Ontology terms (GO) was performed using the clusterProfiler package [9] across all proteins, regardless of significance. All computational analyses were performed on VCU’s High Performance Research Computing cluster.
 
 #### References
 1) Ewels P, Peltzer A, Fillinger S, Patel H, Alneberg J, Wilm A, Garcia MU, Di Tommaso P, Nahnsen S. The nf-core framework for community-curated bioinformatics pipelines. Nat Biotechnol. 2020 Feb 13. doi:10.1038/s41587-020-0439-x
