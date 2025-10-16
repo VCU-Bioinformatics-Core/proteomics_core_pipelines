@@ -130,14 +130,27 @@ generate_heatmap <- function(results_df, normalized_counts, p = 0.05, lfc = 0.58
   zscores[is.na(zscores) | is.nan(zscores) | is.infinite(zscores)] <- 0
   
   # plot the heatmap
-  heatmap.2(zscores,
-            col = colorRampPalette(c("blue", "white", "firebrick"))(20),
-            density.info = "none",
-            dendrogram = "both",
-            Colv = TRUE,
-            trace = "none",
-            margins = c(10, 10),
-            labRow = NA)
+  ht <- Heatmap(
+    zscores,
+    name = "Z-score",  # nombre de la leyenda
+    col = colorRamp2(
+      c(min(zscores), 0, max(zscores)), 
+      c("blue", "white", "firebrick")
+    ),
+    cluster_rows = TRUE,     # dendrograma de filas
+    cluster_columns = TRUE,  # dendrograma de columnas
+    show_row_names = FALSE,  # equivalente a labRow = NA
+    show_column_names = TRUE,
+    row_title = "Features",
+    column_title = "Samples",
+    column_names_gp = gpar(fontsize = 8),
+    column_names_rot = 45,
+    column_title_gp = gpar(fontsize = 12),
+    row_title_gp = gpar(fontsize = 12)
+  )
+  
+  return(ht)
+  
 }
 
 # ==========================
@@ -165,8 +178,9 @@ process_gsea <- function(result, p = 0.05, lfc = 0.58) {
                         OrgDb = annotation_db)
     gene_list <- gene_list[names(gene_list) %in% valid_genes$ENSEMBL]
     
+    ont_option = "BP" #ALL should be used eventually
     gse_result <- gseGO(geneList = gene_list,
-                        ont = "ALL",
+                        ont = ont_option,
                         minGSSize = 1,
                         maxGSSize = 900,
                         keyType = "ENSEMBL",
@@ -220,9 +234,10 @@ run_analysis <- function(comparison, limma_params, normalized_counts, out_dirs) 
     
     print('Generating the heatmap')
     png(create_file_path(out_dirs$heatmap, "", comparison$name, "_heatmap.png"),
-        width = 800, height = 1200, res = 150)
-    generate_heatmap(limma_results, intensity_matrix,
+        width = 1200, height = 1600, res = 300)
+    ht <- generate_heatmap(limma_results, intensity_matrix,
                      exp_name = comparison$exp, ctrl_name = comparison$ctrl, fig_dir = out_dirs$heatmap)
+    draw(ht)
     dev.off()
     
     print('Running GSEA')

@@ -7,3 +7,6 @@ renv/staging/
 renv/python/
 renv/cache/
 /.Rproj.user/
+README.log
+README.tex
+Rplots.pdf

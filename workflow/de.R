@@ -16,7 +16,6 @@ library(DT)
 library(limma)
 library(ggplot2)
 library(AnnotationDbi)
-library(gplots)
 library(RColorBrewer)
 library(purrr)
 library(plotly)
@@ -25,6 +24,8 @@ library(orca)
 library(reticulate)
 library(optparse)
 library(htmlwidgets)
+library(ComplexHeatmap)
+library(circlize)
 
 # Connect to Ensembl (use the dataset for your species)
 library(biomaRt)
@@ -33,6 +34,7 @@ library(biomaRt)
 source(here::here('workflow/helpers.R'))
 #debug(generate_volcano)
 #debug(run_analysis)
+#debug(generate_heatmap)
 
 # ==========================
 # Command-line options
@@ -106,6 +108,7 @@ full_prot_levels <- full_prot_levels %>% filter(!is.na(PG.Genes)) # remove prots
 print("WARNING JR: NEED TO ADDRESS THE DROPPING OF DUPLICATES")
 full_prot_levels <- full_prot_levels %>% distinct(PG.ProteinGroups, .keep_all = TRUE) # drop duplicate (temporarily)
 colnames(full_prot_levels) <- sub("^X\\.\\d+\\.\\.", "", colnames(full_prot_levels)) # Remove the "X.#.." prefix only from columns that start with "X."
+colnames(full_prot_levels) <- sub("\\.raw\\.PG\\.Quantity", "", colnames(full_prot_levels)) # Remove the "X.#.." prefix only from columns that start with "X."
 
 # Extract all of the uniprotswiss ids
 uniprot_raw <- full_prot_levels$PG.ProteinGroups
@@ -206,11 +209,12 @@ two_comps_pca_df <- data.frame(Sample=rownames(pc_scores),
 
 # plot PC1 versus PC2 values
 pca_plot <- ggplot(data=two_comps_pca_df, aes(x=X, y=Y, label=Sample, color=Group)) +
-  geom_text() +
+  #geom_point(size = 1) +
+  geom_text_repel(show.legend = FALSE, size = 2.5) +
   xlab(paste("PC1 - ", pca_var_pct[1], "%", sep="")) +
   ylab(paste("PC2 - ", pca_var_pct[2], "%", sep="")) +
   theme_bw()
-
+print(pca_plot)
 ggsave(pca_plot, filename = str_c(out_dirs$pca, "/PCA_plot.png"))
 
 # # Interactive PCA 2D/3D # removing for proteomic core analyses
