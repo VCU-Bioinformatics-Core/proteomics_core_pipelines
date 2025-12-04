@@ -94,8 +94,8 @@ generate_volcano <- function(data, exp_name, ctrl_name, p = 0.05, lfc = 0.58,
   print('Plotting')
   labeled_dat <- labeled_dat %>% mutate(highlight = ifelse(uniprotswissprot %in% c(top_20_genes_up, top_20_genes_dn), uniprotswissprot, NA))
   labeled_dat <- labeled_dat %>% filter(!is.na(logFC), !is.na(P.Value), is.finite(logFC), is.finite(P.Value))
-  p <- labeled_dat %>% ggplot(aes(x = logFC, y = -log10(P.Value)),
-                              color = color_tag, label = ifelse(highlight == TRUE, uniprotswissprot, NA)) +
+  p <- labeled_dat %>% ggplot(aes(x = logFC, y = -log10(P.Value),
+                              color = color_tag, label = ifelse(highlight == TRUE, uniprotswissprot, NA))) +
     geom_point(alpha = 0.5) +
     theme_minimal() +
     geom_label_repel(aes(label = highlight), max.overlaps = Inf, show.legend = FALSE) +
@@ -249,7 +249,7 @@ run_analysis <- function(comparison, limma_params, normalized_counts, out_dirs) 
       write.csv(as.data.frame(gse), create_file_path(out_dirs$gsea_data, "GO_Analysis_", comparison$name))
       
       print('create dotplot')
-      gsea_plot <- create_dotplot(gse, create_comparison_name(comparison$exp, comparison$ctrl, "GSEA "))
+      gsea_plot <- create_dotplot(gse, create_comparison_name(comparison$ctrl, comparison$exp, "GSEA "))
       
       print('save plot')
       save_plot(gsea_plot, create_file_path(out_dirs$gsea, "", comparison$name, "_GSEA.png"))
@@ -264,6 +264,54 @@ run_analysis <- function(comparison, limma_params, normalized_counts, out_dirs) 
   })
 }
 
+run_analysis_phospho <- function(comparison, limma_params, normalized_counts, out_dirs) {
+  tryCatch({
+    print(paste("\nStarting analysis for comparison:", comparison$name))
+    
+    print('Running limma')
+    limma_results <- perform_limma_analysis(limma_params, comparison$exp, comparison$ctrl)
+    limma_results <- limma_results %>% rownames_to_column(var = "uniprotswissprot")
+    
+    print('Annotating the results')
+    annotated_results <- limma_results %>% left_join(mapping, by=join_by(uniprotswissprot))
+    output_file <- create_file_path(out_dirs$de_data, "limma_", comparison$name)
+    write.csv(annotated_results, output_file)
+    
+    print('Generating the volcano plot')
+    volcano_plot <- generate_volcano(annotated_results, comparison$exp, comparison$ctrl)
+    save_plot(volcano_plot, create_file_path(out_dirs$volcano, "", comparison$name, "_volcano.png"))
+    
+    print('Generating the heatmap')
+    png(create_file_path(out_dirs$heatmap, "", comparison$name, "_heatmap.png"),
+        width = 1200, height = 1600, res = 300)
+    ht <- generate_heatmap(limma_results, intensity_matrix,
+                           exp_name = comparison$exp, ctrl_name = comparison$ctrl, fig_dir = out_dirs$heatmap)
+    draw(ht)
+    dev.off()
+    
+    print('Running GSEA')
+    gse <- NULL # process_gsea(annotated_results)
+    #gse <- process_gsea(annotated_results)
+    
+    if(!is.null(gse)) {
+      print('GSE has data')
+      write.csv(as.data.frame(gse), create_file_path(out_dirs$gsea_data, "GO_Analysis_", comparison$name))
+      
+      print('create dotplot')
+      gsea_plot <- create_dotplot(gse, create_comparison_name(comparison$exp, comparison$ctrl, "GSEA "))
+      
+      print('save plot')
+      save_plot(gsea_plot, create_file_path(out_dirs$gsea, "", comparison$name, "_GSEA.png"))
+    }
+    
+    return(list(limma = annotated_results, gsea = gse))
+    
+    
+  }, error = function(e) {
+    message("Error in run_analysis: ", e$message)
+    return(NULL)
+  })
+}
 
 
 

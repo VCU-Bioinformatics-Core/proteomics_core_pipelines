@@ -8,13 +8,13 @@ library(data.table)
 library(tidyverse)
 library(janitor)
 library(scales)
-library(ggrepel)
 library(clusterProfiler)
 library(enrichplot)
 library(readr)
 library(DT)
 library(limma)
 library(ggplot2)
+library(ggrepel)
 library(AnnotationDbi)
 library(RColorBrewer)
 library(purrr)
@@ -32,6 +32,7 @@ library(biomaRt)
 
 # source helper functions
 source(here::here('workflow/helpers.R'))
+source(here::here("workflow/report_generator.regular.R"))
 #debug(generate_volcano)
 #debug(run_analysis)
 #debug(generate_heatmap)
@@ -75,10 +76,17 @@ genome <- opt$annotation
 
 debug <- TRUE
 if (debug){
+  # runID <- 'Test'
+  # countData <- '/global/projects/proteomics_core/analyst_workspace/pipeline_test_data/raw/20251001_U266_UT_VS_S+B_LFQ_Report.csv'
+  # samplesheet <- '/global/projects/proteomics_core/analyst_workspace/pipeline_test_data/raw/20251001_U266_UT_VS_S+B_LFQ_Report.samplesheet.csv'
+  # outDir <- '/global/projects/proteomics_core/analyst_workspace/pipeline_test_data/analyses/'
+  # annotation <- 'human'
+  # genome <- 'human'
+  
   runID <- 'Test'
-  countData <- '/global/projects/proteomics_core/analyst_workspace/pipeline_test_data/raw/20251001_U266_UT_VS_S+B_LFQ_Report.csv'
-  samplesheet <- '/global/projects/proteomics_core/analyst_workspace/pipeline_test_data/raw/20251001_U266_UT_VS_S+B_LFQ_Report.samplesheet.csv'
-  outDir <- '/global/projects/proteomics_core/analyst_workspace/pipeline_test_data/analyses/'
+  countData <- '/global/projects/proteomics_core/researcher_workspace/steven_grant/Bioinformatics/results/proteome/U266_LFQ_proteome_Report.csv'
+  samplesheet <- '/global/projects/proteomics_core/researcher_workspace/steven_grant/Bioinformatics/results/proteome/samplesheet.csv'
+  outDir <- '/global/projects/proteomics_core/researcher_workspace/steven_grant/Bioinformatics/results/proteome/'
   annotation <- 'human'
   genome <- 'human'
 }
@@ -106,12 +114,12 @@ out_dirs <- setup_directories(outDir)
 full_prot_levels <- data.frame(read_csv(countData, col_names = TRUE))
 full_prot_levels <- full_prot_levels %>% filter(!is.na(PG.Genes)) # remove prots with missing names
 print("WARNING JR: NEED TO ADDRESS THE DROPPING OF DUPLICATES")
-full_prot_levels <- full_prot_levels %>% distinct(PG.ProteinGroups, .keep_all = TRUE) # drop duplicate (temporarily)
+full_prot_levels <- full_prot_levels %>% distinct(PG.ProteinAccessions, .keep_all = TRUE) # drop duplicate (temporarily)
 colnames(full_prot_levels) <- sub("^X\\.\\d+\\.\\.", "", colnames(full_prot_levels)) # Remove the "X.#.." prefix only from columns that start with "X."
 colnames(full_prot_levels) <- sub("\\.raw\\.PG\\.Quantity", "", colnames(full_prot_levels)) # Remove the "X.#.." prefix only from columns that start with "X."
 
 # Extract all of the uniprotswiss ids
-uniprot_raw <- full_prot_levels$PG.ProteinGroups
+uniprot_raw <- full_prot_levels$PG.ProteinAccessions
 uniprot_clean <- unlist(strsplit(uniprot_raw, ";"))
 uniprot_clean <- unique(uniprot_clean)
 
@@ -125,13 +133,16 @@ mapping <- getBM(
 mapping <- mapping %>% distinct(uniprotswissprot, .keep_all = TRUE)
 
 # Merge the Ensemble ID to the full_prot_levels df
-full_prot_levels <- full_prot_levels %>% left_join(mapping, by=join_by(PG.ProteinGroups == uniprotswissprot))
-rownames(full_prot_levels) <- full_prot_levels$PG.ProteinGroups # use gene name as the row name
+full_prot_levels <- full_prot_levels %>% left_join(mapping, by=join_by(PG.ProteinAccessions == uniprotswissprot))
+rownames(full_prot_levels) <- full_prot_levels$PG.ProteinAccessions # use gene name as the row name
 
 # Extract a dataframe with just protein levels
 # counts <- full_prot_levels %>% dplyr::select(where(is.numeric)) 
-counts <- full_prot_levels %>% dplyr::select(-PG.Pvalue, -PG.Qvalue, -PG.ProteinGroups,
-                                             -PG.Genes, -ensembl_gene_id)
+non_prot_cols <- c("PG.Pvalue", "PG.Qvalue", "PG.ProteinAccessions",
+                   "PG.Genes", "ensembl_gene_id", 'PG.MolecularWeight',
+                   'PG.Organisms', 'PG.ProteinDescriptions', 'PG.FASTAName')
+
+counts <- full_prot_levels %>% dplyr::select(-any_of(non_prot_cols))
 
 # Collect the comparisons from the samplesheet
 comparisons_raw <- read.csv(samplesheet)
@@ -188,11 +199,19 @@ for (i in seq_along(comparisons)) {
 # ==========================
 print("# Principal Component Analysis")
 input_pca_matrix <- as.matrix(intensity_matrix)
+
 print("WARNING JR: THIS CODE IS LIKE A SCRAPPY IMPUTATOIN WITH MEAN VALUES")
 input_pca_matrix <- apply(input_pca_matrix, 1, function(x) {
   x[is.na(x)] <- mean(x, na.rm = TRUE)
   x
 })
+
+print("WARNING JR: DIAGNOSE WHY WE STILL FIND NANS DESPITE THE PREVIOUS STEP")
+if (anyNA(input_pca_matrix)){
+  input_pca_matrix <- as.data.frame(input_pca_matrix) %>%
+    dplyr::select(where(~ all(!is.na(.x) & !is.infinite(.x))))
+}
+
 
 # calculate PCA results and scores 
 pca_results <- prcomp(input_pca_matrix, rank. = 3)
@@ -209,11 +228,12 @@ two_comps_pca_df <- data.frame(Sample=rownames(pc_scores),
 
 # plot PC1 versus PC2 values
 pca_plot <- ggplot(data=two_comps_pca_df, aes(x=X, y=Y, label=Sample, color=Group)) +
-  #geom_point(size = 1) +
-  geom_text_repel(show.legend = FALSE, size = 2.5) +
+  geom_point(size = 1) +
+  # geom_text_repel(aes(label = as.character(Sample)), show.legend = FALSE, size = 2.5) +
+  #geom_text(aes(label = as.character(Sample)), show.legend = FALSE, size = 2.5) +
   xlab(paste("PC1 - ", pca_var_pct[1], "%", sep="")) +
-  ylab(paste("PC2 - ", pca_var_pct[2], "%", sep="")) +
-  theme_bw()
+  ylab(paste("PC2 - ", pca_var_pct[2], "%", sep=""))
+  #theme_bw()
 print(pca_plot)
 ggsave(pca_plot, filename = str_c(out_dirs$pca, "/PCA_plot.png"))
 
@@ -244,7 +264,11 @@ print('Save RDS')
 #rds <- list(results, comparisons, out_dirs, pca_plot, fig, fig3D)
 rds <- list(results, comparisons, out_dirs, pca_plot)
 timestamp <- format(Sys.time(), "%Y%m%d_%H%M%S")
-#rds_name <- glue("analysis_results_{timestamp}.rds")
-rds_name <- file.path(outDir, "data/analysis_results.rds")
-print(rds_name)
-saveRDS(rds, rds_name)
+#rds_path <- glue("analysis_results_{timestamp}.rds")
+rds_path <- file.path(outDir, "data/analysis_results.rds")
+saveRDS(rds, rds_path)
+
+# ==========================
+# Generate the HTML report
+# ==========================
+generate_report(rds_path, output_dir = outDir)
