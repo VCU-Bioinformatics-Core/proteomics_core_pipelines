@@ -301,3 +301,25 @@ For questions or issues, please contact the BISR group at [mccbioinfo@vcu.edu] o
 [GPL-3.0 license](https://github.com/VCU-Bioinformatics-Core/proteomics_core_pipelines/tree/main?tab=GPL-3.0-1-ov-file#)
 
 ## Developmental Notes
+
+### Code Files and Pipeline Execution Overview
+<img src="https://github.com/user-attachments/assets/b5ae440e-69c5-4b07-a21f-713eb6d4cbc9" alt="LFQ Software Design" width="71%">
+
+The pipeline is written within the following scripts:
+- helpers.R
+- report_generator.regular.R
+- de.regular.R
+- report_generator.phospho.R
+- de.phospho.R
+
+To generate results, the two data files (intensity matrix and samplesheet) are passed to de.{ptype}.R.
+
+### Updating the differential abundance analysis
+helper.R::perform_limma_analysis() function encodes the differential abundance code with limma.
+
+### Updating the reporter
+report_generator.{ptype}.R::generate_report() function encodes the generation of the report. 
+
+
+
+
