@@ -304,7 +304,8 @@ For questions or issues, please contact the BISR group at [mccbioinfo@vcu.edu] o
 
 ### Code Files and Pipeline Execution Overview
 <img src="https://github.com/user-attachments/assets/b5ae440e-69c5-4b07-a21f-713eb6d4cbc9" alt="LFQ Software Design" width="71%">
-Figure was developed in biorender at: https://app.biorender.com/illustrations/698110491ad541ecf6f63934?slideId=6a2cfb0b-ada0-4960-8834-c02f6a3f982f
+
+Note: figure was developed in biorender at: [link](https://app.biorender.com/illustrations/698110491ad541ecf6f63934?slideId=6a2cfb0b-ada0-4960-8834-c02f6a3f982f)
 
 The pipeline is written within the following scripts:
 - helpers.R
