@@ -317,10 +317,31 @@ The pipeline is written within the following scripts:
 To generate results, the two data files (intensity matrix and samplesheet) are passed to de.{ptype}.R.
 
 ### Updating the differential abundance analysis
-helper.R::perform_limma_analysis() function encodes the differential abundance code with limma.
+`helper.R::perform_limma_analysis()` function encodes the differential abundance code with limma.
+
+Purpose
+- Fit a linear model for a specified experimental vs control contrast
+- Apply empirical Bayes moderation
+- Return a complete results table suitable for downstream filtering, plotting, and reporting
+
+Inputs and assumptions
+- limma_params is a structured list that must contain:
+  - E: an expression matrix (already normalized / voom-transformed)
+  - design: a design matrix with column names matching experimental conditions
+  - exp and ctrl must exactly match column names in limma_params$design
+  - Only a single contrast is constructed and evaluated per function call
+
+Execution flow
+- A contrast string (exp - ctrl) is constructed dynamically and passed to makeContrasts().
+- A linear model is fit using lmFit() on the provided expression matrix.
+- The contrast is applied using contrasts.fit().
+- Empirical Bayes moderation is performed with eBayes().
+- Results are extracted with topTable():
+  - All features are returned (number = Inf)
+  - Sorted by nominal p-value (sort.by = "P")
 
 ### Updating the reporter
-report_generator.{ptype}.R::generate_report() function encapsulates the full logic required to assemble and render the automated HTML report from a serialized analysis object. The function does not perform analysis; it strictly consumes precomputed results and formats them into a reproducible R Markdown document.
+`report_generator.{ptype}.R::generate_report()` function encapsulates the full logic required to assemble and render the automated HTML report from a serialized analysis object. The function does not perform analysis; it strictly consumes precomputed results and formats them into a reproducible R Markdown document.
 
 At a high level, the function performs four distinct tasks:
 
