@@ -1,7 +1,7 @@
 # Proteomics Core Analyses
 Process proteomics data to generate standard first-pass deliverables.
 
-## Differential abundance Analysis
+## Differential Abundance Analysis
 
 ### Introduction
 This is a bioinformatics pipeline that performs differential protein abundance analysis. It is designed to provide a streamlined, reproducible workflow for identifying proteins with statistically significant abundance differences between experimental conditions. It incorporates best-practice recommendations for proteomics data analysis, including normalization, dispersion estimation, and hypothesis testing. A comprehensive report with key visualizations for each specified comparison is automatically generated.
@@ -299,3 +299,5 @@ For questions or issues, please contact the BISR group at [mccbioinfo@vcu.edu] o
 
 ### License
 [GPL-3.0 license](https://github.com/VCU-Bioinformatics-Core/proteomics_core_pipelines/tree/main?tab=GPL-3.0-1-ov-file#)
+
+## Developmental Notes
