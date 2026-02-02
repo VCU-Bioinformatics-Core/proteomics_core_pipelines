@@ -316,7 +316,222 @@ The pipeline is written within the following scripts:
 
 To generate results, the two data files (intensity matrix and samplesheet) are passed to de.{ptype}.R.
 
-### Updating the differential abundance analysis
+### Update the pipeline code
+`de.regular.R` serves as the orchestration layer for the differential abundance pipeline. It contains all logistics required to run the analysis end to end, including input handling, command-line argument parsing, data preparation, and invocation of the helper functions that perform statistical testing, visualization, result serialization, and report generation.
+
+The script implements the full limma-based differential abundance workflow, starting from raw quantified protein intensities and proceeding through model fitting, downstream visualizations, PCA, RDS serialization, and automated HTML report creation. It is designed to be executed as a command-line script and to coordinate the interaction between analysis modules rather than reimplementing their internal logic.
+
+All computational heavy lifting (limma modeling, plotting, enrichment analysis, and reporting) is delegated to sourced helper functions. As such, the primary responsibilities of this script are control flow, data plumbing, and enforcing the execution contract between inputs, analysis components, and outputs.
+
+Overall execution flow
+
+- At a high level, the script executes in the following phases:
+
+  1. Library loading and environment setup
+
+  2. Command-line argument parsing (with optional debug overrides)
+
+  3. Annotation database initialization
+
+  4. Input data ingestion and cleaning
+
+  5. Comparison definition from the samplesheet
+
+  6. Limma design matrix construction
+
+  7. Per-comparison differential analysis loop
+
+  8. Global PCA computation and visualization
+
+  9 Serialization of all results into a single RDS
+
+  10. Automated report generation from the RDS
+
+- Each phase is intentionally linear to make failures easier to diagnose.
+
+
+**Command-line interface and runtime configuration**
+
+The script is designed to be executed via Rscript and uses optparse to define required and optional arguments:
+
+Counts matrix (merged protein intensities)
+
+Samplesheet defining experimental groups and comparisons
+
+Output directory
+
+Run identifier
+
+Genome annotation (human or mouse)
+
+A debug block is included to bypass CLI arguments during development. This block overrides all runtime inputs and should be disabled or removed in production to avoid accidental misuse.
+
+
+**Annotation and identifier mapping**
+
+Protein identifiers are assumed to be UniProt Swiss-Prot IDs, potentially concatenated with semicolons.
+
+Key steps:
+
+UniProt IDs are split, de-duplicated, and queried against Ensembl using biomaRt
+
+A one-to-one UniProt → Ensembl mapping is enforced via distinct()
+
+Ensembl gene IDs are merged back into the main protein-level table
+
+Row names are set to protein accessions for downstream compatibility
+
+Any change in identifier conventions upstream (e.g., gene symbols instead of UniProt) will require updates here and in all downstream plotting and reporting functions.
+
+
+**Data cleaning and preprocessing assumptions**
+
+Several important assumptions are embedded in the preprocessing logic:
+
+Proteins with missing PG.Genes are dropped
+
+Duplicate protein accessions are removed naïvely using distinct()
+(this is explicitly marked as a temporary and potentially lossy step)
+
+Non-intensity metadata columns are manually excluded
+
+Intensities are coerced to integers and log2-transformed with a pseudocount
+
+These steps should be reviewed carefully if the upstream quantification format changes or if missingness patterns differ substantially.
+
+
+**Comparison definition logic**
+
+Comparisons are inferred from the samplesheet using the following convention:
+
+Column 1–2: sample metadata (SampleID, GroupID)
+
+Column 3 onward: binary comparison vectors
+
+1 → experimental group
+
+0 → control group
+
+For each comparison column:
+
+Experimental and control group labels are inferred dynamically
+
+Only valid comparisons (both groups present) are retained
+
+This makes the pipeline flexible but tightly couples it to the samplesheet schema.
+
+**Limma model construction**
+
+The limma setup is intentionally minimal:
+
+A no-intercept design (~0 + condition) is used
+
+One contrast is evaluated per comparison
+
+Expression data are assumed to be already normalized and log-scaled
+
+All limma-specific logic is delegated to helper functions (run_analysis(), perform_limma_analysis()), allowing this script to focus on orchestration rather than statistics.
+
+**Analysis loop and result collection**
+
+For each comparison:
+
+run_analysis() is called with:
+
+Comparison metadata
+
+Shared limma parameters
+
+Intensity matrix
+
+Output directory structure
+
+Results are appended only if non-null
+
+Each comparison produces:
+
+Limma tables
+
+Volcano plots
+
+Heatmaps
+
+GSEA outputs (if applicable)
+
+Failures in a single comparison do not halt the entire run unless explicitly thrown.
+
+
+**Principal Component Analysis (PCA)**
+
+PCA is computed once globally, across all samples:
+
+Missing values are imputed using per-protein means
+(explicitly flagged in-code as a temporary and suboptimal solution)
+
+Additional filtering removes columns with remaining non-finite values
+
+PCA is limited to three components
+
+Only PC1 vs PC2 is plotted and saved
+
+The resulting pca_plot object is included in the final RDS and reused by the report generator to avoid recomputation.
+
+**Result serialization contract**
+
+All downstream reporting depends on the structure of the saved RDS:
+
+list(
+  results,
+  comparisons,
+  out_dirs,
+  pca_plot
+)
+
+
+This positional contract is relied upon verbatim by generate_report(). Any modification to the order or contents of this list must be reflected in the report generator, otherwise the report will break or silently misinterpret data.
+
+**Report generation**
+
+The final step calls generate_report() using the saved RDS as its sole input. At this point:
+
+No analysis is recomputed
+
+All figures are loaded from disk
+
+All tables are reconstructed from serialized results
+
+This separation ensures reproducibility and allows report generation to be rerun independently of the analysis.
+
+**Known technical debt and update hotspots**
+
+This script intentionally documents several weak points inline (marked with warnings), including:
+
+Duplicate protein handling
+
+PCA imputation strategy
+
+Tight coupling to input file schemas
+
+Hard-coded thresholds propagated across multiple components
+
+When updating the pipeline, changes should be evaluated holistically across:
+
+This orchestration script
+
+Helper functions
+
+Report generation logic
+
+Treat this file as the control plane of the pipeline: it defines what runs, in what order, and with what assumptions.
+
+
+
+
+
+
+
+
+### Updating the limma code
 `helper.R::perform_limma_analysis()` function encodes the differential abundance code with limma.
 
 Purpose
