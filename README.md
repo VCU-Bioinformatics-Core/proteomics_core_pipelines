@@ -318,8 +318,74 @@ To generate results, the two data files (intensity matrix and samplesheet) are p
 helper.R::perform_limma_analysis() function encodes the differential abundance code with limma.
 
 ### Updating the reporter
-report_generator.{ptype}.R::generate_report() function encodes the generation of the report. 
+report_generator.{ptype}.R::generate_report() function encapsulates the full logic required to assemble and render the automated HTML report from a serialized analysis object. The function does not perform analysis; it strictly consumes precomputed results and formats them into a reproducible R Markdown document.
 
+At a high level, the function performs four distinct tasks:
 
+1. Input validation and setup
 
+2. Deserialization of analysis outputs
 
+3. Programmatic construction of an R Markdown document
+
+4. Rendering (optional) and file management
+
+Below is a breakdown of how these pieces fit together and where updates should be made.
+
+1. Inputs and assumptions
+
+- The function assumes that analysis_results_path points to an .rds file with a fixed positional structure:
+
+  - [[1]] → results: a list of per-comparison analysis outputs (limma, GSEA, etc.)
+
+  - [[2]] → comparisons: metadata defining comparison names and group labels
+
+  - [[3]] → out_dirs: named list of output directories (volcano, heatmap, gsea, pca)
+
+  - [[4]] → pca_plot: a precomputed PCA ggplot object
+
+- Any change to how the upstream pipeline saves this RDS (order, naming, or contents) must be mirrored here, otherwise the report will silently misbehave or fail.
+
+2. Output behavior
+
+- The function creates a single .Rmd file ({report_prefix}.Rmd) in output_dir.
+
+- The HTML filename is fixed to {report_prefix}.html (timestamping is currently disabled but preserved in comments).
+
+- Rendering via rmarkdown::render() is intentionally commented out. This allows:
+
+  - Manual inspection/debugging of the generated Rmd
+
+  - Deferred rendering on systems without Pandoc or a full R Markdown stack
+
+3. R Markdown generation strategy
+
+- The report is assembled as a set of character strings using glue() and appended incrementally:
+
+  - Front matter + setup chunk. Defines document metadata, HTML options, and reloads the RDS inside the report environment to ensure self-containment.
+
+  - Global sections. Overview, pipeline description, PCA visualization, and a cross-comparison summary table computed dynamically from results.
+
+  - Per-comparison sections (looped) For each comparison:
+
+    - Experimental design metadata
+
+    - Volcano plot (loaded from file)
+
+    - Heatmap (loaded from file)
+
+    - Differential abundance tables (computed in-report)
+
+    - GSEA plots and tables (if available)
+
+    - All plots except PCA are included via knitr::include_graphics(). This deliberately decouples visualization generation from reporting and avoids recomputation.
+
+4. Thresholds and hard-coded logic
+
+- Several analytical thresholds are hard-coded in the reporting layer and must remain synchronized with the analysis pipeline:
+
+  - Adjusted p-value cutoff: adj.P.Val < 0.05
+
+  - Fold-change cutoff: |log2FC| ≥ 0.58 (1.5×)
+
+  - GSEA presence is inferred by checking results[[i]]$gsea
