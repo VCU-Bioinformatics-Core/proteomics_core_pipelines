@@ -343,7 +343,7 @@ Overall execution flow
 
   8. Global PCA computation and visualization
 
-  9 Serialization of all results into a single RDS
+  9. Serialization of all results into a single RDS
 
   10. Automated report generation from the RDS
 
@@ -352,73 +352,71 @@ Overall execution flow
 
 **Command-line interface and runtime configuration**
 
-The script is designed to be executed via Rscript and uses optparse to define required and optional arguments:
+- The script is designed to be executed via Rscript and uses optparse to define required and optional arguments:
 
-Counts matrix (merged protein intensities)
+  - Counts matrix (merged protein intensities)
 
-Samplesheet defining experimental groups and comparisons
+  - Samplesheet defining experimental groups and comparisons
 
-Output directory
+  - Output directory
 
-Run identifier
+  - Run identifier
 
-Genome annotation (human or mouse)
+  - Genome annotation (human or mouse)
 
-A debug block is included to bypass CLI arguments during development. This block overrides all runtime inputs and should be disabled or removed in production to avoid accidental misuse.
-
+  - A debug block is included to bypass CLI arguments during development. This block overrides all runtime inputs and should be disabled or removed in production to avoid accidental misuse.
 
 **Annotation and identifier mapping**
 
-Protein identifiers are assumed to be UniProt Swiss-Prot IDs, potentially concatenated with semicolons.
+- Protein identifiers are assumed to be UniProt Swiss-Prot IDs, potentially concatenated with semicolons.
 
-Key steps:
+- Key steps:
 
-UniProt IDs are split, de-duplicated, and queried against Ensembl using biomaRt
+  - UniProt IDs are split, de-duplicated, and queried against Ensembl using biomaRt
 
-A one-to-one UniProt → Ensembl mapping is enforced via distinct()
+  - A one-to-one UniProt → Ensembl mapping is enforced via distinct()
 
-Ensembl gene IDs are merged back into the main protein-level table
+  - Ensembl gene IDs are merged back into the main protein-level table
 
-Row names are set to protein accessions for downstream compatibility
+  - Row names are set to protein accessions for downstream compatibility
 
-Any change in identifier conventions upstream (e.g., gene symbols instead of UniProt) will require updates here and in all downstream plotting and reporting functions.
+- Any change in identifier conventions upstream (e.g., gene symbols instead of UniProt) will require updates here and in all downstream plotting and reporting functions.
 
 
 **Data cleaning and preprocessing assumptions**
 
-Several important assumptions are embedded in the preprocessing logic:
+- Several important assumptions are embedded in the preprocessing logic:
 
-Proteins with missing PG.Genes are dropped
+  - Proteins with missing PG.Genes are dropped
 
-Duplicate protein accessions are removed naïvely using distinct()
+  - Duplicate protein accessions are removed naïvely using distinct()
 (this is explicitly marked as a temporary and potentially lossy step)
 
-Non-intensity metadata columns are manually excluded
+  - Non-intensity metadata columns are manually excluded
 
-Intensities are coerced to integers and log2-transformed with a pseudocount
+  - Intensities are coerced to integers and log2-transformed with a pseudocount
 
-These steps should be reviewed carefully if the upstream quantification format changes or if missingness patterns differ substantially.
-
+- These steps should be reviewed carefully if the upstream quantification format changes or if missingness patterns differ substantially.
 
 **Comparison definition logic**
 
-Comparisons are inferred from the samplesheet using the following convention:
+- Comparisons are inferred from the samplesheet using the following convention:
 
-Column 1–2: sample metadata (SampleID, GroupID)
+  - Column 1–2: sample metadata (SampleID, GroupID)
 
-Column 3 onward: binary comparison vectors
+  - Column 3 onward: binary comparison vectors
 
-1 → experimental group
+    - 1 → experimental group
 
-0 → control group
+    - 0 → control group
 
-For each comparison column:
+- For each comparison column:
 
-Experimental and control group labels are inferred dynamically
+  - Experimental and control group labels are inferred dynamically
 
-Only valid comparisons (both groups present) are retained
+  - Only valid comparisons (both groups present) are retained
 
-This makes the pipeline flexible but tightly couples it to the samplesheet schema.
+- This makes the pipeline flexible but tightly couples it to the samplesheet schema.
 
 **Limma model construction**
 
