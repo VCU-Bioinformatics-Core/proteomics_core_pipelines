@@ -17,6 +17,7 @@ This is a bioinformatics pipeline that performs differential protein abundance a
   - [Mouse Analysis](#mouse-analysis)
   - [Human Analysis](#human-analysis)
   - [Arguments](#arguments)
+- [Current execution workflow (temporary)](#current-execution-workflow-temporary)
 - [Pipeline Output](#pipeline-output)
   - [Data](#data)
     - [de_data](#de_data)
