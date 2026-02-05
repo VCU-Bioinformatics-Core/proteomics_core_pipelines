@@ -144,6 +144,40 @@ Rscript de.regular.R \
 --annotation mouse
 ```
 
+##### Current execution workflow (temporary)
+
+At present, the pipeline is executed manually through an interactive RStudio session. This workflow exists to ensure a controlled runtime environment (via renv) and will likely be automated in the future.
+
+The current steps are:
+
+1. Launch RStudio on cardinal.som.edu.
+
+2. Open the proteomics_core_pipelines GitHub repository as the active RStudio project.
+This step is required to activate the project-specific renv environment and ensure all package versions are correctly resolved.
+
+3. From within RStudio, open a terminal and navigate to the desired analysis directory.
+
+4. Execute the pipeline using a wrapper script (example below).
+
+5. Open the generated R Markdown file located in <outdir>/*.Rmd for inspection, debugging, or manual rendering.
+
+**Wrapper script invocation**
+
+The pipeline is currently launched via a shell wrapper that calls the R script with all required command-line arguments:
+
+```
+project_dir="<path-to-project-dir>"
+
+Rscript <wrapper-script-path> \
+  --counts <counts-path> \
+  --samplesheet <samplesheet-path> \
+  --outdir <output-dir> \
+  --runid <arbitrary-id> \
+  --annotation <human or mouse>
+```
+
+This approach allows the analysis to be parameterized from the command line while still relying on RStudio to manage the execution environment. The wrapper script is responsible only for argument passing; all analysis logic remains within the R pipeline itself.
+
 ##### Arguments
 - `-c, --counts`: Path to the merged counts file **(Mandatory)**
 - `-s, --samplesheet`: Path to the sample sheet file **(Mandatory)**
