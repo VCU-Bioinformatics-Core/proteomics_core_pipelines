@@ -123,7 +123,7 @@ The pipeline is executed using an R script. Example commands for running it on V
 ```bash
 module load R/4.4.1
 
-Rscript de.R \
+Rscript de.regular.R \
 --counts human_counts.tsv \
 --samplesheet samplesheet.csv \
 --outdir human_results \
@@ -136,7 +136,7 @@ Rscript de.R \
 ```bash
 module load R/4.4.1
 
-Rscript de.R \
+Rscript de.regular.R \
 --counts mouse_counts.tsv \
 --samplesheet samplesheet.csv \
 --outdir mouse_results \
