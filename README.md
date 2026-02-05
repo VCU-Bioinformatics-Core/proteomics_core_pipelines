@@ -144,6 +144,13 @@ Rscript de.regular.R \
 --annotation mouse
 ```
 
+##### Arguments
+- `-c, --counts`: Path to the merged counts file **(Mandatory)**
+- `-s, --samplesheet`: Path to the sample sheet file **(Mandatory)**
+- `-o, --outdir`: Output directory (default: ./output)
+- `-r, --runid`: Unique identifier for the analysis run **(Mandatory)**
+- `-a, --annotation`: Genome to use for annotation: 'mouse' or 'human' (default: mouse) 
+
 #### Current execution workflow (temporary)
 
 At present, the pipeline is executed manually through an interactive RStudio session. This workflow exists to ensure a controlled runtime environment (via renv) and will likely be automated in the future.
@@ -175,14 +182,7 @@ Rscript <wrapper-script-path> \
   --annotation <human or mouse>
 ```
 
-This approach allows the analysis to be parameterized from the command line while still relying on RStudio to manage the execution environment. The wrapper script is responsible only for argument passing; all analysis logic remains within the R pipeline itself.
-
-##### Arguments
-- `-c, --counts`: Path to the merged counts file **(Mandatory)**
-- `-s, --samplesheet`: Path to the sample sheet file **(Mandatory)**
-- `-o, --outdir`: Output directory (default: ./output)
-- `-r, --runid`: Unique identifier for the analysis run **(Mandatory)**
-- `-a, --annotation`: Genome to use for annotation: 'mouse' or 'human' (default: mouse)  
+This approach allows the analysis to be parameterized from the command line while still relying on RStudio to manage the execution environment. The wrapper script is responsible only for argument passing; all analysis logic remains within the R pipeline itself. 
 
 ### Pipeline Output
 The pipeline generates an output directory (specified by `--outdir`) containing two main subdirectories: `data` and `figures`.
