@@ -144,7 +144,7 @@ Rscript de.regular.R \
 --annotation mouse
 ```
 
-##### Current execution workflow (temporary)
+#### Current execution workflow (temporary)
 
 At present, the pipeline is executed manually through an interactive RStudio session. This workflow exists to ensure a controlled runtime environment (via renv) and will likely be automated in the future.
 
@@ -161,7 +161,7 @@ This step is required to activate the project-specific renv environment and ensu
 
 5. Open the generated R Markdown file located in <outdir>/*.Rmd for inspection, debugging, or manual rendering.
 
-**Wrapper script invocation**
+##### Wrapper script invocation
 
 The pipeline is currently launched via a shell wrapper that calls the R script with all required command-line arguments:
 
