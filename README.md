@@ -150,16 +150,16 @@ At present, the pipeline is executed manually through an interactive RStudio ses
 
 The current steps are:
 
-1. Launch RStudio on cardinal.som.edu.
+1. Launch **RStudio** on `cardinal.som.edu`.
 
-2. Open the proteomics_core_pipelines GitHub repository as the active RStudio project.
-This step is required to activate the project-specific renv environment and ensure all package versions are correctly resolved.
+2. Open the **proteomics_core_pipelines** GitHub repository as the active RStudio project.
+This step is required to activate the project-specific **renv** environment and ensure all package versions are correctly resolved.
 
-3. From within RStudio, open a terminal and navigate to the desired analysis directory.
+3. From within RStudio, open a terminal and navigate to the desired **analysis directory**.
 
 4. Execute the pipeline using a wrapper script (example below).
 
-5. Open the generated R Markdown file located in <outdir>/*.Rmd for inspection, debugging, or manual rendering.
+5. Open the generated **R Markdown file** located in `<outdir>/*.Rmd` for inspection, debugging, or manual rendering.
 
 ##### Wrapper script invocation
 
@@ -167,7 +167,6 @@ The pipeline is currently launched via a shell wrapper that calls the R script w
 
 ```
 project_dir="<path-to-project-dir>"
-
 Rscript <wrapper-script-path> \
   --counts <counts-path> \
   --samplesheet <samplesheet-path> \
