@@ -1,5 +1,15 @@
 # Proteomics Core Analyses
-Process proteomics data to generate standard first-pass deliverables.
+
+The proteomics core generates multiple types of proteomics datasets, each with distinct study designs that determine the analytical pipeline we can apply.
+The available study designs include:
+- 1 × 1: two treatment groups, one sample per group
+- 3 × 3: two treatment groups, three samples per group
+- 3 × 3 × 3: three treatment groups, three samples per group
+- 3 × 3 × 3 × 3: four treatment groups, three samples per group
+
+Given the limitations imposed by sample size, differential abundance analysis is performed only for designs with at least a 3 × 3 structure or larger.
+
+For the 1 × 1 design, we restrict the analysis to exploratory and pilot-level visualizations.
 
 ## Differential Abundance Analysis
 
