@@ -5,6 +5,18 @@ These pipelines were developed through a collaboration between the Bioinformatic
 
 In addition, the pipelines are designed to be modular and fully reproducible, enabling broader adoption and adaptation by other research groups.
 
+The pipeline has been developed to handle the following study designs and protein data (see below). 
+
+| Study Design  | LFQ | Phosphoproteomics |
+|---------------|-----|-------------------|
+| 1 × 1         | NS  | NS                |
+| 3 × 3         | 90% | NS                |
+| 3 × 3 × 3     | NS  | NS                |
+| 3 × 3 × 3 × 3 | NS  | NS                |
+
+NS means "Not started"
+Percentages describe about how much of the pipeline is complete
+
 ### Study Designs Used at the Proteomics Core
 The proteomics core generates multiple types of datasets, each with distinct study designs that determine the analytical pipeline we can apply.
 The diagram below gives an overview with follow-up verbal descriptions:
