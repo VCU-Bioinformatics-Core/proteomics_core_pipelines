@@ -113,8 +113,10 @@ Therefore, phosphoproteomic analyses are conducted primarily at the site- or pep
 
 ## Differential Abundance Analysis
 
-### Introduction
-This is a bioinformatics pipeline that performs differential protein abundance analysis. It is designed to provide a streamlined, reproducible workflow for identifying proteins with statistically significant abundance differences between experimental conditions. It incorporates best-practice recommendations for proteomics data analysis, including normalization, dispersion estimation, and hypothesis testing. A comprehensive report with key visualizations for each specified comparison is automatically generated.
+Differential abundance analysis is the main analysis module of this pipeline. The pipeline is designed to provide a streamlined, reproducible
+workflow for identifying proteins with statistically significant abundance differences between experimental conditions. It incorporates
+best-practice recommendations for proteomics data analysis, including normalization, dispersion estimation, and hypothesis testing. A
+comprehensive report with key visualizations for each specified comparison is automatically generated.
 
 ### Pipeline
 <img height="450" alt="Proteomics Pipeline" src="https://github.com/user-attachments/assets/ca5e73a9-7a5c-4578-bf7b-3ea563cc0237" />
