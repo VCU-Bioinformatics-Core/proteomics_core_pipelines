@@ -456,11 +456,11 @@ Overall execution flow
 
 The limma setup is intentionally minimal:
 
-A no-intercept design (~0 + condition) is used
+- A no-intercept design (~0 + condition) is used
 
-One contrast is evaluated per comparison
+- One contrast is evaluated per comparison
 
-Expression data are assumed to be already normalized and log-scaled
+- Expression data are assumed to be already normalized and log-scaled
 
 All limma-specific logic is delegated to helper functions (run_analysis(), perform_limma_analysis()), allowing this script to focus on orchestration rather than statistics.
 
@@ -468,27 +468,27 @@ All limma-specific logic is delegated to helper functions (run_analysis(), perfo
 
 For each comparison:
 
-run_analysis() is called with:
+- run_analysis() is called with:
 
-Comparison metadata
+  - Comparison metadata
 
-Shared limma parameters
+  - Shared limma parameters
 
-Intensity matrix
+  - Intensity matrix
 
-Output directory structure
+  - Output directory structure
 
-Results are appended only if non-null
+- Results are appended only if non-null
 
-Each comparison produces:
+- Each comparison produces:
 
-Limma tables
+  - Limma tables
 
-Volcano plots
+  - Volcano plots
 
-Heatmaps
+  - Heatmaps
 
-GSEA outputs (if applicable)
+  - GSEA outputs (if applicable)
 
 Failures in a single comparison do not halt the entire run unless explicitly thrown.
 
@@ -497,28 +497,28 @@ Failures in a single comparison do not halt the entire run unless explicitly thr
 
 PCA is computed once globally, across all samples:
 
-Missing values are imputed using per-protein means
+- Missing values are imputed using per-protein means
 (explicitly flagged in-code as a temporary and suboptimal solution)
 
-Additional filtering removes columns with remaining non-finite values
+- Additional filtering removes columns with remaining non-finite values
 
-PCA is limited to three components
+- PCA is limited to three components
 
-Only PC1 vs PC2 is plotted and saved
+- Only PC1 vs PC2 is plotted and saved
 
 The resulting pca_plot object is included in the final RDS and reused by the report generator to avoid recomputation.
 
 **Result serialization contract**
 
 All downstream reporting depends on the structure of the saved RDS:
-
+```R
 list(
   results,
   comparisons,
   out_dirs,
   pca_plot
 )
-
+```
 
 This positional contract is relied upon verbatim by generate_report(). Any modification to the order or contents of this list must be reflected in the report generator, otherwise the report will break or silently misinterpret data.
 
@@ -526,11 +526,11 @@ This positional contract is relied upon verbatim by generate_report(). Any modif
 
 The final step calls generate_report() using the saved RDS as its sole input. At this point:
 
-No analysis is recomputed
+- No analysis is recomputed
 
-All figures are loaded from disk
+- All figures are loaded from disk
 
-All tables are reconstructed from serialized results
+- All tables are reconstructed from serialized results
 
 This separation ensures reproducibility and allows report generation to be rerun independently of the analysis.
 
@@ -538,30 +538,23 @@ This separation ensures reproducibility and allows report generation to be rerun
 
 This script intentionally documents several weak points inline (marked with warnings), including:
 
-Duplicate protein handling
+- Duplicate protein handling
 
-PCA imputation strategy
+- PCA imputation strategy
 
-Tight coupling to input file schemas
+- Tight coupling to input file schemas
 
-Hard-coded thresholds propagated across multiple components
+- Hard-coded thresholds propagated across multiple components
 
 When updating the pipeline, changes should be evaluated holistically across:
 
-This orchestration script
+- This orchestration script
 
-Helper functions
+- Helper functions
 
-Report generation logic
+- Report generation logic
 
 Treat this file as the control plane of the pipeline: it defines what runs, in what order, and with what assumptions.
-
-
-
-
-
-
-
 
 ### Updating the limma code
 `helper.R::perform_limma_analysis()` function encodes the differential abundance code with limma.
