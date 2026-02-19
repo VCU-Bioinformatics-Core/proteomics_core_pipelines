@@ -131,7 +131,7 @@ visualizations and summary statistics, thereby facilitating transparent interpre
 - Automatically builds an HTML report based on R markdown, with plots and tables.
 
 *Note:*
-- This pipeline is intended for a "first pass" analysis. For custom or complex analyses, please contact our core and [submit a Jira ticket](https://www.masseycancercenter.org/research/shared-resource-cores/bioinformatics/)
+- This pipeline is intended for a "first pass" analysis. For custom or complex analyses, please contact the Bioinformatics core and [submit a Jira ticket](https://www.masseycancercenter.org/research/shared-resource-cores/bioinformatics/)
 - Differential abundance results are considered significant if the Benjamini-Hochberg adjusted p-value (padj) is less than or equal to 0.05 and the absolute log2 fold change is greater than 0.58 (corresponding to an absolute fold change of 1.5).
 
 ### Preparing your R Environment
