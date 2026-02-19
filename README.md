@@ -15,7 +15,11 @@ The available study designs include:
 
 Given the limitations imposed by sample size, differential abundance analysis is performed only for designs with at least a 3 × 3 structure or larger.
 
-For the 1 × 1 design, we restrict the analysis to exploratory and pilot-level visualizations.
+For the 1 × 1 design, we restrict the analysis to exploratory and pilot-level visualizations. 
+
+Diagram of analyses:
+
+<img width="1536" height="1024" alt="image" src="https://github.com/user-attachments/assets/0f117f61-75ec-4f07-80a3-b086d6677098" />
 
 ### Protein Assaying Strategy
 
