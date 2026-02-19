@@ -21,7 +21,6 @@ Percentages describe about how much of the pipeline is complete
     - [Label-Free Quantification (LFQ)](#label-free-quantification-lfq)
     - [Phosphoproteomics](#phosphoproteomics)
 - [Differential Abundance Analysis](#differential-abundance-analysis)
-  - [Introduction](#introduction)
   - [Pipeline](#pipeline)
   - [Preparing your R Environment](#preparing-your-r-environment)
   - [Usage](#usage)
