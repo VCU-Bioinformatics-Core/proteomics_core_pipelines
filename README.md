@@ -14,6 +14,12 @@ These pipelines were developed through a collaboration between the Bioinformatic
 NS means "Not started"
 Percentages describe about how much of the pipeline is complete
 
+ANALYST READ THIS
+- The pipeline temporarily runs using these instructions: [Current Execution Workflow](#current-execution-workflow-temporary):
+  Currently this is the most reliable way of making sure the correct environment is loaded, the analysis data is output, and the rmarkdown
+  is rendered. This last step has been problematic due to a bug with knittr and knitting must be done manually with Rstudio.
+- Currently there are some difficulties using the renv setup. The current `.renv` file was generated using Cardinal (VCU server) and somehow, configurations on that server affected this file.
+
 ## Table of Contents
 - [Input Datasets and Proteome Sources](#input-datasets-and-proteome-sources)
   - [Study Designs](#study-designs)
@@ -254,7 +260,7 @@ This step is required to activate the project-specific **renv** environment and 
 
 ##### Wrapper script invocation
 
-The pipeline is currently launched via a shell wrapper that calls the R script with all required command-line arguments:
+The pipeline is currently launched via a shell wrapper that calls the R script with all required command-line arguments as show:
 
 ```
 project_dir="<path-to-project-dir>"
@@ -735,3 +741,8 @@ Below is a breakdown of how these pieces fit together and where updates should b
   - Fold-change cutoff: |log2FC| ≥ 0.58 (1.5×)
 
   - GSEA presence is inferred by checking results[[i]]$gsea
+
+ ### Issues with the renv environment
+
+This environment was created within 
+
