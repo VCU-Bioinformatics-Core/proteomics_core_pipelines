@@ -14,11 +14,16 @@ These pipelines were developed through a collaboration between the Bioinformatic
 NS means "Not started"
 Percentages describe about how much of the pipeline is complete
 
-ANALYST READ THIS
-- The pipeline temporarily runs using these instructions: [Current Execution Workflow](#current-execution-workflow-temporary):
-  Currently this is the most reliable way of making sure the correct environment is loaded, the analysis data is output, and the rmarkdown
-  is rendered. This last step has been problematic due to a bug with knittr and knitting must be done manually with Rstudio.
-- Currently there are some difficulties using the renv setup. The current `.renv` file was generated using Cardinal (VCU server) and somehow, configurations on that server affected this file.
+`ANALYST READ THIS`
+```
+1. The pipeline temporarily runs using the instructions under "Current Execution Workflow".
+   Currently this is the most reliable way of making sure the correct environment is loaded, the analysis
+   data is output, and the rmarkdown is rendered. This last step has been problematic due to a bug with
+   knittr and knitting must be done manually with Rstudio.
+
+2. Currently there are some difficulties using the renv setup. The current `.renv` file was generated
+   using Cardinal (VCU server) and somehow, configurations on that server affected this file.
+```
 
 ## Table of Contents
 - [Input Datasets and Proteome Sources](#input-datasets-and-proteome-sources)
