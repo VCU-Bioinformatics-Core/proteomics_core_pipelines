@@ -428,6 +428,46 @@ For questions or issues, please contact the BISR group at [mccbioinfo@vcu.edu] o
 ### License
 [GPL-3.0 license](https://github.com/VCU-Bioinformatics-Core/proteomics_core_pipelines/tree/main?tab=GPL-3.0-1-ov-file#)
 
+## Spectronaut Export Configuration
+
+This document describes the required output format when exporting data from [Spectronaut](https://biognosys.com/software/spectronaut/).
+
+### Required Output Columns for Proteomics
+
+When generating the export spreadsheet, the following columns **must** be included:
+
+| Column | Level | Description |
+|---|---|---|
+| `PG.ProteinAccessions` | Protein Group | Protein accession numbers |
+| `PG.Genes` | Protein Group | Gene names associated with the protein group |
+| `PG.UniProtIds` | Protein Group | UniProt identifiers |
+| `PG.ProteinNames` | Protein Group | Full protein names |
+| `PG.FastaHeaders` | Protein Group | FASTA header lines from the reference database |
+| `PG.FASTAName` | Protein Group | Protein name as listed in the FASTA file |
+
+### Required Output Columns for Phosphoproteomics
+
+When generating the export spreadsheet, the following columns **must** be included:
+
+| Column | Level | Description |
+|---|---|---|
+| `PG.ProteinAccessions` | Protein Group | Protein accession numbers |
+| `PG.Genes` | Protein Group | Gene names associated with the protein group |
+| `PG.UniProtIds` | Protein Group | UniProt identifiers |
+| `PG.ProteinNames` | Protein Group | Full protein names |
+| `PG.FastaHeaders` | Protein Group | FASTA header lines from the reference database |
+| `EG.PrecursorId` | Precursor | Modified peptide sequence with charge state |
+| `PG.FASTAName` | Protein Group | Protein name as listed in the FASTA file |
+
+### Export Instructions
+
+1. Open your Spectronaut project and complete the search/analysis.
+2. Navigate to **Report** in the top menu.
+3. Select or create a report schema.
+4. Under the schema editor, ensure all columns listed above are enabled.
+5. Set the export granularity to **Precursor** level so that both `EG.*` and `PG.*` fields are included together.
+6. Export the report as a `.tsv` or `.xlsx` file.
+
 ## Developmental Notes
 
 ### Code Files and Pipeline Execution Overview
