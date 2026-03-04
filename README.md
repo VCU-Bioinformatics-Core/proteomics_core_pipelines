@@ -61,6 +61,7 @@ Percentages describe about how much of the pipeline is complete
   - [Future Improvements](#future-improvements)
   - [Contact](#contact)
   - [License](#license)
+- [Spectronaut Export Configuration](#spectronaut-export-configuration)
 - [Developmental Notes](#developmental-notes)
   - [Code Files and Pipeline Execution Overview](#code-files-and-pipeline-execution-overview)
   - [Updating the Pipeline Code](#update-the-pipeline-code)
