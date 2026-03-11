@@ -41,18 +41,35 @@ setup_directories <- function(base_dir) {
 # ==========================
 # limma analysis functions
 # ==========================
-perform_limma_analysis <- function(limma_params, exp, ctrl) {
+perform_limma_analysis <- function(limma_params, exp, ctrl, min_valid_samples=2) {
   tryCatch({
     print(paste("Performing limma-voom analysis for", exp, "vs", ctrl))
+    
+    # Identify which columns belong to each group
+    exp_cols  <- which(limma_params$design[, exp]  == 1)
+    ctrl_cols <- which(limma_params$design[, ctrl] == 1)
+    
+    # Count valid (non-NA/NaN) values per gene per group
+    valid_exp  <- rowSums(!is.na(limma_params$E[, exp_cols,  drop = FALSE]))
+    valid_ctrl <- rowSums(!is.na(limma_params$E[, ctrl_cols, drop = FALSE]))
+    
+    # Filter genes with at least min_valid_samples in BOTH groups
+    keep <- valid_exp >= min_valid_samples & valid_ctrl >= min_valid_samples
+    print(paste("Genes before filtering:", nrow(limma_params$E)))
+    print(paste("Genes after filtering: ", sum(keep)))
+    print(paste("Genes removed:         ", sum(!keep)))
+    
+    E_filtered <- limma_params$E[keep, , drop = FALSE]
     
     # Build contrast
     contrast_matrix <- makeContrasts(contrasts = paste0(exp, "-", ctrl),
                                      levels = colnames(limma_params$design))
     
     # Fit linear model
-    fit <- lmFit(limma_params$E, limma_params$design)
+    #fit <- lmFit(limma_params$E, limma_params$design)
+    fit <- lmFit(E_filtered, limma_params$design) # using the E_filtered instead
     fit2 <- contrasts.fit(fit, contrast_matrix)
-    fit2 <- eBayes(fit2)
+    fit2 <- eBayes(fit2, robust = TRUE)
     
     # Extract results
     res <- topTable(fit2, coef = 1, number = Inf, sort.by = "P")
@@ -110,6 +127,53 @@ generate_volcano <- function(data, exp_name, ctrl_name, p = 0.05, lfc = 0.58,
   return(p)
 }
 
+generate_phospho_volcano <- function(data, exp_name, ctrl_name, p = 0.05, lfc = 0.58, 
+                             sig = "adj.P.Val", out_dir = ".") {
+  
+  print('Labeling the data')
+  labeled_dat <- data %>% 
+    mutate(
+      color_tag = case_when(
+        eval(as.symbol(sig)) < p & logFC < -lfc ~ "Under expressed",
+        eval(as.symbol(sig)) < p & logFC > lfc ~ "Over expressed",
+        TRUE ~ NA_character_
+      )
+    )
+  
+  print('Extracting the top 20 genes')
+  top_20_genes_up <- labeled_dat %>%
+    filter(P.Value <= p & logFC >= lfc) %>%
+    arrange(eval(as.symbol(sig))) %>%
+    slice_head(n = 20) %>%
+    pull(uniprotswissprot)
+  
+  print('Extracting the bottom 20 genes')
+  top_20_genes_dn <- labeled_dat %>%
+    filter(P.Value <= p & logFC <= -lfc) %>%
+    arrange(eval(as.symbol(sig))) %>%
+    slice_head(n = 20) %>%
+    pull(uniprotswissprot)
+  
+  print('Plotting')
+  labeled_dat <- labeled_dat %>% mutate(highlight = ifelse(uniprotswissprot %in% c(top_20_genes_up, top_20_genes_dn), uniprotswissprot, NA))
+  labeled_dat <- labeled_dat %>% filter(!is.na(logFC), !is.na(P.Value), is.finite(logFC), is.finite(P.Value))
+  p <- labeled_dat %>% ggplot(aes(x = logFC, y = -log10(P.Value),
+                                  color = color_tag, label = ifelse(highlight == TRUE, uniprotswissprot, NA))) +
+    geom_point(alpha = 0.5) +
+    theme_minimal() +
+    geom_label_repel(aes(label = highlight), max.overlaps = Inf, show.legend = FALSE) +
+    scale_color_manual(values = c("firebrick", "steelblue")) +
+    geom_hline(yintercept = -log10(p), col = "red", linetype = 2) +
+    geom_vline(xintercept = c(-lfc, lfc)) +
+    theme(legend.title = element_blank()) +
+    labs(x = "Log2 Fold-Change (FC)",
+         y = paste0("-log10( P-value )"),
+         title = create_comparison_name(exp_name, ctrl_name, "Differentially expressed genes - ")
+    )
+  return(p)
+}
+
+
 generate_heatmap <- function(results_df, normalized_counts, p = 0.05, lfc = 0.58, 
                              exp_name, ctrl_name, fig_dir) {
   
@@ -159,6 +223,10 @@ generate_heatmap <- function(results_df, normalized_counts, p = 0.05, lfc = 0.58
 
 process_gsea <- function(result, p = 0.05, lfc = 0.58) {
   tryCatch({
+    
+    print('result')
+    print(result[1:3, 1:3])
+      
     sig_genes <- result %>% arrange(desc(logFC))
     sig_genes <- sig_genes %>% filter(!is.na(logFC))
     
@@ -167,6 +235,8 @@ process_gsea <- function(result, p = 0.05, lfc = 0.58) {
       return(NULL)
     }
     
+    # create a gene list where the names are ensembl genes 
+    # and the values are logFC
     gene_list <- sig_genes$logFC
     names(gene_list) <- sig_genes$ensembl_gene_id
     gene_list <- gene_list[!is.na(names(gene_list))]
@@ -224,6 +294,13 @@ run_analysis <- function(comparison, limma_params, normalized_counts, out_dirs) 
     limma_results <- limma_results %>% rownames_to_column(var = "uniprotswissprot")
     
     print('Annotating the results')
+    mapping <- getBM(
+      attributes = c("uniprotswissprot", "ensembl_gene_id"), # "external_gene_name"
+      filters = "uniprotswissprot",
+      values = uniprot_clean,
+      mart = ensembl
+    )
+    mapping <- mapping %>% distinct(uniprotswissprot, .keep_all = TRUE)
     annotated_results <- limma_results %>% left_join(mapping, by=join_by(uniprotswissprot))
     output_file <- create_file_path(out_dirs$de_data, "limma_", comparison$name)
     write.csv(annotated_results, output_file)
@@ -237,55 +314,6 @@ run_analysis <- function(comparison, limma_params, normalized_counts, out_dirs) 
         width = 1200, height = 1600, res = 300)
     ht <- generate_heatmap(limma_results, intensity_matrix,
                      exp_name = comparison$exp, ctrl_name = comparison$ctrl, fig_dir = out_dirs$heatmap)
-    draw(ht)
-    dev.off()
-    
-    print('Running GSEA')
-    gse <- NULL # process_gsea(annotated_results)
-    gse <- process_gsea(annotated_results)
-    
-    if(!is.null(gse)) {
-      print('GSE has data')
-      write.csv(as.data.frame(gse), create_file_path(out_dirs$gsea_data, "GO_Analysis_", comparison$name))
-      
-      print('create dotplot')
-      gsea_plot <- create_dotplot(gse, create_comparison_name(comparison$ctrl, comparison$exp, "GSEA "))
-      
-      print('save plot')
-      save_plot(gsea_plot, create_file_path(out_dirs$gsea, "", comparison$name, "_GSEA.png"))
-    }
-    
-    return(list(limma = annotated_results, gsea = gse))
-    
-    
-  }, error = function(e) {
-    message("Error in run_analysis: ", e$message)
-    return(NULL)
-  })
-}
-
-run_analysis_phospho <- function(comparison, limma_params, normalized_counts, out_dirs) {
-  tryCatch({
-    print(paste("\nStarting analysis for comparison:", comparison$name))
-    
-    print('Running limma')
-    limma_results <- perform_limma_analysis(limma_params, comparison$exp, comparison$ctrl)
-    limma_results <- limma_results %>% rownames_to_column(var = "uniprotswissprot")
-    
-    print('Annotating the results')
-    annotated_results <- limma_results %>% left_join(mapping, by=join_by(uniprotswissprot))
-    output_file <- create_file_path(out_dirs$de_data, "limma_", comparison$name)
-    write.csv(annotated_results, output_file)
-    
-    print('Generating the volcano plot')
-    volcano_plot <- generate_volcano(annotated_results, comparison$exp, comparison$ctrl)
-    save_plot(volcano_plot, create_file_path(out_dirs$volcano, "", comparison$name, "_volcano.png"))
-    
-    print('Generating the heatmap')
-    png(create_file_path(out_dirs$heatmap, "", comparison$name, "_heatmap.png"),
-        width = 1200, height = 1600, res = 300)
-    ht <- generate_heatmap(limma_results, intensity_matrix,
-                           exp_name = comparison$exp, ctrl_name = comparison$ctrl, fig_dir = out_dirs$heatmap)
     draw(ht)
     dev.off()
     
@@ -313,16 +341,59 @@ run_analysis_phospho <- function(comparison, limma_params, normalized_counts, ou
   })
 }
 
+run_analysis_phospho <- function(comparison, limma_params, normalized_counts, out_dirs) {
+  tryCatch({
+    print(paste("Starting analysis for comparison:", comparison$name))
+    
+    print('Running limma')
+    limma_results <- perform_limma_analysis(limma_params, comparison$exp, comparison$ctrl)
+    limma_results <- limma_results %>% rownames_to_column(var = "uniprotswissprot")
+    
+    # print('Annotating the results')
+    # mapping <- getBM(
+    #   attributes = c("uniprotswissprot", "ensembl_gene_id"), # "external_gene_name"
+    #   filters = "uniprotswissprot",
+    #   values = uniprot_clean,
+    #   mart = ensembl
+    # )
+    # mapping <- mapping %>% distinct(uniprotswissprot, .keep_all = TRUE)
+    # annotated_results <- NULL #limma_results %>% left_join(mapping, by=join_by(uniprotswissprot))
+    output_file <- create_file_path(out_dirs$de_data, "limma_", comparison$name)
+    write.csv(limma_results, output_file)
 
+    print('Generating the volcano plot')
+    volcano_plot <- generate_phospho_volcano(limma_results, comparison$exp, comparison$ctrl)
+    save_plot(volcano_plot, create_file_path(out_dirs$volcano, "", comparison$name, "_volcano.png"))
+    
+    print('Generating the heatmap')
+    png(create_file_path(out_dirs$heatmap, "", comparison$name, "_heatmap.png"),
+        width = 1200, height = 1600, res = 300)
+    ht <- generate_heatmap(limma_results, intensity_matrix,
+                           exp_name = comparison$exp, ctrl_name = comparison$ctrl, fig_dir = out_dirs$heatmap)
+    draw(ht)
+    dev.off()
+    
+    # GSEA currently not supported for phosphoproteins since we are doing a 
+    # peptide level analysis
+    # print('Running GSEA')
+    gse <- NULL
+    # gse <- process_gsea(limma_results)
+    if(!is.null(gse)) {
+      print('GSE has data')
+      write.csv(as.data.frame(gse), create_file_path(out_dirs$gsea_data, "GO_Analysis_", comparison$name))
 
+      print('create dotplot')
+      gsea_plot <- create_dotplot(gse, create_comparison_name(comparison$ctrl, comparison$exp, "GSEA "))
 
-
-
-
-
-
-
-
-
-
-
+      print('save plot')
+      save_plot(gsea_plot, create_file_path(out_dirs$gsea, "", comparison$name, "_GSEA.png"))
+    }
+    
+    return(list(limma = limma_results, gsea = gse))
+    
+    
+  }, error = function(e) {
+    message("Error in run_analysis: ", e$message)
+    return(NULL)
+  })
+}

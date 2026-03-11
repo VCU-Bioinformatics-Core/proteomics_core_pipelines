@@ -305,10 +305,10 @@ if (sum(dap_flags) == 0) {{
 ```{{r top-up-daps-{i} }}
 
 if (dap_flags[1] > 0){{
-    #DT::datatable(top_up %>% select(ENSEMBL_ID, SYMBOL, log2FoldChange, pvalue, padj, GENENAME),
+    #DT::datatable(top_up %>% select(SYMBOL, log2FoldChange, pvalue, padj, GENENAME),
     #           caption = "Top Up Regulated Proteins")
     
-    DT::datatable(top_up %>% dplyr::select(ensembl_gene_id, uniprotswissprot, logFC, pvalue, padj, uniprotswissprot),
+    DT::datatable(top_up %>% dplyr::select(uniprotswissprot, logFC, pvalue, padj, uniprotswissprot),
                caption = "Top Up Regulated Proteins")
 }} else {{
   cat("No up regulated proteins found\\n\\n")
@@ -319,10 +319,10 @@ if (dap_flags[1] > 0){{
 ```{{r top-down-daps-{i} }}
 
 if (dap_flags[2] > 0){{
-  # DT::datatable(top_down %>% select(ENSEMBL_ID, SYMBOL, log2FoldChange, pvalue, padj, GENENAME),
+  # DT::datatable(top_down %>% select(SYMBOL, log2FoldChange, pvalue, padj, GENENAME),
   #             caption = "Top Down Regulated Proteins")
   
-  DT::datatable(top_down %>% dplyr::select(ensembl_gene_id, uniprotswissprot, logFC, pvalue, padj, uniprotswissprot),
+  DT::datatable(top_down %>% dplyr::select(uniprotswissprot, logFC, pvalue, padj, uniprotswissprot),
                 caption = "Top Down Regulated Proteins")
   
 }} else {{

@@ -1,6 +1,9 @@
 # ==========================
-# limma differential expression pipeline
+# limma differential expression pipeline for phospopeptides
 # ==========================
+# In contrast to the protein-level analysis performed in de.regular.R,
+# this workflow is specifically designed for phosphopeptide-level analysis
+# and is parameterized accordingly.
 
 library(here)
 library(dplyr)
@@ -36,6 +39,7 @@ source(here::here("workflow/report_generator.phospho.R"))
 #debug(generate_volcano)
 #debug(run_analysis)
 #debug(generate_heatmap)
+#debug(process_gsea)
 
 # ==========================
 # Command-line options
@@ -65,17 +69,9 @@ genome <- opt$annotation
 # ==========================
 # Debug mode
 # ==========================
-# debug <- TRUE
-# if (debug){
-#   runID <- "test_run"
-#   countData <- "./example_counts.tsv"
-#   samplesheet <- "./example_samplesheet.csv"
-#   outDir <- "./test_output"
-#   genome <- "mouse"
-# }
 
-debug <- TRUE
-# debug <- FALSE
+#debug <- TRUE
+debug <- FALSE
 if (debug){
   # runID <- 'Test'
   # countData <- '/global/projects/proteomics_core/analyst_workspace/pipeline_test_data/raw/20251001_U266_UT_VS_S+B_LFQ_Report.csv'
@@ -85,44 +81,81 @@ if (debug){
   # genome <- 'human'
   
   runID <- 'Test'
-  countData <- '/global/projects/proteomics_core/researcher_workspace/steven_grant/Bioinformatics/results/phospho_proteome/LFQ_phospho_4condition_DEV_Report_A.csv'
+  countData <- '/global/projects/proteomics_core/researcher_workspace/steven_grant/Report.CSV/Phospho_Proteome_DEV/U266_LFQ_phospho_4condition_DEV_Report.Complete.csv'
   samplesheet <- '/global/projects/proteomics_core/researcher_workspace/steven_grant/Bioinformatics/results/phospho_proteome/samplesheet.csv'
   outDir <- '/global/projects/proteomics_core/researcher_workspace/steven_grant/Bioinformatics/results/phospho_proteome/'
   annotation <- 'human'
   genome <- 'human'
 }
 
-# ==========================
-# Load annotation DB
-# ==========================
-if (genome == "human") {
-  if (!require("org.Hs.eg.db")) BiocManager::install("org.Hs.eg.db")
-  annotation_db <- org.Hs.eg.db
-  ensembl <- useMart("ensembl", dataset = "hsapiens_gene_ensembl")
-  
-} else if (genome == "mouse") {
-  if (!require("org.Mm.eg.db")) BiocManager::install("org.Mm.eg.db")
-  annotation_db <- org.Mm.eg.db
-  ensembl <- useMart("ensembl", dataset = "mmusculus_gene_ensembl")
-} else {
-  stop("Invalid genome specified. Use 'mouse' or 'human'")
-}
+# # ==========================
+# # Load annotation DB
+# # ==========================
+# if (genome == "human") {
+#   if (!require("org.Hs.eg.db")) BiocManager::install("org.Hs.eg.db")
+#   annotation_db <- org.Hs.eg.db
+#   ensembl <- useMart("ensembl", dataset = "hsapiens_gene_ensembl")
+# 
+# } else if (genome == "mouse") {
+#   if (!require("org.Mm.eg.db")) BiocManager::install("org.Mm.eg.db")
+#   annotation_db <- org.Mm.eg.db
+#   ensembl <- useMart("ensembl", dataset = "mmusculus_gene_ensembl")
+# } else {
+#   stop("Invalid genome specified. Use 'mouse' or 'human'")
+# }
+
+print('**************************************************************')
+print('**************************************************************')
+print('**************************************************************')
+print('**************************************************************')
+print('**************************************************************')
 
 # ==========================
 # Read and prepare data
 # ==========================
 out_dirs <- setup_directories(outDir)
-full_prot_levels <- data.frame(read_csv(countData, col_names = TRUE))
-full_prot_levels <- full_prot_levels %>% filter(!is.na(EG.PrecursorId)) # remove prots with missing names
-print("WARNING JR: NEED TO ADDRESS THE DROPPING OF DUPLICATES")
-full_prot_levels <- full_prot_levels %>% distinct(EG.PrecursorId, .keep_all = TRUE) # drop duplicate (temporarily)
-colnames(full_prot_levels) <- sub("^X\\.\\d+\\.\\.", "", colnames(full_prot_levels)) # Remove the "X.#.." prefix only from columns that start with "X."
-colnames(full_prot_levels) <- sub("\\.raw\\.EG\\.TotalQuantity\\..Settings.", "", colnames(full_prot_levels)) # Remove the "X.#.." prefix only from columns that start with "X."
+full_peptide_levels <- data.frame(read_csv(countData, col_names = TRUE, na = c("", "NA", "Filtered")))
 
-# Extract a dataframe with just protein levels
-# counts <- full_prot_levels %>% dplyr::select(where(is.numeric)) 
-non_prot_cols <- c("EG.PrecursorId", 'PG.FASTAName')
-counts <- full_prot_levels %>% dplyr::select(-any_of(non_prot_cols))
+print_peptide_report <- function(df, prefix){
+  num_genes <- nrow(df)
+  msg <- glue("{prefix}: {num_genes}")
+  print(msg)
+}
+print_peptide_report(full_peptide_levels, 'Peptides - Total Amount')
+
+# remove pepties with missing names (deprecated)
+# full_peptide_levels <- full_peptide_levels %>% filter(!is.na(PG.Genes))
+
+# remove peptides that come from the cRAP database
+full_peptide_levels <- full_peptide_levels %>% filter(!grepl("cRAP[0-9]+", PG.ProteinAccessions))
+print_peptide_report(full_peptide_levels, 'Peptides - without cRAP')
+
+# remove peptides that are not phosphorylated
+full_peptide_levels <- full_peptide_levels %>% filter(grepl("Phospho \\(STY\\)", EG.PrecursorId))
+print_peptide_report(full_peptide_levels, 'Peptides - only phospho')
+
+check_fn <- file.path(outDir, "data/check_phospho.csv")
+write.csv(full_peptide_levels, check_fn)
+
+
+
+# name the rownames with the peptide
+rownames(full_peptide_levels) <- paste0(full_peptide_levels$PG.Genes, ' -- ', full_peptide_levels$EG.PrecursorId)
+
+# Extract a dataframe with just peptide levels
+#non_numeric_cols <- c('PG.ProteinAccessions', 'PG.Genes', 'PG.UniProtIds', 'PG.ProteinNames', 'PG.FastaHeaders', 'EG.PrecursorId')
+non_numeric_cols <- c('PG.ProteinAccessions', 'PG.Genes', 'PG.UniProtIds', 'PG.FASTAName', 'EG.PrecursorId')
+counts <- full_peptide_levels %>% dplyr::select(-any_of(non_numeric_cols))
+
+
+
+# check_fn <- file.path(outDir, "data/check.csv")
+# write.csv(counts, check_fn)
+
+
+
+
+
 
 # Collect the comparisons from the samplesheet
 comparisons_raw <- read.csv(samplesheet)
@@ -161,9 +194,13 @@ limma_params <- list(E = intensity_matrix, design = design)
 # ==========================
 # Analysis loop
 # ==========================
-
 results <- list()
 for (i in seq_along(comparisons)) {
+  
+  # may need to consider what to do about imputations, especially dealing 
+  # with the limma_param
+  
+  print(glue('Analysis {i}'))
   
   # run the analysis on the current samples
   curr_result <- run_analysis_phospho(comparisons[[i]], limma_params, intensity_matrix, out_dirs)
@@ -180,7 +217,7 @@ for (i in seq_along(comparisons)) {
 print("# Principal Component Analysis")
 input_pca_matrix <- as.matrix(intensity_matrix)
 
-print("WARNING JR: THIS CODE IS LIKE A SCRAPPY IMPUTATOIN WITH MEAN VALUES")
+print("WARNING JR: THIS CODE IS LIKE A SCRAPPY IMPUTATION WITH MEAN VALUES")
 input_pca_matrix <- apply(input_pca_matrix, 1, function(x) {
   x[is.na(x)] <- mean(x, na.rm = TRUE)
   x
@@ -191,7 +228,6 @@ if (anyNA(input_pca_matrix)){
   input_pca_matrix <- as.data.frame(input_pca_matrix) %>%
     dplyr::select(where(~ all(!is.na(.x) & !is.infinite(.x))))
 }
-
 
 # calculate PCA results and scores 
 pca_results <- prcomp(input_pca_matrix, rank. = 3)
