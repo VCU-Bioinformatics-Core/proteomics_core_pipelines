@@ -81,108 +81,67 @@ perform_limma_analysis <- function(limma_params, exp, ctrl, min_valid_samples=2)
   })
 }
 
-generate_volcano <- function(data, exp_name, ctrl_name, p = 0.05, lfc = 0.58, 
-                             sig = "adj.P.Val", out_dir = ".") {
-  
+generate_volcano <- function(data, exp_name, ctrl_name, p_thresh = 0.05, lfc = 0.58,
+                             sig = "adj.P.Val", label_col = "uniprotswissprot",
+                             out_dir = ".") {
+
   print('Labeling the data')
-  labeled_dat <- data %>% 
+  labeled_dat <- data %>%
     mutate(
       color_tag = case_when(
-        eval(as.symbol(sig)) < p & logFC < -lfc ~ "Under expressed",
-        eval(as.symbol(sig)) < p & logFC > lfc ~ "Over expressed",
+        eval(as.symbol(sig)) < p_thresh & logFC < -lfc ~ "Under expressed",
+        eval(as.symbol(sig)) < p_thresh & logFC > lfc ~ "Over expressed",
         TRUE ~ NA_character_
       )
     )
-  
+
   print('Extracting the top 20 genes')
   top_20_genes_up <- labeled_dat %>%
-    filter(P.Value <= p & logFC >= lfc) %>%
+    filter(P.Value <= p_thresh & logFC >= lfc) %>%
     arrange(eval(as.symbol(sig))) %>%
     slice_head(n = 20) %>%
-    pull(uniprotswissprot)
-  
+    pull(.data[[label_col]])
+
   print('Extracting the bottom 20 genes')
   top_20_genes_dn <- labeled_dat %>%
-    filter(P.Value <= p & logFC <= -lfc) %>%
+    filter(P.Value <= p_thresh & logFC <= -lfc) %>%
     arrange(eval(as.symbol(sig))) %>%
     slice_head(n = 20) %>%
-    pull(uniprotswissprot)
-  
+    pull(.data[[label_col]])
+
   print('Plotting')
-  labeled_dat <- labeled_dat %>% mutate(highlight = ifelse(uniprotswissprot %in% c(top_20_genes_up, top_20_genes_dn), uniprotswissprot, NA))
-  labeled_dat <- labeled_dat %>% filter(!is.na(logFC), !is.na(P.Value), is.finite(logFC), is.finite(P.Value))
-  p <- labeled_dat %>% ggplot(aes(x = logFC, y = -log10(P.Value),
-                              color = color_tag, label = ifelse(highlight == TRUE, uniprotswissprot, NA))) +
+  labeled_dat <- labeled_dat %>%
+    mutate(highlight = ifelse(.data[[label_col]] %in% c(top_20_genes_up, top_20_genes_dn),
+                              .data[[label_col]], NA)) %>%
+    filter(!is.na(logFC), !is.na(P.Value), is.finite(logFC), is.finite(P.Value))
+
+  volcano_plot <- labeled_dat %>%
+    ggplot(aes(x = logFC, y = -log10(P.Value), color = color_tag)) +
     geom_point(alpha = 0.5) +
     theme_minimal() +
     geom_label_repel(aes(label = highlight), max.overlaps = Inf, show.legend = FALSE) +
     scale_color_manual(values = c("firebrick", "steelblue")) +
-    geom_hline(yintercept = -log10(p), col = "red", linetype = 2) +
+    geom_hline(yintercept = -log10(p_thresh), col = "red", linetype = 2) +
     geom_vline(xintercept = c(-lfc, lfc)) +
     theme(legend.title = element_blank()) +
     labs(x = "Log2 Fold-Change (FC)",
-         y = paste0("-log10( P-value )"),
+         y = "-log10( P-value )",
          title = create_comparison_name(exp_name, ctrl_name, "Differentially expressed genes - ")
     )
-  return(p)
-}
-
-generate_phospho_volcano <- function(data, exp_name, ctrl_name, p = 0.05, lfc = 0.58, 
-                             sig = "adj.P.Val", out_dir = ".") {
-  
-  print('Labeling the data')
-  labeled_dat <- data %>% 
-    mutate(
-      color_tag = case_when(
-        eval(as.symbol(sig)) < p & logFC < -lfc ~ "Under expressed",
-        eval(as.symbol(sig)) < p & logFC > lfc ~ "Over expressed",
-        TRUE ~ NA_character_
-      )
-    )
-  
-  print('Extracting the top 20 genes')
-  top_20_genes_up <- labeled_dat %>%
-    filter(P.Value <= p & logFC >= lfc) %>%
-    arrange(eval(as.symbol(sig))) %>%
-    slice_head(n = 20) %>%
-    pull(uniprotswissprot)
-  
-  print('Extracting the bottom 20 genes')
-  top_20_genes_dn <- labeled_dat %>%
-    filter(P.Value <= p & logFC <= -lfc) %>%
-    arrange(eval(as.symbol(sig))) %>%
-    slice_head(n = 20) %>%
-    pull(uniprotswissprot)
-  
-  print('Plotting')
-  labeled_dat <- labeled_dat %>% mutate(highlight = ifelse(uniprotswissprot %in% c(top_20_genes_up, top_20_genes_dn), uniprotswissprot, NA))
-  labeled_dat <- labeled_dat %>% filter(!is.na(logFC), !is.na(P.Value), is.finite(logFC), is.finite(P.Value))
-  p <- labeled_dat %>% ggplot(aes(x = logFC, y = -log10(P.Value),
-                                  color = color_tag, label = ifelse(highlight == TRUE, uniprotswissprot, NA))) +
-    geom_point(alpha = 0.5) +
-    theme_minimal() +
-    geom_label_repel(aes(label = highlight), max.overlaps = Inf, show.legend = FALSE) +
-    scale_color_manual(values = c("firebrick", "steelblue")) +
-    geom_hline(yintercept = -log10(p), col = "red", linetype = 2) +
-    geom_vline(xintercept = c(-lfc, lfc)) +
-    theme(legend.title = element_blank()) +
-    labs(x = "Log2 Fold-Change (FC)",
-         y = paste0("-log10( P-value )"),
-         title = create_comparison_name(exp_name, ctrl_name, "Differentially expressed genes - ")
-    )
-  return(p)
+  return(volcano_plot)
 }
 
 
-generate_heatmap <- function(results_df, normalized_counts, p = 0.05, lfc = 0.58, 
-                             exp_name, ctrl_name, fig_dir) {
-  
+generate_heatmap <- function(results_df, normalized_counts, p = 0.05, lfc = 0.58,
+                             exp_name, ctrl_name, fig_dir,
+                             row_id_col = "uniprotswissprot") {
+
   # filter the data for certain pvalues and lfc
-  filtered_data <- results_df %>% 
+  filtered_data <- results_df %>%
     dplyr::filter((adj.P.Val < p & abs(logFC) >= lfc))
-  
+
   # add jitter
-  values <- normalized_counts[filtered_data$uniprotswissprot, ] %>%
+  values <- normalized_counts[filtered_data[[row_id_col]], ] %>%
     as.matrix() %>%
     jitter(factor = 1, amount = 0.00001)
   
@@ -344,32 +303,25 @@ run_analysis <- function(comparison, limma_params, normalized_counts, out_dirs) 
 run_analysis_phospho <- function(comparison, limma_params, normalized_counts, out_dirs) {
   tryCatch({
     print(paste("Starting analysis for comparison:", comparison$name))
-    
+
     print('Running limma')
     limma_results <- perform_limma_analysis(limma_params, comparison$exp, comparison$ctrl)
-    limma_results <- limma_results %>% rownames_to_column(var = "uniprotswissprot")
-    
-    # print('Annotating the results')
-    # mapping <- getBM(
-    #   attributes = c("uniprotswissprot", "ensembl_gene_id"), # "external_gene_name"
-    #   filters = "uniprotswissprot",
-    #   values = uniprot_clean,
-    #   mart = ensembl
-    # )
-    # mapping <- mapping %>% distinct(uniprotswissprot, .keep_all = TRUE)
-    # annotated_results <- NULL #limma_results %>% left_join(mapping, by=join_by(uniprotswissprot))
+    limma_results <- limma_results %>% rownames_to_column(var = "peptide_id")
+
     output_file <- create_file_path(out_dirs$de_data, "limma_", comparison$name)
     write.csv(limma_results, output_file)
 
     print('Generating the volcano plot')
-    volcano_plot <- generate_phospho_volcano(limma_results, comparison$exp, comparison$ctrl)
+    volcano_plot <- generate_volcano(limma_results, comparison$exp, comparison$ctrl,
+                                     label_col = "peptide_id")
     save_plot(volcano_plot, create_file_path(out_dirs$volcano, "", comparison$name, "_volcano.png"))
-    
+
     print('Generating the heatmap')
     png(create_file_path(out_dirs$heatmap, "", comparison$name, "_heatmap.png"),
         width = 1200, height = 1600, res = 300)
-    ht <- generate_heatmap(limma_results, intensity_matrix,
-                           exp_name = comparison$exp, ctrl_name = comparison$ctrl, fig_dir = out_dirs$heatmap)
+    ht <- generate_heatmap(limma_results, normalized_counts,
+                           exp_name = comparison$exp, ctrl_name = comparison$ctrl,
+                           fig_dir = out_dirs$heatmap, row_id_col = "peptide_id")
     draw(ht)
     dev.off()
     

@@ -66,6 +66,11 @@ samplesheet <- opt$samplesheet
 outDir <- opt$outdir
 genome <- opt$annotation
 
+if (is.null(runID) || is.null(countData) || is.null(samplesheet)) {
+  print_help(opt_parser)
+  stop("--runid, --counts, and --samplesheet are required.")
+}
+
 # ==========================
 # Debug mode
 # ==========================
@@ -103,12 +108,6 @@ if (debug){
 # } else {
 #   stop("Invalid genome specified. Use 'mouse' or 'human'")
 # }
-
-print('**************************************************************')
-print('**************************************************************')
-print('**************************************************************')
-print('**************************************************************')
-print('**************************************************************')
 
 # ==========================
 # Read and prepare data
@@ -179,8 +178,7 @@ for (comparisons_name in comparisons_cols) {
 }
 
 # Optional log2-transform (if values are not log-scaled)
-intensity_matrix <- counts %>% mutate(across(where(is.numeric), ~ as.integer(round(.))))
-intensity_matrix <- log2(intensity_matrix + 1)
+intensity_matrix <- log2(counts + 1)
 
 # ==========================
 # Set up the limma design matrix 
