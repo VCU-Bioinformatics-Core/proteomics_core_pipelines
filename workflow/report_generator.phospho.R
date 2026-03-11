@@ -393,6 +393,44 @@ email BISR if you would like to be a part of this training. In the meantime, QIA
 playlist of user-friendly tutorials available on Youtube titled “QIAGEN IPA Training
 Videos” the **Qiagen Digital Insights Youtube** page.'
 
+imputation_content <- '\n
+## Imputation Reporting
+
+The histograms below show the distribution of all log2 intensity values across
+all proteins **before** (blue) and **after** (red) imputation. Imputed values
+typically appear as a secondary peak shifted towards the lower end of the
+distribution, reflecting the left-censored nature of missing-not-at-random
+(MNAR) data in proteomics.
+
+```{r imputation-histogram, fig.width=8, fig.height=5}
+intensity_raw      <- rds_data[[5]]
+intensity_imputed  <- rds_data[[6]]
+
+raw_vals <- data.frame(
+  value = unlist(intensity_raw),
+  type  = "Pre-imputation"
+)
+raw_vals <- raw_vals[!is.na(raw_vals$value), ]
+
+imp_vals <- data.frame(
+  value = unlist(intensity_imputed),
+  type  = "Post-imputation"
+)
+
+all_vals       <- rbind(raw_vals, imp_vals)
+all_vals$type  <- factor(all_vals$type, levels = c("Pre-imputation", "Post-imputation"))
+
+ggplot(all_vals, aes(x = value, fill = type)) +
+  geom_histogram(alpha = 0.6, bins = 80, position = "identity") +
+  scale_fill_manual(values = c("Pre-imputation" = "steelblue",
+                               "Post-imputation" = "firebrick")) +
+  labs(x = "log2 Intensity", y = "Count", fill = NULL,
+       title = "Intensity distribution before and after imputation") +
+  theme_bw() +
+  theme(legend.position = "top")
+```
+'
+
 manuscript_content <- '\n
 ## Manuscript-Ready Text
 
@@ -428,7 +466,7 @@ Please include the following statements in your acknowledgements manuscript sect
   # pasting together these last sections
   # skipping IPA for now but will add on later is there is interest
   #rmd_content <- paste0(rmd_content, ipa_content, manuscript_content)
-  rmd_content <- paste0(rmd_content, manuscript_content)
+  rmd_content <- paste0(rmd_content, imputation_content, manuscript_content)
   
   # Write the R Markdown file
   #fn <- glue('{report_prefix}_{timestamp}.Rmd')

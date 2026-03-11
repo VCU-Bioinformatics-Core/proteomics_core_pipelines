@@ -26,6 +26,7 @@ library(optparse)
 library(htmlwidgets)
 library(ComplexHeatmap)
 library(circlize)
+library(DEP)
 
 # Connect to Ensembl (use the dataset for your species)
 library(biomaRt)
@@ -50,7 +51,11 @@ option_list = list(
   make_option(c("-r", "--runid"), type = "character", default = NULL,
               help = "Required. Unique run ID"),
   make_option(c("-a", "--annotation"), type = "character", default = "mouse",
-              help = "Genome for annotation: 'mouse' or 'human' [default= %default]")
+              help = "Genome for annotation: 'mouse' or 'human' [default= %default]"),
+  make_option(c("-i", "--imputation"), type = "character", default = "MinProb",
+              help = "DEP imputation method: 'MinProb', 'knn', 'bpca', 'QRILC', 'man', or 'none' [default= %default]"),
+  make_option(c("-q", "--imputation-q"), type = "double", default = 0.01,
+              help = "q parameter for MinProb/QRILC: quantile cutoff for the left-censored distribution [default= %default]")
 )
 
 opt_parser = OptionParser(option_list=option_list)
@@ -61,6 +66,8 @@ countData <- opt$counts
 samplesheet <- opt$samplesheet
 outDir <- opt$outdir
 genome <- opt$annotation
+imputation_method <- opt$imputation
+imputation_q <- opt$`imputation-q`
 
 # ==========================
 # Debug mode
@@ -168,9 +175,36 @@ for (comparisons_name in comparisons_cols) {
 # Optional log2-transform (if values are not log-scaled)
 intensity_matrix <- counts %>% mutate(across(where(is.numeric), ~ as.integer(round(.))))
 intensity_matrix <- log2(intensity_matrix + 1)
+intensity_matrix_raw <- intensity_matrix  # snapshot before imputation
 
 # ==========================
-# Set up the limma design matrix 
+# Imputation with DEP
+# ==========================
+if (imputation_method != "none") {
+  se <- SummarizedExperiment::SummarizedExperiment(
+    assays = list(intensity = as.matrix(intensity_matrix)),
+    colData = S4Vectors::DataFrame(
+      label     = comparisons_raw$SampleID,
+      condition = comparisons_raw$GroupID
+    ),
+    rowData = S4Vectors::DataFrame(
+      name = rownames(intensity_matrix),
+      ID   = rownames(intensity_matrix)
+    )
+  )
+  if (imputation_method %in% c("MinProb", "QRILC")) {
+    se_imputed <- DEP::impute(se, fun = imputation_method, q = imputation_q)
+  } else {
+    se_imputed <- DEP::impute(se, fun = imputation_method)
+  }
+  intensity_matrix <- as.data.frame(SummarizedExperiment::assay(se_imputed))
+  print(glue("Imputation applied: {imputation_method} (q={imputation_q})"))
+} else {
+  print("Imputation skipped (--imputation none)")
+}
+
+# ==========================
+# Set up the limma design matrix
 # ==========================
 sample_info <- data.frame(sample = comparisons_raw$SampleID,
                           condition = comparisons_raw$GroupID)
@@ -200,17 +234,8 @@ for (i in seq_along(comparisons)) {
 print("# Principal Component Analysis")
 input_pca_matrix <- as.matrix(intensity_matrix)
 
-print("WARNING JR: THIS CODE IS LIKE A SCRAPPY IMPUTATOIN WITH MEAN VALUES")
-input_pca_matrix <- apply(input_pca_matrix, 1, function(x) {
-  x[is.na(x)] <- mean(x, na.rm = TRUE)
-  x
-})
-
-print("WARNING JR: DIAGNOSE WHY WE STILL FIND NANS DESPITE THE PREVIOUS STEP")
-if (anyNA(input_pca_matrix)){
-  input_pca_matrix <- as.data.frame(input_pca_matrix) %>%
-    dplyr::select(where(~ all(!is.na(.x) & !is.infinite(.x))))
-}
+# Values already imputed via DEP above; transpose so samples are rows for prcomp
+input_pca_matrix <- t(input_pca_matrix)
 
 
 # calculate PCA results and scores 
@@ -262,7 +287,7 @@ ggsave(pca_plot, filename = str_c(out_dirs$pca, "/PCA_plot.png"))
 # ==========================
 print('Save RDS')
 #rds <- list(results, comparisons, out_dirs, pca_plot, fig, fig3D)
-rds <- list(results, comparisons, out_dirs, pca_plot)
+rds <- list(results, comparisons, out_dirs, pca_plot, intensity_matrix_raw, intensity_matrix)
 timestamp <- format(Sys.time(), "%Y%m%d_%H%M%S")
 #rds_path <- glue("analysis_results_{timestamp}.rds")
 rds_path <- file.path(outDir, "data/analysis_results.rds")
