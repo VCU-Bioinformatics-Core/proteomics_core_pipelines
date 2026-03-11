@@ -140,11 +140,6 @@ print_peptide_report(full_peptide_levels, 'Peptides - without cRAP')
 full_peptide_levels <- full_peptide_levels %>% filter(grepl("Phospho \\(STY\\)", EG.PrecursorId))
 print_peptide_report(full_peptide_levels, 'Peptides - only phospho')
 
-check_fn <- file.path(outDir, "data/check_phospho.csv")
-write.csv(full_peptide_levels, check_fn)
-
-
-
 # name the rownames with the peptide
 rownames(full_peptide_levels) <- paste0(full_peptide_levels$PG.Genes, ' -- ', full_peptide_levels$EG.PrecursorId)
 
@@ -152,16 +147,6 @@ rownames(full_peptide_levels) <- paste0(full_peptide_levels$PG.Genes, ' -- ', fu
 #non_numeric_cols <- c('PG.ProteinAccessions', 'PG.Genes', 'PG.UniProtIds', 'PG.ProteinNames', 'PG.FastaHeaders', 'EG.PrecursorId')
 non_numeric_cols <- c('PG.ProteinAccessions', 'PG.Genes', 'PG.UniProtIds', 'PG.FASTAName', 'EG.PrecursorId')
 counts <- full_peptide_levels %>% dplyr::select(-any_of(non_numeric_cols))
-
-
-
-# check_fn <- file.path(outDir, "data/check.csv")
-# write.csv(counts, check_fn)
-
-
-
-
-
 
 # Collect the comparisons from the samplesheet
 comparisons_raw <- read.csv(samplesheet)

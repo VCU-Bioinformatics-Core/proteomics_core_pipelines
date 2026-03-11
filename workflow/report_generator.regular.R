@@ -371,37 +371,42 @@ imputation_content <- '\n
 ## Imputation Reporting
 
 The histograms below show the distribution of all log2 intensity values across
-all proteins **before** (blue) and **after** (red) imputation. Imputed values
-typically appear as a secondary peak shifted towards the lower end of the
-distribution, reflecting the left-censored nature of missing-not-at-random
+all proteins. **Observed** (blue) values are those measured directly, while
+**Imputed** (red) values are those that were missing and filled in. Imputed
+values typically appear as a secondary peak shifted towards the lower end of
+the distribution, reflecting the left-censored nature of missing-not-at-random
 (MNAR) data in proteomics.
 
 ```{r imputation-histogram, fig.width=8, fig.height=5}
 intensity_raw      <- rds_data[[5]]
 intensity_imputed  <- rds_data[[6]]
 
+raw_mat     <- as.matrix(intensity_raw)
+imputed_mat <- as.matrix(intensity_imputed)
+obs_mask    <- !is.na(raw_mat)
+
 raw_vals <- data.frame(
-  value = unlist(intensity_raw),
-  type  = "Pre-imputation"
+  value = raw_mat[obs_mask],
+  type  = "Observed"
 )
-raw_vals <- raw_vals[!is.na(raw_vals$value), ]
 
 imp_vals <- data.frame(
-  value = unlist(intensity_imputed),
-  type  = "Post-imputation"
+  value = imputed_mat[!obs_mask],
+  type  = "Imputed"
 )
 
-all_vals       <- rbind(raw_vals, imp_vals)
-all_vals$type  <- factor(all_vals$type, levels = c("Pre-imputation", "Post-imputation"))
+all_vals      <- rbind(raw_vals, imp_vals)
+all_vals$type <- factor(all_vals$type, levels = c("Observed", "Imputed"))
 
 ggplot(all_vals, aes(x = value, fill = type)) +
   geom_histogram(alpha = 0.6, bins = 80, position = "identity") +
-  scale_fill_manual(values = c("Pre-imputation" = "steelblue",
-                               "Post-imputation" = "firebrick")) +
+  scale_fill_manual(values = c("Observed" = "steelblue",
+                               "Imputed"  = "firebrick")) +
   labs(x = "log2 Intensity", y = "Count", fill = NULL,
-       title = "Intensity distribution before and after imputation") +
+       title = "Observed vs. imputed intensity values") +
   theme_bw() +
-  theme(legend.position = "top")
+  theme(legend.position = "top") +
+  guides(fill = guide_legend(override.aes = list(alpha = 1)))
 ```
 '
 
@@ -409,7 +414,15 @@ manuscript_content <- '\n
 ## Manuscript-Ready Text
 
 ### Methods
-Differential abundance analysis was carried out using limma v 1.44.0 [1].
+Prior to differential abundance analysis, missing intensity values were imputed
+using the DEP R package [1]. Missing values in proteomics data-dependent
+acquisition (DDA) experiments are commonly attributed to a missing-not-at-random
+(MNAR) mechanism, where low-abundance peptides fall below the instrument
+detection threshold. To address this, remaining missing values were imputed from
+a down-shifted Gaussian distribution centered at the low end of the observed
+intensity distribution.
+
+Differential abundance analysis was carried out using limma v 1.44.0 [2].
 Proteins were considered significantly differentially abundant (DAP) when they
 exhibited an absolute log₂ fold-change ≥ 0.58 (1.5-fold) and an adjusted P-value
 (FDR) < 0.05 (correction done with a Benjamini Hochberg). Volcano plots and
@@ -417,17 +430,21 @@ heatmaps were generated using the raw or log transformed intensity values and
 visualized using R packages (ggplot2 and ggrepel), where the top up-regulated
 and down-regulated proteins (based on adjusted P-value) were highlighted.
 Heatmaps were produced using ComplexHeatmap after z-score transformation of the
-filtered expression matrix. Gene Set Enrichment Analysis (GSEA) [2] for Gene
-Ontology terms (GO) was performed using the clusterProfiler package [3] across
+filtered expression matrix. Gene Set Enrichment Analysis (GSEA) [3] for Gene
+Ontology terms (GO) was performed using the clusterProfiler package [4] across
 all proteins, regardless of significance. All computational analyses were
 performed on VCU’s High Performance Research Computing cluster.
 
 ### References
-1) Ritchie, M.E., Phipson, B., Wu, D., Hu, Y., Law, C.W., Shi, W., Smyth, G.K., 2015. limma powers differential expression analyses for RNA-sequencing and microarray studies. Nucleic Acids Research 43(7), e47. https://doi.org/10.1093/nar/gkv007
+1) Zhang X, Smits AH, van Tilburg GB, Ovaa H, Huber W, Vermeulen M. (2018).
+Proteome-wide identification of ubiquitin interactions using UbIA-MS. Nature
+Protocols 13, 530-550. https://doi.org/10.1038/nprot.2017.147
 
-2) A. Subramanian, P. Tamayo, V.K. Mootha, S. Mukherjee, B.L. Ebert, M.A. Gillette, A. Paulovich, S.L. Pomeroy, T.R. Golub, E.S. Lander, & J.P. Mesirov, Gene set enrichment analysis: A knowledge-based approach for interpreting genome-wide expression profiles, Proc. Natl. Acad. Sci. U.S.A. 102 (43) 15545-15550, https://doi.org/10.1073/pnas.0506580102 (2005).
+2) Ritchie, M.E., Phipson, B., Wu, D., Hu, Y., Law, C.W., Shi, W., Smyth, G.K., 2015. limma powers differential expression analyses for RNA-sequencing and microarray studies. Nucleic Acids Research 43(7), e47. https://doi.org/10.1093/nar/gkv007
 
-3) Yu G, Wang LG, Han Y, He QY. clusterProfiler: an R package for comparing biological themes among gene clusters. OMICS. 2012 May;16(5):284-7. doi: 10.1089/omi.2011.0118. Epub 2012 Mar 28. PMID: 22455463; PMCID: PMC3339379.
+3) A. Subramanian, P. Tamayo, V.K. Mootha, S. Mukherjee, B.L. Ebert, M.A. Gillette, A. Paulovich, S.L. Pomeroy, T.R. Golub, E.S. Lander, & J.P. Mesirov, Gene set enrichment analysis: A knowledge-based approach for interpreting genome-wide expression profiles, Proc. Natl. Acad. Sci. U.S.A. 102 (43) 15545-15550, https://doi.org/10.1073/pnas.0506580102 (2005).
+
+4) Yu G, Wang LG, Han Y, He QY. clusterProfiler: an R package for comparing biological themes among gene clusters. OMICS. 2012 May;16(5):284-7. doi: 10.1089/omi.2011.0118. Epub 2012 Mar 28. PMID: 22455463; PMCID: PMC3339379.
 
 ### Required Acknowledgements
 
