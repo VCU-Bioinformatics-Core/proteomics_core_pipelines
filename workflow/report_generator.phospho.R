@@ -79,6 +79,7 @@ intensity_matrix_raw <- rds_data[[5]]
 intensity_matrix <- rds_data[[6]]
 #annotation <- rds_data[[7]]
 sample_info <- rds_data[[8]]
+peptide_counts <- rds_data[[9]]
 ```
 
 ## Overview
@@ -123,6 +124,21 @@ As part of this pipeline we produce the following files for your downstream use:
 ```
 
 ## Global Sample Exploration
+
+### Global Summary
+
+```{{r global-summary}}
+if (!is.null(peptide_counts)) {{
+  summary_df <- data.frame(
+    Step = c("Total peptides", "After cRAP removal", "Phosphopeptides only"),
+    Count = c(peptide_counts$total, peptide_counts$no_crap, peptide_counts$phospho),
+    stringsAsFactors = FALSE
+  )
+  knitr::kable(summary_df, caption = "Peptide filtering summary")
+}} else {{
+  cat("Peptide count summary not available.")
+}}
+```
 
 ### Principal Component Analysis
 
@@ -425,13 +441,25 @@ if (dap_flags[2] > 0){{
 the term is enriched
 - Y-axis: a given Gene Set
 
+```{{r gsea-protein-counts-{i}}}
+pc <- results[[{i}]]$protein_counts
+if (!is.null(pc)) {{
+  pc_df <- data.frame(
+    Step = c("Significant phosphopeptides", "Unique proteins (UniProt)", "Proteins after Ensembl mapping"),
+    Count = c(pc$n_sig_peptides, pc$n_sig_uniprots, pc$n_mapped),
+    stringsAsFactors = FALSE
+  )
+  knitr::kable(pc_df, caption = "Protein aggregation summary for GSEA")
+}} else {{
+  cat("Protein count summary not available.")
+}}
+```
+
 ```{{r gsea-{i}, out.width="100%", out.height="100%"}}
 # Display GSEA results from file
 gsea_path <- file.path(out_dirs$gsea, paste0("{name}_GSEA.png"))
 if (file.exists(gsea_path)) {{
   knitr::include_graphics(gsea_path)
-}} else {{
-  cat("GSEA results not available for this comparison")
 }}
 ```
 

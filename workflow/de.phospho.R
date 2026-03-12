@@ -136,6 +136,7 @@ print_peptide_report <- function(df, prefix){
   msg <- glue("{prefix}: {num_genes}")
   print(msg)
 }
+n_peptides_total <- nrow(full_peptide_levels)
 print_peptide_report(full_peptide_levels, 'Peptides - Total Amount')
 
 # remove pepties with missing names (deprecated)
@@ -143,10 +144,12 @@ print_peptide_report(full_peptide_levels, 'Peptides - Total Amount')
 
 # remove peptides that come from the cRAP database
 full_peptide_levels <- full_peptide_levels %>% filter(!grepl("cRAP[0-9]+", PG.ProteinAccessions))
+n_peptides_no_crap <- nrow(full_peptide_levels)
 print_peptide_report(full_peptide_levels, 'Peptides - without cRAP')
 
 # remove peptides that are not phosphorylated
 full_peptide_levels <- full_peptide_levels %>% filter(grepl("Phospho \\(STY\\)", EG.PrecursorId))
+n_peptides_phospho <- nrow(full_peptide_levels)
 print_peptide_report(full_peptide_levels, 'Peptides - only phospho')
 
 # name the rownames with the peptide
@@ -308,7 +311,8 @@ generate_global_heatmap(intensity_matrix, out_dirs, top_n = heatmap_top_n,
 print('Save RDS')
 #rds <- list(results, comparisons, out_dirs, pca_plot, fig, fig3D)
 imputation_params <- list(method = imputation_method, q = imputation_q)
-rds <- list(results, comparisons, out_dirs, pca_plot, intensity_matrix_raw, intensity_matrix, imputation_params, sample_info)
+peptide_counts <- list(total = n_peptides_total, no_crap = n_peptides_no_crap, phospho = n_peptides_phospho)
+rds <- list(results, comparisons, out_dirs, pca_plot, intensity_matrix_raw, intensity_matrix, imputation_params, sample_info, peptide_counts)
 timestamp <- format(Sys.time(), "%Y%m%d_%H%M%S")
 #rds_path <- glue("analysis_results_{timestamp}.rds")
 rds_path <- file.path(outDir, "data/analysis_results.rds")

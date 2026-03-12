@@ -398,8 +398,6 @@ the term is enriched
 gsea_path <- file.path(out_dirs$gsea, paste0("{name}_GSEA.png"))
 if (file.exists(gsea_path)) {{
   knitr::include_graphics(gsea_path)
-}} else {{
-  cat("GSEA results not available for this comparison")
 }}
 ```
 

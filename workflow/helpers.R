@@ -45,29 +45,12 @@ perform_limma_analysis <- function(limma_params, exp, ctrl, min_valid_samples=2)
   tryCatch({
     print(paste("Performing limma-voom analysis for", exp, "vs", ctrl))
     
-    # Identify which columns belong to each group
-    exp_cols  <- which(limma_params$design[, exp]  == 1)
-    ctrl_cols <- which(limma_params$design[, ctrl] == 1)
-    
-    # Count valid (non-NA/NaN) values per gene per group
-    valid_exp  <- rowSums(!is.na(limma_params$E[, exp_cols,  drop = FALSE]))
-    valid_ctrl <- rowSums(!is.na(limma_params$E[, ctrl_cols, drop = FALSE]))
-    
-    # Filter genes with at least min_valid_samples in BOTH groups
-    keep <- valid_exp >= min_valid_samples & valid_ctrl >= min_valid_samples
-    print(paste("Genes before filtering:", nrow(limma_params$E)))
-    print(paste("Genes after filtering: ", sum(keep)))
-    print(paste("Genes removed:         ", sum(!keep)))
-    
-    E_filtered <- limma_params$E[keep, , drop = FALSE]
-    
     # Build contrast
     contrast_matrix <- makeContrasts(contrasts = paste0(exp, "-", ctrl),
                                      levels = colnames(limma_params$design))
     
     # Fit linear model
-    #fit <- lmFit(limma_params$E, limma_params$design)
-    fit <- lmFit(E_filtered, limma_params$design) # using the E_filtered instead
+    fit <- lmFit(limma_params$E, limma_params$design)
     fit2 <- contrasts.fit(fit, contrast_matrix)
     fit2 <- eBayes(fit2, robust = TRUE)
     
@@ -234,12 +217,16 @@ aggregate_phospho_for_gsea <- function(limma_results, peptide_metadata, p = 0.05
   limma_results <- limma_results %>%
     mutate(uniprot_id = sapply(strsplit(PG.UniProtIds, ";"), `[`, 1))
 
-  sig_uniprots <- limma_results %>%
-    filter(adj.P.Val < p & abs(logFC) >= lfc) %>%
+  sig_peptides <- limma_results %>%
+    filter(adj.P.Val < p & abs(logFC) >= lfc)
+  n_sig_peptides <- nrow(sig_peptides)
+
+  sig_uniprots <- sig_peptides %>%
     pull(uniprot_id) %>%
     unique()
+  n_sig_uniprots <- length(sig_uniprots)
 
-  if (length(sig_uniprots) == 0) {
+  if (n_sig_uniprots == 0) {
     message("No significant phosphopeptides found for GSEA aggregation")
     return(NULL)
   }
@@ -265,21 +252,20 @@ aggregate_phospho_for_gsea <- function(limma_results, peptide_metadata, p = 0.05
   aggregated <- aggregated %>%
     left_join(mapping, by = c("uniprot_id" = "uniprotswissprot")) %>%
     filter(!is.na(ensembl_gene_id))
+  n_mapped <- nrow(aggregated)
 
-  if (nrow(aggregated) == 0) {
+  if (n_mapped == 0) {
     message("No Ensembl IDs found for aggregated phospho UniProt IDs")
     return(NULL)
   }
 
-  return(aggregated)
+  counts <- list(n_sig_peptides = n_sig_peptides, n_sig_uniprots = n_sig_uniprots, n_mapped = n_mapped)
+  return(list(data = aggregated, counts = counts))
 }
 
-process_gsea <- function(result, p = 0.05, lfc = 0.58) {
+process_gsea <- function(result, p = 0.05, lfc = 0.58, ont_option = "BP") {
   tryCatch({
     
-    print('result')
-    print(result[1:3, 1:3])
-      
     sig_genes <- result %>% arrange(desc(logFC))
     sig_genes <- sig_genes %>% filter(!is.na(logFC))
     
@@ -288,7 +274,7 @@ process_gsea <- function(result, p = 0.05, lfc = 0.58) {
       return(NULL)
     }
     
-    # create a gene list where the names are ensembl genes 
+    # create a gene list where the names are ensembl genes
     # and the values are logFC
     gene_list <- sig_genes$logFC
     names(gene_list) <- sig_genes$ensembl_gene_id
@@ -301,7 +287,6 @@ process_gsea <- function(result, p = 0.05, lfc = 0.58) {
                         OrgDb = annotation_db)
     gene_list <- gene_list[names(gene_list) %in% valid_genes$ENSEMBL]
     
-    ont_option = "BP" #ALL should be used eventually
     gse_result <- gseGO(geneList = gene_list,
                         ont = ont_option,
                         minGSSize = 1,
@@ -338,7 +323,7 @@ create_dotplot <- function(gse, title) {
 # centralizing function
 # ==========================
 
-run_analysis <- function(comparison, limma_params, normalized_counts, out_dirs, intensity_matrix_raw = NULL) {
+run_analysis <- function(comparison, limma_params, normalized_counts, out_dirs, intensity_matrix_raw = NULL, ont_option = "BP") {
   tryCatch({
     print(paste("\nStarting analysis for comparison:", comparison$name))
 
@@ -401,8 +386,8 @@ run_analysis <- function(comparison, limma_params, normalized_counts, out_dirs, 
     dev.off()
     
     print('Running GSEA')
-    gse <- NULL # process_gsea(annotated_results)
-    #gse <- process_gsea(annotated_results)
+    gse <- NULL # process_gsea(annotated_results, ont_option = ont_option)
+    #gse <- process_gsea(annotated_results, ont_option = ont_option)
     
     if(!is.null(gse)) {
       print('GSE has data')
@@ -424,7 +409,7 @@ run_analysis <- function(comparison, limma_params, normalized_counts, out_dirs, 
   })
 }
 
-run_analysis_phospho <- function(comparison, limma_params, normalized_counts, out_dirs, intensity_matrix_raw = NULL, peptide_metadata = NULL) {
+run_analysis_phospho <- function(comparison, limma_params, normalized_counts, out_dirs, intensity_matrix_raw = NULL, peptide_metadata = NULL, ont_option = "BP") {
   tryCatch({
     print(paste("Starting analysis for comparison:", comparison$name))
 
@@ -479,9 +464,13 @@ run_analysis_phospho <- function(comparison, limma_params, normalized_counts, ou
     dev.off()
     
     print('Running GSEA')
+    agg_result <- tryCatch(
+      aggregate_phospho_for_gsea(limma_results, peptide_metadata),
+      error = function(e) { message("Error in phospho aggregation: ", e$message); NULL }
+    )
+    protein_counts <- if (!is.null(agg_result)) agg_result$counts else NULL
     gse <- tryCatch({
-      aggregated_for_gsea <- aggregate_phospho_for_gsea(limma_results, peptide_metadata)
-      if (!is.null(aggregated_for_gsea)) process_gsea(aggregated_for_gsea) else NULL
+      if (!is.null(agg_result)) process_gsea(agg_result$data, ont_option = ont_option) else NULL
     }, error = function(e) {
       message("Error in phospho GSEA: ", e$message)
       NULL
@@ -501,7 +490,7 @@ run_analysis_phospho <- function(comparison, limma_params, normalized_counts, ou
       })
     }
 
-    return(list(limma = limma_results, gsea = gse))
+    return(list(limma = limma_results, gsea = gse, protein_counts = protein_counts))
     
     
   }, error = function(e) {
