@@ -179,7 +179,7 @@ generate_heatmap <- function(results_df, normalized_counts, p = 0.05, lfc = 0.58
     dplyr::filter((adj.P.Val < p & abs(logFC) >= lfc))
 
   # restrict columns to only the two groups being compared
-  all_samples  <- rownames(design)
+  all_samples  <- colnames(normalized_counts)
   exp_samples  <- all_samples[design[, exp_name]  == 1]
   ctrl_samples <- all_samples[design[, ctrl_name] == 1]
   comparison_samples <- c(exp_samples, ctrl_samples)
@@ -223,6 +223,56 @@ generate_heatmap <- function(results_df, normalized_counts, p = 0.05, lfc = 0.58
 # ==========================
 # gsea analysis functions
 # ==========================
+
+aggregate_phospho_for_gsea <- function(limma_results, peptide_metadata, p = 0.05, lfc = 0.58) {
+  # Join DE results with metadata to get PG.UniProtIds per peptide
+  limma_results <- limma_results %>%
+    left_join(peptide_metadata, by = "peptide_id")
+
+  # Identify peptides with at least one significant result, then get their
+  # parent UniProt IDs (PG.UniProtIds may be semicolon-separated; take first)
+  limma_results <- limma_results %>%
+    mutate(uniprot_id = sapply(strsplit(PG.UniProtIds, ";"), `[`, 1))
+
+  sig_uniprots <- limma_results %>%
+    filter(adj.P.Val < p & abs(logFC) >= lfc) %>%
+    pull(uniprot_id) %>%
+    unique()
+
+  if (length(sig_uniprots) == 0) {
+    message("No significant phosphopeptides found for GSEA aggregation")
+    return(NULL)
+  }
+
+  # For each qualifying UniProt ID, take the logFC of the most significant
+  # phosphopeptide (smallest adj.P.Val) as the representative value
+  aggregated <- limma_results %>%
+    filter(uniprot_id %in% sig_uniprots) %>%
+    group_by(uniprot_id) %>%
+    slice_min(adj.P.Val, n = 1, with_ties = FALSE) %>%
+    ungroup() %>%
+    dplyr::select(uniprot_id, logFC)
+
+  # Map UniProt IDs to Ensembl IDs via biomart (same approach as regular pipeline)
+  mapping <- getBM(
+    attributes = c("uniprotswissprot", "ensembl_gene_id"),
+    filters    = "uniprotswissprot",
+    values     = unique(aggregated$uniprot_id),
+    mart       = ensembl
+  ) %>%
+    distinct(uniprotswissprot, .keep_all = TRUE)
+
+  aggregated <- aggregated %>%
+    left_join(mapping, by = c("uniprot_id" = "uniprotswissprot")) %>%
+    filter(!is.na(ensembl_gene_id))
+
+  if (nrow(aggregated) == 0) {
+    message("No Ensembl IDs found for aggregated phospho UniProt IDs")
+    return(NULL)
+  }
+
+  return(aggregated)
+}
 
 process_gsea <- function(result, p = 0.05, lfc = 0.58) {
   tryCatch({
@@ -374,7 +424,7 @@ run_analysis <- function(comparison, limma_params, normalized_counts, out_dirs, 
   })
 }
 
-run_analysis_phospho <- function(comparison, limma_params, normalized_counts, out_dirs, intensity_matrix_raw = NULL) {
+run_analysis_phospho <- function(comparison, limma_params, normalized_counts, out_dirs, intensity_matrix_raw = NULL, peptide_metadata = NULL) {
   tryCatch({
     print(paste("Starting analysis for comparison:", comparison$name))
 
@@ -428,22 +478,29 @@ run_analysis_phospho <- function(comparison, limma_params, normalized_counts, ou
     draw(ht)
     dev.off()
     
-    # GSEA currently not supported for phosphoproteins since we are doing a 
-    # peptide level analysis
-    # print('Running GSEA')
-    gse <- NULL
-    # gse <- process_gsea(limma_results)
+    print('Running GSEA')
+    gse <- tryCatch({
+      aggregated_for_gsea <- aggregate_phospho_for_gsea(limma_results, peptide_metadata)
+      if (!is.null(aggregated_for_gsea)) process_gsea(aggregated_for_gsea) else NULL
+    }, error = function(e) {
+      message("Error in phospho GSEA: ", e$message)
+      NULL
+    })
     if(!is.null(gse)) {
       print('GSE has data')
-      write.csv(as.data.frame(gse), create_file_path(out_dirs$gsea_data, "GO_Analysis_", comparison$name))
+      tryCatch({
+        write.csv(as.data.frame(gse), create_file_path(out_dirs$gsea_data, "GO_Analysis_", comparison$name))
 
-      print('create dotplot')
-      gsea_plot <- create_dotplot(gse, create_comparison_name(comparison$ctrl, comparison$exp, "GSEA "))
+        print('create dotplot')
+        gsea_plot <- create_dotplot(gse, create_comparison_name(comparison$ctrl, comparison$exp, "GSEA "))
 
-      print('save plot')
-      save_plot(gsea_plot, create_file_path(out_dirs$gsea, "", comparison$name, "_GSEA.png"))
+        print('save plot')
+        save_plot(gsea_plot, create_file_path(out_dirs$gsea, "", comparison$name, "_GSEA.png"))
+      }, error = function(e) {
+        message("Error saving phospho GSEA outputs: ", e$message)
+      })
     }
-    
+
     return(list(limma = limma_results, gsea = gse))
     
     

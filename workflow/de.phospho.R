@@ -106,21 +106,21 @@ if (debug){
   genome <- 'human'
 }
 
-# # ==========================
-# # Load annotation DB
-# # ==========================
-# if (genome == "human") {
-#   if (!require("org.Hs.eg.db")) BiocManager::install("org.Hs.eg.db")
-#   annotation_db <- org.Hs.eg.db
-#   ensembl <- useMart("ensembl", dataset = "hsapiens_gene_ensembl")
-# 
-# } else if (genome == "mouse") {
-#   if (!require("org.Mm.eg.db")) BiocManager::install("org.Mm.eg.db")
-#   annotation_db <- org.Mm.eg.db
-#   ensembl <- useMart("ensembl", dataset = "mmusculus_gene_ensembl")
-# } else {
-#   stop("Invalid genome specified. Use 'mouse' or 'human'")
-# }
+# ==========================
+# Load annotation DB
+# ==========================
+if (genome == "human") {
+  if (!require("org.Hs.eg.db")) BiocManager::install("org.Hs.eg.db")
+  annotation_db <- org.Hs.eg.db
+  ensembl <- useMart("ensembl", dataset = "hsapiens_gene_ensembl")
+
+} else if (genome == "mouse") {
+  if (!require("org.Mm.eg.db")) BiocManager::install("org.Mm.eg.db")
+  annotation_db <- org.Mm.eg.db
+  ensembl <- useMart("ensembl", dataset = "mmusculus_gene_ensembl")
+} else {
+  stop("Invalid genome specified. Use 'mouse' or 'human'")
+}
 
 # ==========================
 # Read and prepare data
@@ -153,6 +153,10 @@ rownames(full_peptide_levels) <- paste0(full_peptide_levels$PG.Genes, ' -- ', fu
 #non_numeric_cols <- c('PG.ProteinAccessions', 'PG.Genes', 'PG.UniProtIds', 'PG.ProteinNames', 'PG.FastaHeaders', 'EG.PrecursorId')
 non_numeric_cols <- c('PG.ProteinAccessions', 'PG.Genes', 'PG.UniProtIds', 'PG.FASTAName', 'EG.PrecursorId')
 counts <- full_peptide_levels %>% dplyr::select(-any_of(non_numeric_cols))
+
+# Metadata table for GSEA ID mapping (peptide_id -> PG.UniProtIds)
+peptide_metadata <- full_peptide_levels %>%
+  transmute(peptide_id = rownames(full_peptide_levels), PG.UniProtIds)
 
 # Collect the comparisons from the samplesheet
 comparisons_raw <- read.csv(samplesheet)
@@ -227,7 +231,7 @@ for (i in seq_along(comparisons)) {
   print(glue('Analysis {i}'))
   
   # run the analysis on the current samples
-  curr_result <- run_analysis_phospho(comparisons[[i]], limma_params, intensity_matrix, out_dirs, intensity_matrix_raw)
+  curr_result <- run_analysis_phospho(comparisons[[i]], limma_params, intensity_matrix, out_dirs, intensity_matrix_raw, peptide_metadata)
   
   # save the current results if successful
   if (!is.null(curr_result)){
