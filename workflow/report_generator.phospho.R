@@ -396,11 +396,25 @@ Videos” the **Qiagen Digital Insights Youtube** page.'
 imputation_content <- '\n
 ## Imputation Reporting
 
+### Parameters
+
+```{r imputation-params}
+imp_params <- rds_data[[7]]
+imp_method <- if (!is.null(imp_params)) imp_params$method else "unknown"
+imp_q      <- if (!is.null(imp_params)) imp_params$q      else NA
+
+param_table <- data.frame(
+  Parameter = c("Package", "Method", "q (quantile cutoff)"),
+  Value     = c("DEP", imp_method, as.character(imp_q)),
+  stringsAsFactors = FALSE
+)
+kable(param_table, caption = "Imputation parameters used in this analysis")
+```
+
 The histograms below show the distribution of all log2 intensity values across
 all proteins. **Observed** (blue) values are those measured directly, while
 **Imputed** (red) values are those that were missing and filled in. Imputed
-values
-typically appear as a secondary peak shifted towards the lower end of the
+values typically appear as a secondary peak shifted towards the lower end of the
 distribution, reflecting the left-censored nature of missing-not-at-random
 (MNAR) data in proteomics.
 
