@@ -59,7 +59,9 @@ option_list = list(
   make_option(c("--seed"), type = "integer", default = 42,
               help = "Random seed for reproducibility of stochastic imputation methods [default= %default]"),
   make_option(c("--heatmap-top-n"), type = "integer", default = 1000,
-              help = "Number of top molecules by CV to show in the global heatmap [default= %default]")
+              help = "Number of top molecules by CV to show in the global heatmap [default= %default]"),
+  make_option(c("--gsea-ont"), type = "character", default = "BP",
+              help = "Gene ontology category for GSEA: 'BP', 'MF', 'CC', or 'ALL' [default= %default]")
 )
 
 opt_parser = OptionParser(option_list=option_list)
@@ -74,6 +76,7 @@ imputation_method <- opt$imputation
 imputation_q <- opt$`imputation-q`
 imputation_seed <- opt$seed
 heatmap_top_n <- opt$`heatmap-top-n`
+gsea_ont <- opt$`gsea-ont`
 
 # ==========================
 # Debug mode
@@ -227,7 +230,7 @@ results <- vector("list", length(comparisons))
 for (i in seq_along(comparisons)) {
 
   # run the analysis on the current samples
-  curr_result <- run_analysis(comparisons[[i]], limma_params, intensity_matrix, out_dirs, intensity_matrix_raw)
+  curr_result <- run_analysis(comparisons[[i]], limma_params, intensity_matrix, out_dirs, intensity_matrix_raw, ont_option = gsea_ont)
   
   # save the current results if successful
   if (!is.null(curr_result)){
