@@ -61,7 +61,9 @@ option_list = list(
   make_option(c("-q", "--imputation-q"), type = "double", default = 0.01,
               help = "q parameter for MinProb/QRILC: quantile cutoff for the left-censored distribution [default= %default]"),
   make_option(c("--seed"), type = "integer", default = 42,
-              help = "Random seed for reproducibility of stochastic imputation methods [default= %default]")
+              help = "Random seed for reproducibility of stochastic imputation methods [default= %default]"),
+  make_option(c("--heatmap-top-n"), type = "integer", default = 1000,
+              help = "Number of top molecules by CV to show in the global heatmap [default= %default]")
 )
 
 opt_parser = OptionParser(option_list=option_list)
@@ -75,6 +77,7 @@ genome <- opt$annotation
 imputation_method <- opt$imputation
 imputation_q <- opt$`imputation-q`
 imputation_seed <- opt$seed
+heatmap_top_n <- opt$`heatmap-top-n`
 
 if (is.null(runID) || is.null(countData) || is.null(samplesheet)) {
   print_help(opt_parser)
@@ -284,6 +287,13 @@ ggsave(pca_plot, filename = str_c(out_dirs$pca, "/PCA_plot.png"))
 #   layout(title = paste('Total Explained Variance = ', tot_explained_variance_ratio),
 #          scene = list(bgcolor = "#e5ecf6"))
 # export_plotly_to_html(fig3D, paste0(out_dirs$pca, "/allsamples_PCA_plot3D.html"))
+
+# ==========================
+# Generate global heatmap
+# ==========================
+print('Generating global heatmap')
+generate_global_heatmap(intensity_matrix, out_dirs, top_n = heatmap_top_n,
+                        molecule_label = "Phosphopeptides")
 
 # ==========================
 # Save RDS

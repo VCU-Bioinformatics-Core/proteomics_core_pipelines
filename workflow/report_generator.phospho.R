@@ -65,6 +65,8 @@ library(ggplot2)
 library(plotly)
 library(DT)
 library(htmlwidgets)
+library(ComplexHeatmap)
+library(circlize)
 
 # Load results
 rds_data <- readRDS("{analysis_results_path}")
@@ -73,7 +75,8 @@ comparisons <- rds_data[[2]]
 out_dirs <- rds_data[[3]]
 pca_plot <- rds_data[[4]]
 #pca_plotly <- rds_data[[5]]
-#pca_3d <- rds_data[[6]]
+intensity_matrix_raw <- rds_data[[5]]
+intensity_matrix <- rds_data[[6]]
 #annotation <- rds_data[[7]]
 ```
 
@@ -127,6 +130,21 @@ separate into distinct clusters.
 
 ```{{r pca-plot, fig.width=6, fig.height=4 }}
 pca_plot
+```
+
+### Global Phosphopeptide Heatmap
+
+The heatmap below shows z-score normalized expression of the top 1000
+phosphopeptides by coefficient of variation (CV) across all samples, clustered
+by similarity.
+
+```{{r global-heatmap, fig.width=10, fig.height=10}}
+global_heatmap_path <- file.path(out_dirs$heatmap, "global_heatmap.png")
+if (file.exists(global_heatmap_path)) {{
+  knitr::include_graphics(global_heatmap_path)
+}} else {{
+  cat("Global heatmap not available.")
+}}
 ```
 
 <!--Interactive PCA plots can also be found in the following files:

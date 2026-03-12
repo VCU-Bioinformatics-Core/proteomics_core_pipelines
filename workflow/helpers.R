@@ -132,6 +132,44 @@ generate_volcano <- function(data, exp_name, ctrl_name, p_thresh = 0.05, lfc = 0
 }
 
 
+generate_global_heatmap <- function(intensity_matrix, out_dirs, top_n = 1000, molecule_label = "Proteins") {
+  mat <- as.matrix(intensity_matrix)
+
+  # Filter to top N most variable molecules by coefficient of variation (CV = sd / |mean|)
+  row_means <- rowMeans(mat, na.rm = TRUE)
+  row_sds   <- apply(mat, 1, sd, na.rm = TRUE)
+  cv        <- row_sds / abs(row_means)
+  cv[is.nan(cv) | is.infinite(cv)] <- 0
+
+  n_select <- min(top_n, nrow(mat))
+  mat <- mat[order(cv, decreasing = TRUE)[1:n_select], , drop = FALSE]
+
+  zscores <- t(scale(t(mat)))
+  zscores[is.nan(zscores) | is.infinite(zscores)] <- 0
+
+  out_path <- file.path(out_dirs$heatmap, "global_heatmap.png")
+  png(out_path, width = 1200, height = 1600, res = 300)
+  ht <- Heatmap(
+    zscores,
+    name = "Z-score",
+    col = colorRamp2(c(-2, 0, 2), c("blue", "white", "firebrick")),
+    cluster_rows = TRUE,
+    cluster_columns = TRUE,
+    show_row_names = FALSE,
+    show_column_names = TRUE,
+    row_title = paste0(molecule_label, " (top ", n_select, " by CV)"),
+    column_title = "Samples",
+    column_names_gp = gpar(fontsize = 8),
+    column_names_rot = 45,
+    column_title_gp = gpar(fontsize = 12),
+    row_title_gp = gpar(fontsize = 12)
+  )
+  draw(ht)
+  dev.off()
+
+  return(out_path)
+}
+
 generate_heatmap <- function(results_df, normalized_counts, p = 0.05, lfc = 0.58,
                              exp_name, ctrl_name, fig_dir,
                              row_id_col = "uniprotswissprot") {
