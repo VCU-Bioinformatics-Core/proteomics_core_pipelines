@@ -244,14 +244,14 @@ create_dotplot <- function(gse, title) {
 # centralizing function
 # ==========================
 
-run_analysis <- function(comparison, limma_params, normalized_counts, out_dirs) {
+run_analysis <- function(comparison, limma_params, normalized_counts, out_dirs, intensity_matrix_raw = NULL) {
   tryCatch({
     print(paste("\nStarting analysis for comparison:", comparison$name))
-    
+
     print('Running limma')
     limma_results <- perform_limma_analysis(limma_params, comparison$exp, comparison$ctrl)
     limma_results <- limma_results %>% rownames_to_column(var = "uniprotswissprot")
-    
+
     print('Annotating the results')
     mapping <- getBM(
       attributes = c("uniprotswissprot", "ensembl_gene_id"), # "external_gene_name"
@@ -261,6 +261,35 @@ run_analysis <- function(comparison, limma_params, normalized_counts, out_dirs) 
     )
     mapping <- mapping %>% distinct(uniprotswissprot, .keep_all = TRUE)
     annotated_results <- limma_results %>% left_join(mapping, by=join_by(uniprotswissprot))
+
+    # Compute per-protein imputation category using pre-imputation NA counts
+    if (!is.null(intensity_matrix_raw)) {
+      all_samples  <- colnames(limma_params$E)
+      exp_samples  <- all_samples[limma_params$design[, comparison$exp]  == 1]
+      ctrl_samples <- all_samples[limma_params$design[, comparison$ctrl] == 1]
+      n_exp  <- length(exp_samples)
+      n_ctrl <- length(ctrl_samples)
+
+      na_exp   <- rowSums(is.na(intensity_matrix_raw[annotated_results$uniprotswissprot, exp_samples,  drop = FALSE]))
+      na_ctrl  <- rowSums(is.na(intensity_matrix_raw[annotated_results$uniprotswissprot, ctrl_samples, drop = FALSE]))
+      na_total <- na_exp + na_ctrl
+
+      annotated_results <- annotated_results %>%
+        mutate(
+          imputation_category = case_when(
+            adj.P.Val >= 0.05                                                      ~ "not-significant",
+            na_total == 0                                                           ~ "complete-data",
+            (na_exp == n_exp & na_ctrl == 0) | (na_ctrl == n_ctrl & na_exp == 0)  ~ "on-off",
+            na_total == 1                                                           ~ "imputation-low",
+            na_total == 2                                                           ~ "imputation-medium",
+            na_total >= 3                                                           ~ "imputation-high",
+            TRUE                                                                    ~ "other"
+          )
+        )
+      print("Imputation category distribution:")
+      print(table(annotated_results$imputation_category))
+    }
+
     output_file <- create_file_path(out_dirs$de_data, "limma_", comparison$name)
     write.csv(annotated_results, output_file)
     
@@ -300,13 +329,41 @@ run_analysis <- function(comparison, limma_params, normalized_counts, out_dirs) 
   })
 }
 
-run_analysis_phospho <- function(comparison, limma_params, normalized_counts, out_dirs) {
+run_analysis_phospho <- function(comparison, limma_params, normalized_counts, out_dirs, intensity_matrix_raw = NULL) {
   tryCatch({
     print(paste("Starting analysis for comparison:", comparison$name))
 
     print('Running limma')
     limma_results <- perform_limma_analysis(limma_params, comparison$exp, comparison$ctrl)
     limma_results <- limma_results %>% rownames_to_column(var = "peptide_id")
+
+    # Compute per-protein imputation category using pre-imputation NA counts
+    if (!is.null(intensity_matrix_raw)) {
+      all_samples  <- colnames(limma_params$E)
+      exp_samples  <- all_samples[limma_params$design[, comparison$exp]  == 1]
+      ctrl_samples <- all_samples[limma_params$design[, comparison$ctrl] == 1]
+      n_exp  <- length(exp_samples)
+      n_ctrl <- length(ctrl_samples)
+
+      na_exp   <- rowSums(is.na(intensity_matrix_raw[limma_results$peptide_id, exp_samples,  drop = FALSE]))
+      na_ctrl  <- rowSums(is.na(intensity_matrix_raw[limma_results$peptide_id, ctrl_samples, drop = FALSE]))
+      na_total <- na_exp + na_ctrl
+
+      limma_results <- limma_results %>%
+        mutate(
+          imputation_category = case_when(
+            adj.P.Val >= 0.05                                                      ~ "not-significant",
+            na_total == 0                                                           ~ "complete-data",
+            (na_exp == n_exp & na_ctrl == 0) | (na_ctrl == n_ctrl & na_exp == 0)  ~ "on-off",
+            na_total == 1                                                           ~ "imputation-low",
+            na_total == 2                                                           ~ "imputation-medium",
+            na_total >= 3                                                           ~ "imputation-high",
+            TRUE                                                                    ~ "other"
+          )
+        )
+      print("Imputation category distribution:")
+      print(table(limma_results$imputation_category))
+    }
 
     output_file <- create_file_path(out_dirs$de_data, "limma_", comparison$name)
     write.csv(limma_results, output_file)

@@ -147,7 +147,7 @@ summary_table <- data.frame(
 )
 
 for (i in seq_along(comparisons)) {{
-  if (!is.null(results[[i]])) {{
+  if (i <= length(results) && !is.null(results[[i]])) {{
     res_df <- results[[i]]$limma
     
     # Count DAPs (padj < 0.05 & |log2FC| >= 0.58)
@@ -267,18 +267,22 @@ and adjusted pvalues (**padj**).
 
 dap_flag = 0
 if (!is.null(results[[2]]) && !is.null(results[[2]]$limma)) {{
-  top_up <- results[[2]]$limma %>%
+  imp_levels <- c("complete-data", "on-off", "imputation-low", "imputation-medium", "imputation-high", "not-significant", "other")
+
+  top_up <- results[[{i}]]$limma %>%
     filter(!is.na(adj.P.Val) & adj.P.Val < 0.05 & logFC >= 0.58) %>%
     mutate(logFC = round(logFC, 2),
-           pvalue = formatC(P.Value, format = "e", digits = 2),
-           padj = formatC(adj.P.Val, format = "e", digits = 2)) %>%
+           pvalue = signif(P.Value, 3),
+           padj = signif(adj.P.Val, 3),
+           imputation_category = factor(imputation_category, levels = imp_levels)) %>%
     arrange(padj)
-  
-  top_down <- results[[2]]$limma %>%
+
+  top_down <- results[[{i}]]$limma %>%
     filter(!is.na(adj.P.Val) & adj.P.Val < 0.05 & logFC <= -0.58) %>%
     mutate(logFC = round(logFC, 2),
-           pvalue = formatC(P.Value, format = "e", digits = 2),
-           padj = formatC(adj.P.Val, format = "e", digits = 2)) %>%
+           pvalue = signif(P.Value, 3),
+           padj = signif(adj.P.Val, 3),
+           imputation_category = factor(imputation_category, levels = imp_levels)) %>%
     arrange(padj)
   
   combined_sigs <- bind_rows(top_up, top_down)
@@ -291,14 +295,27 @@ if (!is.null(results[[2]]) && !is.null(results[[2]]$limma)) {{
 }}
 ```
 
+```{{r imputation-category-summary-{i} }}
+if (i <= length(results) && !is.null(results[[{i}]]) && !is.null(results[[{i}]]$limma)) {{
+  sig_df <- results[[{i}]]$limma %>%
+    filter(!is.na(adj.P.Val) & adj.P.Val < 0.05 & abs(logFC) >= 0.58)
+  if ("imputation_category" %in% colnames(sig_df) && nrow(sig_df) > 0) {{
+    cat_counts <- as.data.frame(table(sig_df$imputation_category))
+    colnames(cat_counts) <- c("Category", "Count")
+    kable(cat_counts, caption = "Significant DAPs by imputation category (all, not just top 20)")
+  }}
+}}
+```
+
 ```{{r daps-{i} }}
 
 if (dap_flag > 0){{
   # DT::datatable(top_down %>% select(ENSEMBL_ID, SYMBOL, log2FoldChange, pvalue, padj, GENENAME),
   #             caption = "Top Down Regulated Proteins")
   
-  DT::datatable(combined_sigs %>% dplyr::select(ensembl_gene_id, uniprotswissprot, logFC, pvalue, padj, uniprotswissprot),
-                caption = "Differentially Abundance Proteins")
+  DT::datatable(combined_sigs %>% dplyr::select(ensembl_gene_id, uniprotswissprot, logFC, pvalue, padj, imputation_category),
+                caption = "Differentially Abundance Proteins",
+                filter = "top")
   
 }} else {{
   cat("No differential abundance results available for this comparison\n")

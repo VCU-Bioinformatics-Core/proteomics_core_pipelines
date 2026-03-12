@@ -55,7 +55,9 @@ option_list = list(
   make_option(c("-i", "--imputation"), type = "character", default = "MinProb",
               help = "DEP imputation method: 'MinProb', 'knn', 'bpca', 'QRILC', 'man', or 'none' [default= %default]"),
   make_option(c("-q", "--imputation-q"), type = "double", default = 0.01,
-              help = "q parameter for MinProb/QRILC: quantile cutoff for the left-censored distribution [default= %default]")
+              help = "q parameter for MinProb/QRILC: quantile cutoff for the left-censored distribution [default= %default]"),
+  make_option(c("--seed"), type = "integer", default = 42,
+              help = "Random seed for reproducibility of stochastic imputation methods [default= %default]")
 )
 
 opt_parser = OptionParser(option_list=option_list)
@@ -68,6 +70,7 @@ outDir <- opt$outdir
 genome <- opt$annotation
 imputation_method <- opt$imputation
 imputation_q <- opt$`imputation-q`
+imputation_seed <- opt$seed
 
 # ==========================
 # Debug mode
@@ -181,6 +184,7 @@ intensity_matrix_raw <- intensity_matrix  # snapshot before imputation
 # Imputation with DEP
 # ==========================
 if (imputation_method != "none") {
+  set.seed(imputation_seed)
   se <- SummarizedExperiment::SummarizedExperiment(
     assays = list(intensity = as.matrix(intensity_matrix)),
     colData = S4Vectors::DataFrame(
@@ -216,11 +220,11 @@ limma_params <- list(E = intensity_matrix, design = design)
 # Analysis loop
 # ==========================
 
-results <- list()
+results <- vector("list", length(comparisons))
 for (i in seq_along(comparisons)) {
-  
+
   # run the analysis on the current samples
-  curr_result <- run_analysis(comparisons[[i]], limma_params, intensity_matrix, out_dirs)
+  curr_result <- run_analysis(comparisons[[i]], limma_params, intensity_matrix, out_dirs, intensity_matrix_raw)
   
   # save the current results if successful
   if (!is.null(curr_result)){
