@@ -114,6 +114,7 @@ As part of this pipeline we produce the following files for your downstream use:
     ├── gsea
     │   └── [comparison]_GSEA.png
     ├── heatmap
+    │   ├── global_heatmap.png
     │   └── [comparison]_heatmap.png
     ├── pca
     │   └── PCA_plot.png
