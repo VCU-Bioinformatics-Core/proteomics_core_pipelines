@@ -171,15 +171,21 @@ generate_global_heatmap <- function(intensity_matrix, out_dirs, top_n = 1000, mo
 }
 
 generate_heatmap <- function(results_df, normalized_counts, p = 0.05, lfc = 0.58,
-                             exp_name, ctrl_name, fig_dir,
+                             exp_name, ctrl_name, fig_dir, design,
                              row_id_col = "uniprotswissprot") {
 
   # filter the data for certain pvalues and lfc
   filtered_data <- results_df %>%
     dplyr::filter((adj.P.Val < p & abs(logFC) >= lfc))
 
+  # restrict columns to only the two groups being compared
+  all_samples  <- rownames(design)
+  exp_samples  <- all_samples[design[, exp_name]  == 1]
+  ctrl_samples <- all_samples[design[, ctrl_name] == 1]
+  comparison_samples <- c(exp_samples, ctrl_samples)
+
   # add jitter
-  values <- normalized_counts[filtered_data[[row_id_col]], ] %>%
+  values <- normalized_counts[filtered_data[[row_id_col]], comparison_samples] %>%
     as.matrix() %>%
     jitter(factor = 1, amount = 0.00001)
   
@@ -339,7 +345,8 @@ run_analysis <- function(comparison, limma_params, normalized_counts, out_dirs, 
     png(create_file_path(out_dirs$heatmap, "", comparison$name, "_heatmap.png"),
         width = 1200, height = 1600, res = 300)
     ht <- generate_heatmap(limma_results, intensity_matrix,
-                     exp_name = comparison$exp, ctrl_name = comparison$ctrl, fig_dir = out_dirs$heatmap)
+                     exp_name = comparison$exp, ctrl_name = comparison$ctrl,
+                     fig_dir = out_dirs$heatmap, design = limma_params$design)
     draw(ht)
     dev.off()
     
@@ -416,7 +423,8 @@ run_analysis_phospho <- function(comparison, limma_params, normalized_counts, ou
         width = 1200, height = 1600, res = 300)
     ht <- generate_heatmap(limma_results, normalized_counts,
                            exp_name = comparison$exp, ctrl_name = comparison$ctrl,
-                           fig_dir = out_dirs$heatmap, row_id_col = "peptide_id")
+                           fig_dir = out_dirs$heatmap, design = limma_params$design,
+                           row_id_col = "peptide_id")
     draw(ht)
     dev.off()
     

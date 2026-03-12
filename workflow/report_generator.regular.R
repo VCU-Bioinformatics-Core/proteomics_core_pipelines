@@ -78,6 +78,7 @@ pca_plot <- rds_data[[4]]
 intensity_matrix_raw <- rds_data[[5]]
 intensity_matrix <- rds_data[[6]]
 #annotation <- rds_data[[7]]
+sample_info <- rds_data[[8]]
 ```
 
 ## Overview
@@ -85,7 +86,7 @@ intensity_matrix <- rds_data[[6]]
 **Analyst: {analyst}**
 
 This report contains the results of differential abundance analysis for `r length(comparisons)` comparisons.
-It starts with the **Sample Exploration using PCA** section that highlights sample similarity and
+It starts with the **Global Sample Exploration** section that highlights sample similarity and
 helps to explore and understand the relationships between samples. Next, we present the
 **Differential Abundance Results** section with subsections for each comparison (more details
 below). For further exploration of the results, please refer to the output directories
@@ -120,7 +121,9 @@ As part of this pipeline we produce the following files for your downstream use:
         └── [comparison]_volcano.png
 ```
 
-## Sample Exploration using PCA
+## Global Sample Exploration
+
+### Principal Component Analysis
 
 PCA was performed to visualize the overall patterns of protein levels across samples and
 to identify potential batch effects or outliers. **What we expect:** Samples with similar
@@ -129,6 +132,47 @@ separate into distinct clusters.
 
 ```{{r pca-plot, fig.width=6, fig.height=4 }}
 pca_plot
+```
+
+### One-Way ANOVA
+
+```{{r anova-analysis, results="asis"}}
+n_groups <- length(unique(sample_info$condition))
+if (n_groups > 2) {{
+  cat("A one-way ANOVA was performed across all", n_groups, "groups to identify",
+      "proteins that vary significantly beyond any single pairwise comparison.",
+      "P-values were adjusted using the Benjamini-Hochberg (BH) method.\n\n")
+
+  group <- factor(sample_info$condition)
+  mat   <- as.matrix(intensity_matrix)
+
+  anova_pvals <- apply(mat, 1, function(x) {{
+    tryCatch(
+      summary(aov(x ~ group))[[1]][["Pr(>F)"]][1],
+      error = function(e) NA_real_
+    )
+  }})
+
+  anova_padj <- p.adjust(anova_pvals, method = "BH")
+  n_sig <- sum(anova_padj < 0.05, na.rm = TRUE)
+
+  cat(paste0("**", n_sig, "** out of **", nrow(mat), "** proteins are ",
+             "significantly variable across groups (ANOVA FDR < 0.05).\n\n"))
+
+  anova_results <- data.frame(
+    Protein     = rownames(mat),
+    P_Value     = signif(anova_pvals, 3),
+    Adj_P_Value = signif(anova_padj, 3)
+  ) %>%
+    dplyr::arrange(Adj_P_Value) %>%
+    head(20)
+
+  print(knitr::kable(anova_results,
+    caption = "Top 20 proteins by one-way ANOVA (sorted by adjusted p-value)",
+    row.names = FALSE))
+}} else {{
+  cat("*One-way ANOVA is only reported when more than two groups are present.*\n\n")
+}}
 ```
 
 ### Global Protein Heatmap
