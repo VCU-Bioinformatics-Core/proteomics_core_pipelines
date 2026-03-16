@@ -237,7 +237,8 @@ if (imputation_method == "none") {
   }
   set.seed(imputation_seed)
   fn <- get(fn_name)
-  intensity_matrix <- as.data.frame(fn(as.matrix(intensity_matrix)))
+  groups_vec <- setNames(comparisons_raw$GroupID, comparisons_raw$SampleID)
+  intensity_matrix <- as.data.frame(fn(as.matrix(intensity_matrix), groups = groups_vec))
   print(glue("Custom imputation applied: {imputation_method}"))
 }
 
