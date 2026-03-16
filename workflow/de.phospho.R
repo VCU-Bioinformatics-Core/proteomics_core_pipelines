@@ -37,6 +37,7 @@ library(biomaRt)
 # source helper functions
 source(here::here('workflow/helpers.R'))
 source(here::here("workflow/report_generator.phospho.R"))
+source(here::here("workflow/custom_imputation.R"))
 #debug(generate_volcano)
 #debug(run_analysis)
 #debug(generate_heatmap)
@@ -56,8 +57,14 @@ option_list = list(
               help = "Required. Unique run ID"),
   make_option(c("-a", "--annotation"), type = "character", default = "mouse",
               help = "Genome for annotation: 'mouse' or 'human' [default= %default]"),
-  make_option(c("-i", "--imputation"), type = "character", default = "MinProb",
-              help = "DEP imputation method: 'MinProb', 'knn', 'bpca', 'QRILC', 'man', or 'none' [default= %default]"),
+  make_option(c("-i", "--imputation"), type = "character", default = "DEP-MinProb",
+              help = paste(
+                "Imputation method.",
+                "DEP methods (prefix with 'DEP-'): 'DEP-MinProb', 'DEP-knn', 'DEP-bpca', 'DEP-QRILC', 'DEP-man'.",
+                "Custom methods: any name matching an impute_<name>() function in workflow/custom_imputation.R.",
+                "'none' skips imputation.",
+                "[default= %default]"
+              )),
   make_option(c("-q", "--imputation-q"), type = "double", default = 0.01,
               help = "q parameter for MinProb/QRILC: quantile cutoff for the left-censored distribution [default= %default]"),
   make_option(c("--seed"), type = "integer", default = 42,
@@ -190,9 +197,18 @@ intensity_matrix <- log2(counts + 1)
 intensity_matrix_raw <- intensity_matrix  # snapshot before imputation
 
 # ==========================
-# Imputation with DEP
+# Imputation
 # ==========================
-if (imputation_method != "none") {
+DEP_METHODS <- c("MinProb", "knn", "bpca", "QRILC", "man")
+
+if (imputation_method == "none") {
+  print("Imputation skipped (--imputation none)")
+
+} else if (startsWith(imputation_method, "DEP-")) {
+  dep_fun <- sub("^DEP-", "", imputation_method)
+  if (!dep_fun %in% DEP_METHODS) {
+    stop(glue("Unknown DEP method '{dep_fun}'. Valid DEP methods: {paste(DEP_METHODS, collapse=', ')}"))
+  }
   set.seed(imputation_seed)
   se <- SummarizedExperiment::SummarizedExperiment(
     assays = list(intensity = as.matrix(intensity_matrix)),
@@ -205,15 +221,27 @@ if (imputation_method != "none") {
       ID   = rownames(intensity_matrix)
     )
   )
-  if (imputation_method %in% c("MinProb", "QRILC")) {
-    se_imputed <- DEP::impute(se, fun = imputation_method, q = imputation_q)
+  if (dep_fun %in% c("MinProb", "QRILC")) {
+    se_imputed <- DEP::impute(se, fun = dep_fun, q = imputation_q)
   } else {
-    se_imputed <- DEP::impute(se, fun = imputation_method)
+    se_imputed <- DEP::impute(se, fun = dep_fun)
   }
   intensity_matrix <- as.data.frame(SummarizedExperiment::assay(se_imputed))
   print(glue("Imputation applied: {imputation_method} (q={imputation_q})"))
+
 } else {
-  print("Imputation skipped (--imputation none)")
+  fn_name <- paste0("impute_", imputation_method)
+  if (!exists(fn_name, mode = "function")) {
+    stop(glue(
+      "Unknown imputation method '{imputation_method}'. ",
+      "For DEP methods prefix with 'DEP-' (e.g. 'DEP-MinProb'). ",
+      "For custom methods, define `{fn_name}()` in workflow/custom_imputation.R."
+    ))
+  }
+  set.seed(imputation_seed)
+  fn <- get(fn_name)
+  intensity_matrix <- as.data.frame(fn(as.matrix(intensity_matrix)))
+  print(glue("Custom imputation applied: {imputation_method}"))
 }
 
 # ==========================
