@@ -197,6 +197,7 @@ intensity_matrix_raw <- intensity_matrix  # snapshot before imputation
 # Imputation
 # ==========================
 DEP_METHODS <- c("MinProb", "knn", "bpca", "QRILC", "man")
+n_peptides_not_imputable <- 0L  # overridden by custom imputation when applicable
 
 if (imputation_method == "none") {
   print("Imputation skipped (--imputation none)")
@@ -238,8 +239,12 @@ if (imputation_method == "none") {
   set.seed(imputation_seed)
   fn <- get(fn_name)
   groups_vec <- setNames(comparisons_raw$GroupID, comparisons_raw$SampleID)
-  intensity_matrix <- as.data.frame(fn(as.matrix(intensity_matrix), groups = groups_vec))
+  imputed_mat <- fn(as.matrix(intensity_matrix), groups = groups_vec)
+  n_peptides_not_imputable <- attr(imputed_mat, "n_not_imputable") %||% 0L
+  intensity_matrix <- as.data.frame(imputed_mat)
   print(glue("Custom imputation applied: {imputation_method}"))
+  if (n_peptides_not_imputable > 0)
+    print(glue("  Discarded {n_peptides_not_imputable} not-imputable peptide(s) (all groups had <=1 valid value)"))
 }
 
 # ==========================
@@ -333,7 +338,8 @@ generate_global_heatmap(intensity_matrix, out_dirs, top_n = heatmap_top_n)
 print('Save RDS')
 #rds <- list(results, comparisons, out_dirs, pca_plot, fig, fig3D)
 imputation_params <- list(method = imputation_method, q = imputation_q)
-rds <- list(results, comparisons, out_dirs, pca_plot, intensity_matrix_raw, intensity_matrix, imputation_params, sample_info)
+peptide_counts <- list(not_imputable = n_peptides_not_imputable)
+rds <- list(results, comparisons, out_dirs, pca_plot, intensity_matrix_raw, intensity_matrix, imputation_params, sample_info, peptide_counts)
 timestamp <- format(Sys.time(), "%Y%m%d_%H%M%S")
 #rds_path <- glue("analysis_results_{timestamp}.rds")
 rds_path <- file.path(outDir, "data/analysis_results.rds")

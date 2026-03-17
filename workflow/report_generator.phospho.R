@@ -129,11 +129,13 @@ As part of this pipeline we produce the following files for your downstream use:
 
 ```{{r global-summary}}
 if (!is.null(peptide_counts)) {{
-  summary_df <- data.frame(
-    Step = c("Total peptides", "After cRAP removal", "Phosphopeptides only"),
-    Count = c(peptide_counts$total, peptide_counts$no_crap, peptide_counts$phospho),
-    stringsAsFactors = FALSE
-  )
+  steps  <- c("Total peptides", "After cRAP removal", "Phosphopeptides only")
+  counts <- c(peptide_counts$total, peptide_counts$no_crap, peptide_counts$phospho)
+  if (!is.null(peptide_counts$not_imputable) && peptide_counts$not_imputable > 0) {{
+    steps  <- c(steps,  "Not-imputable (discarded)")
+    counts <- c(counts, peptide_counts$not_imputable)
+  }}
+  summary_df <- data.frame(Step = steps, Count = counts, stringsAsFactors = FALSE)
   knitr::kable(summary_df, caption = "Peptide filtering summary")
 }} else {{
   cat("Peptide count summary not available.")
@@ -519,7 +521,7 @@ imp_q      <- if (!is.null(imp_params)) imp_params$q      else NA
 
 param_table <- data.frame(
   Parameter = c("Package", "Method", "q (quantile cutoff)"),
-  Value     = c("DEP", imp_method, as.character(imp_q)),
+  Value     = c(if (startsWith(imp_method, "DEP-")) "DEP" else "VCU Core", imp_method, as.character(imp_q)),
   stringsAsFactors = FALSE
 )
 kable(param_table, caption = "Imputation parameters used in this analysis")
@@ -538,7 +540,10 @@ intensity_imputed  <- rds_data[[6]]
 
 raw_mat     <- as.matrix(intensity_raw)
 imputed_mat <- as.matrix(intensity_imputed)
-obs_mask    <- !is.na(raw_mat)
+# Align raw_mat to the post-filter rows (not-imputable peptides were dropped from
+# intensity_imputed; keeping them in raw_mat would inflate the "11 imputed" bar).
+raw_mat  <- raw_mat[rownames(imputed_mat), , drop = FALSE]
+obs_mask <- !is.na(raw_mat)
 
 raw_vals <- data.frame(
   value = raw_mat[obs_mask],
@@ -562,6 +567,61 @@ ggplot(all_vals, aes(x = value, fill = type)) +
   theme_bw() +
   theme(legend.position = "top") +
   guides(fill = guide_legend(override.aes = list(alpha = 1)))
+```
+
+```{r imputation-counts}
+n_obs  <- sum(obs_mask)
+n_imp  <- sum(!obs_mask)
+n_tot  <- length(obs_mask)
+pct_imp <- round(100 * n_imp / n_tot, 1)
+counts_table <- data.frame(
+  Parameter = c("Total measurements", "Observed values", "Imputed values", "Imputed (%)"),
+  Value     = c(format(n_tot, big.mark = ","),
+                format(n_obs, big.mark = ","),
+                format(n_imp, big.mark = ","),
+                paste0(pct_imp, "%")),
+  stringsAsFactors = FALSE
+)
+kable(counts_table, caption = "Observed vs. imputed value counts")
+```
+
+### Imputed Values per Peptide
+
+```{r imputation-per-peptide, fig.width=6, fig.height=4}
+imp_per_peptide <- rowSums(!obs_mask)
+max_imp <- ncol(obs_mask)
+imp_counts <- table(factor(imp_per_peptide, levels = 0:max_imp))
+imp_df <- data.frame(n_imputed = as.integer(names(imp_counts)),
+                     n_peptides = as.integer(imp_counts))
+
+ggplot(imp_df, aes(x = factor(n_imputed), y = n_peptides)) +
+  geom_bar(stat = "identity", fill = "steelblue", color = "white") +
+  labs(x = "Number of imputed values per peptide",
+       y = "Number of peptides",
+       title = "Distribution of imputed values per peptide") +
+  theme_bw()
+```
+
+```{r imputation-per-peptide-table}
+imp_summary <- data.frame(
+  `Imputed values per peptide` = 0:max_imp,
+  `Number of peptides`         = as.integer(imp_counts),
+  `Percent of peptides`        = paste0(round(100 * as.integer(imp_counts) / nrow(raw_mat), 1), "%"),
+  stringsAsFactors = FALSE,
+  check.names = FALSE
+)
+kable(imp_summary, caption = "Number of peptides by imputed value count")
+```
+
+```{r imputation-total-counts, fig.width=6, fig.height=4}
+imp_df$total_imputed <- imp_df$n_imputed * imp_df$n_peptides
+
+ggplot(imp_df, aes(x = factor(n_imputed), y = total_imputed)) +
+  geom_bar(stat = "identity", fill = "firebrick", color = "white") +
+  labs(x = "Number of imputed values per peptide",
+       y = "Total imputed values",
+       title = "Total imputed values by imputation count per peptide") +
+  theme_bw()
 ```
 '
 

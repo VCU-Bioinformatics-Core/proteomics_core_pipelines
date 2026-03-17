@@ -66,6 +66,20 @@ impute_3by3 <- function(mat, groups, q = 0.01, ...) {
 
   unique_groups <- unique(groups)
 
+  # --- not-imputable filter ---
+  # A peptide is discarded when every group has <= 1 valid observation across
+  # the entire row. In that case there is no group-level signal to anchor
+  # imputation, so keeping the row would only add noise.
+  not_imputable <- apply(mat, 1, function(row) {
+    all(vapply(unique_groups, function(grp) {
+      sum(!is.na(row[groups == grp])) <= 1
+    }, logical(1)))
+  })
+  n_not_imputable <- sum(not_imputable)
+  if (n_not_imputable > 0) {
+    mat <- mat[!not_imputable, , drop = FALSE]
+  }
+
   # Build global left-tail Gaussian from ALL observed values in the matrix.
   # mu    = q-th quantile of the pooled distribution
   # sigma = MAD of the pooled distribution
@@ -97,5 +111,6 @@ impute_3by3 <- function(mat, groups, q = 0.01, ...) {
     }
   }
 
+  attr(mat, "n_not_imputable") <- n_not_imputable
   mat
 }
