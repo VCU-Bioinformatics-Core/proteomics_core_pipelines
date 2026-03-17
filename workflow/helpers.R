@@ -118,6 +118,9 @@ generate_volcano <- function(data, exp_name, ctrl_name, p_thresh = 0.05, lfc = 0
 generate_global_heatmap <- function(intensity_matrix, out_dirs, top_n = 1000, molecule_label = "Proteins") {
   mat <- as.matrix(intensity_matrix)
 
+  # Drop rows with any non-finite values before clustering
+  mat <- mat[apply(mat, 1, function(x) all(is.finite(x))), , drop = FALSE]
+
   # Filter to top N most variable molecules by coefficient of variation (CV = sd / |mean|)
   row_means <- rowMeans(mat, na.rm = TRUE)
   row_sds   <- apply(mat, 1, sd, na.rm = TRUE)

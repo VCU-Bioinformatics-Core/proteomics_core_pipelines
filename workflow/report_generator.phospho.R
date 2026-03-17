@@ -164,12 +164,13 @@ if (n_groups > 2) {{
   group <- factor(sample_info$condition)
   mat   <- as.matrix(intensity_matrix)
 
-  anova_pvals <- apply(mat, 1, function(x) {{
-    tryCatch(
-      summary(aov(x ~ group))[[1]][["Pr(>F)"]][1],
-      error = function(e) NA_real_
-    )
-  }})
+  anova_pvals <- vapply(seq_len(nrow(mat)), function(i) {{
+    tryCatch({{
+      pval <- summary(aov(mat[i, ] ~ group))[[1]][["Pr(>F)"]][1]
+      if (is.null(pval) || length(pval) == 0) NA_real_ else as.numeric(pval)
+    }}, error = function(e) NA_real_)
+  }}, FUN.VALUE = numeric(1))
+  names(anova_pvals) <- rownames(mat)
 
   anova_padj <- p.adjust(anova_pvals, method = "BH")
   n_sig <- sum(anova_padj < 0.05, na.rm = TRUE)

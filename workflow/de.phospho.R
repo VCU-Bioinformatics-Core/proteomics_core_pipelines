@@ -280,7 +280,11 @@ for (i in seq_along(comparisons)) {
 print("# Principal Component Analysis")
 input_pca_matrix <- as.matrix(intensity_matrix)
 
-# Values already imputed via DEP above; transpose so samples are rows for prcomp
+# Drop any peptide rows that still contain NA or non-finite values after imputation
+finite_rows <- apply(input_pca_matrix, 1, function(x) all(is.finite(x)))
+input_pca_matrix <- input_pca_matrix[finite_rows, ]
+
+# Transpose so samples are rows for prcomp
 input_pca_matrix <- t(input_pca_matrix)
 
 # calculate PCA results and scores 
