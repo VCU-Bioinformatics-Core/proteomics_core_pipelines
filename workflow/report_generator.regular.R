@@ -513,19 +513,45 @@ ggplot(all_vals, aes(x = value, fill = type)) +
   guides(fill = guide_legend(override.aes = list(alpha = 1)))
 ```
 
-### Imputed Values per Protein
+### Total Imputed Values per Protein
 
-```{r imputation-per-peptide, fig.width=6, fig.height=4}
+```{r imputation-total-counts, fig.width=6, fig.height=4}
+n_obs  <- sum(obs_mask)
+n_tot  <- length(obs_mask)
 imp_per_protein <- rowSums(!obs_mask)
 max_imp <- ncol(obs_mask)
 imp_counts <- table(factor(imp_per_protein, levels = 0:max_imp))
 imp_df <- data.frame(n_imputed = as.integer(names(imp_counts)),
                      n_proteins = as.integer(imp_counts))
+imp_df$total_val <- imp_df$n_imputed * imp_df$n_proteins
+imp_df$total_val[imp_df$n_imputed == 0] <- n_obs
+imp_df$bar_type <- ifelse(imp_df$n_imputed == 0, "Observed", "Imputed")
+imp_df$pct_total <- round(100 * imp_df$total_val / n_tot, 1)
+x_labels <- setNames(c("no-imputation", as.character(seq_len(max_imp))), 0:max_imp)
+
+ggplot(imp_df, aes(x = factor(n_imputed), y = total_val, fill = bar_type)) +
+  geom_bar(stat = "identity", color = "white") +
+  geom_text(aes(label = paste0(pct_total, "%")), vjust = -0.4, size = 3) +
+  scale_fill_manual(values = c("Observed" = "steelblue", "Imputed" = "firebrick")) +
+  scale_x_discrete(labels = x_labels) +
+  labs(x = "Number of imputed values per protein",
+       y = "Total values",
+       title = "Total imputed values by imputation count per protein",
+       fill = NULL) +
+  theme_bw() +
+  theme(legend.position = "top")
+```
+
+### Distribution of Imputed Values per Protein
+
+```{r imputation-per-protein, fig.width=6, fig.height=4}
 imp_df$pct <- round(100 * imp_df$n_proteins / nrow(obs_mask), 1)
+x_labels <- setNames(c("no-imputation", as.character(seq_len(max_imp))), 0:max_imp)
 
 ggplot(imp_df, aes(x = factor(n_imputed), y = n_proteins)) +
   geom_bar(stat = "identity", fill = "steelblue", color = "white") +
   geom_text(aes(label = paste0(pct, "%")), vjust = -0.4, size = 3) +
+  scale_x_discrete(labels = x_labels) +
   labs(x = "Number of imputed values per protein",
        y = "Number of proteins",
        title = "Distribution of imputed values per protein") +
