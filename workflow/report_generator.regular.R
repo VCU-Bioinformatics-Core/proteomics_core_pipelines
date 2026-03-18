@@ -80,6 +80,7 @@ intensity_matrix_raw <- rds_data[[5]]
 intensity_matrix <- rds_data[[6]]
 #annotation <- rds_data[[7]]
 sample_info <- rds_data[[8]]
+protein_counts <- rds_data[[9]]
 ```
 
 ## Overview
@@ -130,12 +131,12 @@ As part of this pipeline we produce the following files for your downstream use:
 ### Global Summary
 
 ```{{r global-summary}}
-if (!is.null(peptide_counts) && !is.null(peptide_counts$not_imputable) && peptide_counts$not_imputable > 0) {{
-  steps  <- c("Not-imputable (discarded)", "Curated peptides (used downstream)")
-  counts <- c(peptide_counts$not_imputable,
+if (!is.null(protein_counts) && !is.null(protein_counts$not_imputable) && protein_counts$not_imputable > 0) {{
+  steps  <- c("Not-imputable (discarded)", "Curated proteins (used downstream)")
+  counts <- c(protein_counts$not_imputable,
               nrow(intensity_matrix))
   summary_df <- data.frame(Step = steps, Count = counts, stringsAsFactors = FALSE)
-  knitr::kable(summary_df, caption = "Peptide filtering summary")
+  knitr::kable(summary_df, caption = "Protein filtering summary")
 }}
 ```
 
@@ -362,7 +363,7 @@ and adjusted pvalues (**padj**).
 # Display top DAPs table
 
 dap_flag = 0
-if (!is.null(results[[2]]) && !is.null(results[[2]]$limma)) {{
+if (!is.null(results[[{i}]]) && !is.null(results[[{i}]]$limma)) {{
   imp_levels <- c("complete-data", "on-off", "imputation-low", "imputation-medium", "imputation-high", "not-significant", "other")
 
   top_up <- results[[{i}]]$limma %>%

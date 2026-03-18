@@ -85,6 +85,11 @@ imputation_seed <- opt$seed
 heatmap_top_n <- opt$`heatmap-top-n`
 gsea_ont <- opt$`gsea-ont`
 
+if (is.null(runID) || is.null(countData) || is.null(samplesheet)) {
+  print_help(opt_parser)
+  stop("--runid, --counts, and --samplesheet are required.")
+}
+
 # ==========================
 # Debug mode
 # ==========================
@@ -97,7 +102,8 @@ gsea_ont <- opt$`gsea-ont`
 #   genome <- "mouse"
 # }
 
-debug <- TRUE
+#debug <- TRUE
+debug <- FALSE
 if (debug){
   # runID <- 'Test'
   # countData <- '/global/projects/proteomics_core/analyst_workspace/pipeline_test_data/raw/20251001_U266_UT_VS_S+B_LFQ_Report.csv'
@@ -188,9 +194,8 @@ for (comparisons_name in comparisons_cols) {
   }
 }
 
-# Optional log2-transform (if values are not log-scaled)
-intensity_matrix <- counts %>% mutate(across(where(is.numeric), ~ as.integer(round(.))))
-intensity_matrix <- log2(intensity_matrix + 1)
+# Log2-transform intensities
+intensity_matrix <- log2(counts + 1)
 intensity_matrix_raw <- intensity_matrix  # snapshot before imputation
 
 # ==========================
@@ -238,7 +243,7 @@ if (imputation_method == "none") {
   }
   set.seed(imputation_seed)
   fn <- get(fn_name)
-  groups_vec <- setNames(comparisons_raw$GroupID, comparisons_raw$SampleID)
+  groups_vec <- setNames(comparisons_raw$GroupID, colnames(intensity_matrix))
   imputed_mat <- fn(as.matrix(intensity_matrix), groups = groups_vec)
   n_peptides_not_imputable <- attr(imputed_mat, "n_not_imputable") %||% 0L
   intensity_matrix <- as.data.frame(imputed_mat)
@@ -278,7 +283,11 @@ for (i in seq_along(comparisons)) {
 print("# Principal Component Analysis")
 input_pca_matrix <- as.matrix(intensity_matrix)
 
-# Values already imputed via DEP above; transpose so samples are rows for prcomp
+# Drop any rows that still contain NA or non-finite values after imputation
+finite_rows <- apply(input_pca_matrix, 1, function(x) all(is.finite(x)))
+input_pca_matrix <- input_pca_matrix[finite_rows, ]
+
+# Transpose so samples are rows for prcomp
 input_pca_matrix <- t(input_pca_matrix)
 
 
@@ -338,8 +347,8 @@ generate_global_heatmap(intensity_matrix, out_dirs, top_n = heatmap_top_n)
 print('Save RDS')
 #rds <- list(results, comparisons, out_dirs, pca_plot, fig, fig3D)
 imputation_params <- list(method = imputation_method, q = imputation_q)
-peptide_counts <- list(not_imputable = n_peptides_not_imputable)
-rds <- list(results, comparisons, out_dirs, pca_plot, intensity_matrix_raw, intensity_matrix, imputation_params, sample_info, peptide_counts)
+protein_counts <- list(not_imputable = n_peptides_not_imputable)
+rds <- list(results, comparisons, out_dirs, pca_plot, intensity_matrix_raw, intensity_matrix, imputation_params, sample_info, protein_counts)
 timestamp <- format(Sys.time(), "%Y%m%d_%H%M%S")
 #rds_path <- glue("analysis_results_{timestamp}.rds")
 rds_path <- file.path(outDir, "data/analysis_results.rds")
