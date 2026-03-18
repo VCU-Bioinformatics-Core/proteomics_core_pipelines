@@ -322,6 +322,42 @@ if (file.exists(volcano_path)) {{
 ```
 
 
+**MA Plot**
+
+- Description: visualizes the relationship between average expression and fold change.
+  Points are colored by significance status. A horizontal dashed line marks y = 0
+  (no change), and dotted lines mark ±log2(1.5) fold change thresholds.
+- Data point: a protein/peptide
+- X-axis: average log2 intensity across all samples (AveExpr)
+- Y-axis: log2 fold-change ({exp} / {ctrl})
+
+```{{r ma-plot-{i}, fig.width=7, fig.height=5}}
+if (!is.null(results[[{i}]]) && !is.null(results[[{i}]]$limma)) {{
+  ma_df <- results[[{i}]]$limma %>%
+    filter(!is.na(AveExpr), !is.na(logFC), is.finite(AveExpr), is.finite(logFC)) %>%
+    mutate(sig = case_when(
+      adj.P.Val < 0.05 & logFC >  0.58 ~ "Up",
+      adj.P.Val < 0.05 & logFC < -0.58 ~ "Down",
+      TRUE ~ "NS"
+    ))
+  ggplot(ma_df, aes(x = AveExpr, y = logFC, color = sig)) +
+    geom_point(alpha = 0.4, size = 1) +
+    scale_color_manual(values = c("Up" = "firebrick", "Down" = "steelblue", "NS" = "gray60"),
+                       name = NULL) +
+    geom_hline(yintercept = 0,     linetype = "dashed", color = "black") +
+    geom_hline(yintercept =  0.58, linetype = "dotted", color = "gray40") +
+    geom_hline(yintercept = -0.58, linetype = "dotted", color = "gray40") +
+    labs(x = "Average log2 intensity (AveExpr)",
+         y = "log2 fold-change",
+         title = "MA Plot: {name}") +
+    theme_bw() +
+    theme(legend.position = "top")
+}} else {{
+  cat("MA plot not available for this comparison")
+}}
+```
+
+
 **Heatmap**
 
 - Description: a heatmap of **z-score normalized** intensity data with application of 
