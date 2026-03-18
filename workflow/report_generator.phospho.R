@@ -134,6 +134,8 @@ if (!is.null(peptide_counts)) {{
   if (!is.null(peptide_counts$not_imputable) && peptide_counts$not_imputable > 0) {{
     steps  <- c(steps,  "Not-imputable (discarded)")
     counts <- c(counts, peptide_counts$not_imputable)
+    steps  <- c(steps,  "Curated phosphopeptides (used downstream)")
+    counts <- c(counts, peptide_counts$phospho - peptide_counts$not_imputable)
   }}
   summary_df <- data.frame(Step = steps, Count = counts, stringsAsFactors = FALSE)
   knitr::kable(summary_df, caption = "Peptide filtering summary")
@@ -574,9 +576,11 @@ n_obs  <- sum(obs_mask)
 n_imp  <- sum(!obs_mask)
 n_tot  <- length(obs_mask)
 pct_imp <- round(100 * n_imp / n_tot, 1)
+n_curated <- nrow(intensity_matrix)
 counts_table <- data.frame(
-  Parameter = c("Total measurements", "Observed values", "Imputed values", "Imputed (%)"),
-  Value     = c(format(n_tot, big.mark = ","),
+  Parameter = c("Curated phosphopeptides", "Total measurements", "Observed values", "Imputed values", "Imputed (%)"),
+  Value     = c(format(n_curated, big.mark = ","),
+                format(n_tot, big.mark = ","),
                 format(n_obs, big.mark = ","),
                 format(n_imp, big.mark = ","),
                 paste0(pct_imp, "%")),

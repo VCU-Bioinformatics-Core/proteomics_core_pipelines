@@ -124,6 +124,18 @@ As part of this pipeline we produce the following files for your downstream use:
 
 ## Global Sample Exploration
 
+### Global Summary
+
+```{{r global-summary}}
+if (!is.null(peptide_counts) && !is.null(peptide_counts$not_imputable) && peptide_counts$not_imputable > 0) {{
+  steps  <- c("Not-imputable (discarded)", "Curated peptides (used downstream)")
+  counts <- c(peptide_counts$not_imputable,
+              nrow(intensity_matrix))
+  summary_df <- data.frame(Step = steps, Count = counts, stringsAsFactors = FALSE)
+  knitr::kable(summary_df, caption = "Peptide filtering summary")
+}}
+```
+
 ### Principal Component Analysis
 
 PCA was performed to visualize the overall patterns of protein levels across samples and
