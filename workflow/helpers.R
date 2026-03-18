@@ -65,9 +65,9 @@ perform_limma_analysis <- function(limma_params, exp, ctrl, min_valid_samples=2)
   })
 }
 
-generate_volcano <- function(data, exp_name, ctrl_name, p_thresh = 0.05, lfc = 0.58,
-                             sig = "adj.P.Val", label_col = "uniprotswissprot",
-                             out_dir = ".") {
+generate_volcano_protein <- function(data, exp_name, ctrl_name, p_thresh = 0.05, lfc = 0.58,
+                                     sig = "adj.P.Val", label_col = "uniprotswissprot",
+                                     out_dir = ".") {
 
   print('Labeling the data')
   labeled_dat <- data %>%
@@ -123,9 +123,75 @@ generate_volcano <- function(data, exp_name, ctrl_name, p_thresh = 0.05, lfc = 0
 }
 
 
-generate_ma_plot <- function(data, exp_name, ctrl_name, highlighted_ids = NULL,
-                              p_thresh = 0.05, lfc = 0.58,
-                              label_col = "uniprotswissprot") {
+generate_volcano_phospho <- function(data, exp_name, ctrl_name, p_thresh = 0.05, lfc = 0.58,
+                                     sig = "adj.P.Val", out_dir = ".") {
+
+  print('Labeling the data')
+  labeled_dat <- data %>%
+    mutate(
+      color_tag = case_when(
+        eval(as.symbol(sig)) < p_thresh & logFC < -lfc ~ "Under expressed",
+        eval(as.symbol(sig)) < p_thresh & logFC > lfc ~ "Over expressed",
+        TRUE ~ NA_character_
+      )
+    )
+
+  print('Extracting the top 10 genes')
+  top_10_genes_up <- labeled_dat %>%
+    filter(P.Value <= p_thresh & logFC >= lfc) %>%
+    arrange(eval(as.symbol(sig))) %>%
+    slice_head(n = 10) %>%
+    pull(peptide_id)
+
+  print('Extracting the bottom 10 genes')
+  top_10_genes_dn <- labeled_dat %>%
+    filter(P.Value <= p_thresh & logFC <= -lfc) %>%
+    arrange(eval(as.symbol(sig))) %>%
+    slice_head(n = 10) %>%
+    pull(peptide_id)
+
+  print('Plotting')
+  labeled_dat <- labeled_dat %>%
+    mutate(
+      highlight = ifelse(peptide_id %in% c(top_10_genes_up, top_10_genes_dn), peptide_id, NA),
+      label_display = ifelse(
+        !is.na(highlight),
+        {
+          parts <- strsplit(highlight, " -- ", fixed = TRUE)
+          protein_label <- sapply(parts, `[`, 1)
+          precursor_part <- sapply(parts, function(x) paste(x[-1], collapse = " -- "))
+          ifelse(
+            nchar(precursor_part) > 10,
+            paste0(protein_label, " -- ", substr(precursor_part, 1, 2), "...",
+                   substr(precursor_part, nchar(precursor_part) - 1, nchar(precursor_part))),
+            paste0(protein_label, " -- ", precursor_part)
+          )
+        },
+        NA_character_
+      )
+    ) %>%
+    filter(!is.na(logFC), !is.na(P.Value), is.finite(logFC), is.finite(P.Value))
+
+  volcano_plot <- labeled_dat %>%
+    ggplot(aes(x = logFC, y = -log10(P.Value), color = color_tag)) +
+    geom_point(alpha = 0.5) +
+    theme_minimal() +
+    geom_label_repel(aes(label = label_display), max.overlaps = Inf, show.legend = FALSE) +
+    scale_color_manual(values = c("firebrick", "steelblue")) +
+    geom_hline(yintercept = -log10(p_thresh), col = "red", linetype = 2) +
+    geom_vline(xintercept = c(-lfc, lfc)) +
+    theme(legend.title = element_blank()) +
+    labs(x = "Log2 Fold-Change (FC)",
+         y = "-log10( P-value )",
+         title = create_comparison_name(exp_name, ctrl_name, "Differentially expressed genes - ")
+    )
+  return(list(plot = volcano_plot, highlighted_ids = c(top_10_genes_up, top_10_genes_dn)))
+}
+
+
+generate_ma_plot_protein <- function(data, exp_name, ctrl_name, highlighted_ids = NULL,
+                                      p_thresh = 0.05, lfc = 0.58,
+                                      label_col = "uniprotswissprot") {
   ma_df <- data %>%
     filter(!is.na(AveExpr), !is.na(logFC), is.finite(AveExpr), is.finite(logFC)) %>%
     mutate(sig = case_when(
@@ -143,6 +209,53 @@ generate_ma_plot <- function(data, exp_name, ctrl_name, highlighted_ids = NULL,
                substr(.data[[label_col]], nchar(.data[[label_col]]) - 2, nchar(.data[[label_col]]))),
         .data[[label_col]]
       ))
+  } else NULL
+
+  p <- ggplot(ma_df, aes(x = AveExpr, y = logFC, color = sig)) +
+    geom_point(alpha = 0.4, size = 1) +
+    scale_color_manual(values = c("Up" = "firebrick", "Down" = "steelblue", "NS" = "gray60"),
+                       name = NULL) +
+    geom_hline(yintercept = 0,    linetype = "dashed", color = "black") +
+    geom_hline(yintercept =  lfc, linetype = "dotted", color = "gray40") +
+    geom_hline(yintercept = -lfc, linetype = "dotted", color = "gray40") +
+    labs(x = "Average log2 intensity (AveExpr)",
+         y = "log2 fold-change",
+         title = create_comparison_name(exp_name, ctrl_name, "MA Plot - ")) +
+    theme_bw() +
+    theme(legend.position = "top")
+
+  if (!is.null(ma_labeled) && nrow(ma_labeled) > 0) {
+    p <- p + geom_label_repel(data = ma_labeled, aes(label = label_display),
+                               max.overlaps = Inf, show.legend = FALSE, size = 3)
+  }
+  p
+}
+
+
+generate_ma_plot_phospho <- function(data, exp_name, ctrl_name, highlighted_ids = NULL,
+                                      p_thresh = 0.05, lfc = 0.58) {
+  ma_df <- data %>%
+    filter(!is.na(AveExpr), !is.na(logFC), is.finite(AveExpr), is.finite(logFC)) %>%
+    mutate(sig = case_when(
+      adj.P.Val < p_thresh & logFC >  lfc ~ "Up",
+      adj.P.Val < p_thresh & logFC < -lfc ~ "Down",
+      TRUE ~ "NS"
+    ))
+
+  ma_labeled <- if (!is.null(highlighted_ids)) {
+    ma_df %>%
+      filter(peptide_id %in% highlighted_ids) %>%
+      mutate(label_display = {
+        parts <- strsplit(peptide_id, " -- ", fixed = TRUE)
+        protein_label <- sapply(parts, `[`, 1)
+        precursor_part <- sapply(parts, function(x) paste(x[-1], collapse = " -- "))
+        ifelse(
+          nchar(precursor_part) > 10,
+          paste0(protein_label, " -- ", substr(precursor_part, 1, 2), "...",
+                 substr(precursor_part, nchar(precursor_part) - 1, nchar(precursor_part))),
+          paste0(protein_label, " -- ", precursor_part)
+        )
+      })
   } else NULL
 
   p <- ggplot(ma_df, aes(x = AveExpr, y = logFC, color = sig)) +
@@ -427,13 +540,13 @@ run_analysis <- function(comparison, limma_params, normalized_counts, out_dirs, 
     write.csv(annotated_results, output_file)
     
     print('Generating the volcano plot')
-    volcano_result <- generate_volcano(annotated_results, comparison$exp, comparison$ctrl)
+    volcano_result <- generate_volcano_protein(annotated_results, comparison$exp, comparison$ctrl)
     save_plot(volcano_result$plot, create_file_path(out_dirs$volcano, "", comparison$name, "_volcano.png"),
               width = 10, height = 8)
 
     print('Generating the MA plot')
-    ma_plot <- generate_ma_plot(annotated_results, comparison$exp, comparison$ctrl,
-                                highlighted_ids = volcano_result$highlighted_ids)
+    ma_plot <- generate_ma_plot_protein(annotated_results, comparison$exp, comparison$ctrl,
+                                        highlighted_ids = volcano_result$highlighted_ids)
     save_plot(ma_plot, create_file_path(out_dirs$ma, "", comparison$name, "_ma.png"),
               width = 10, height = 8)
 
@@ -511,15 +624,13 @@ run_analysis_phospho <- function(comparison, limma_params, normalized_counts, ou
     write.csv(limma_results, output_file)
 
     print('Generating the volcano plot')
-    volcano_result <- generate_volcano(limma_results, comparison$exp, comparison$ctrl,
-                                       label_col = "peptide_id")
+    volcano_result <- generate_volcano_phospho(limma_results, comparison$exp, comparison$ctrl)
     save_plot(volcano_result$plot, create_file_path(out_dirs$volcano, "", comparison$name, "_volcano.png"),
               width = 10, height = 8)
 
     print('Generating the MA plot')
-    ma_plot <- generate_ma_plot(limma_results, comparison$exp, comparison$ctrl,
-                                highlighted_ids = volcano_result$highlighted_ids,
-                                label_col = "peptide_id")
+    ma_plot <- generate_ma_plot_phospho(limma_results, comparison$exp, comparison$ctrl,
+                                        highlighted_ids = volcano_result$highlighted_ids)
     save_plot(ma_plot, create_file_path(out_dirs$ma, "", comparison$name, "_ma.png"),
               width = 10, height = 8)
 
