@@ -153,23 +153,12 @@ full_prot_levels <- full_prot_levels %>% distinct(PG.ProteinAccessions, .keep_al
 colnames(full_prot_levels) <- sub("^X\\.\\d+\\.\\.", "", colnames(full_prot_levels)) # Remove the "X.#.." prefix only from columns that start with "X."
 colnames(full_prot_levels) <- sub("\\.raw\\.PG\\.Quantity", "", colnames(full_prot_levels)) # Remove the "X.#.." prefix only from columns that start with "X."
 
-# Extract all of the uniprotswiss ids
+rownames(full_prot_levels) <- full_prot_levels$PG.ProteinAccessions # use protein accession as the row name
+
+# Collect UniProt IDs for per-comparison BioMart annotation in run_analysis()
 uniprot_raw <- full_prot_levels$PG.ProteinAccessions
 uniprot_clean <- unlist(strsplit(uniprot_raw, ";"))
 uniprot_clean <- unique(uniprot_clean)
-
-# Query the uniprot ids to obtain the ensembl ids
-mapping <- getBM(
-  attributes = c("uniprotswissprot", "ensembl_gene_id"), # "external_gene_name"
-  filters = "uniprotswissprot",
-  values = uniprot_clean,
-  mart = ensembl
-)
-mapping <- mapping %>% distinct(uniprotswissprot, .keep_all = TRUE)
-
-# Merge the Ensemble ID to the full_prot_levels df
-full_prot_levels <- full_prot_levels %>% left_join(mapping, by=join_by(PG.ProteinAccessions == uniprotswissprot))
-rownames(full_prot_levels) <- full_prot_levels$PG.ProteinAccessions # use gene name as the row name
 
 # Extract a dataframe with just protein levels
 # counts <- full_prot_levels %>% dplyr::select(where(is.numeric)) 

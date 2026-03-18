@@ -499,14 +499,19 @@ run_analysis <- function(comparison, limma_params, normalized_counts, out_dirs, 
     limma_results <- limma_results %>% rownames_to_column(var = "uniprotswissprot")
 
     print('Annotating the results')
-    mapping <- getBM(
-      attributes = c("uniprotswissprot", "ensembl_gene_id"), # "external_gene_name"
-      filters = "uniprotswissprot",
-      values = uniprot_clean,
-      mart = ensembl
-    )
-    mapping <- mapping %>% distinct(uniprotswissprot, .keep_all = TRUE)
-    annotated_results <- limma_results %>% left_join(mapping, by=join_by(uniprotswissprot))
+    mapping <- tryCatch({
+      m <- getBM(
+        attributes = c("uniprotswissprot", "ensembl_gene_id"),
+        filters = "uniprotswissprot",
+        values = uniprot_clean,
+        mart = ensembl
+      )
+      distinct(m, uniprotswissprot, .keep_all = TRUE)
+    }, error = function(e) {
+      message("BioMart annotation failed (GSEA will be skipped): ", e$message)
+      data.frame(uniprotswissprot = character(), ensembl_gene_id = character())
+    })
+    annotated_results <- limma_results %>% left_join(mapping, by = join_by(uniprotswissprot))
 
     # Compute per-protein imputation category using pre-imputation NA counts
     if (!is.null(intensity_matrix_raw)) {
