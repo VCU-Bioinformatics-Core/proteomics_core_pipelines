@@ -78,31 +78,38 @@ generate_volcano <- function(data, exp_name, ctrl_name, p_thresh = 0.05, lfc = 0
       )
     )
 
-  print('Extracting the top 20 genes')
-  top_20_genes_up <- labeled_dat %>%
+  print('Extracting the top 10 genes')
+  top_10_genes_up <- labeled_dat %>%
     filter(P.Value <= p_thresh & logFC >= lfc) %>%
     arrange(eval(as.symbol(sig))) %>%
-    slice_head(n = 20) %>%
+    slice_head(n = 10) %>%
     pull(.data[[label_col]])
 
-  print('Extracting the bottom 20 genes')
-  top_20_genes_dn <- labeled_dat %>%
+  print('Extracting the bottom 10 genes')
+  top_10_genes_dn <- labeled_dat %>%
     filter(P.Value <= p_thresh & logFC <= -lfc) %>%
     arrange(eval(as.symbol(sig))) %>%
-    slice_head(n = 20) %>%
+    slice_head(n = 10) %>%
     pull(.data[[label_col]])
 
   print('Plotting')
   labeled_dat <- labeled_dat %>%
-    mutate(highlight = ifelse(.data[[label_col]] %in% c(top_20_genes_up, top_20_genes_dn),
-                              .data[[label_col]], NA)) %>%
+    mutate(
+      highlight = ifelse(.data[[label_col]] %in% c(top_10_genes_up, top_10_genes_dn),
+                         .data[[label_col]], NA),
+      label_display = ifelse(
+        !is.na(highlight) & nchar(highlight) > 9,
+        paste0(substr(highlight, 1, 3), "...", substr(highlight, nchar(highlight) - 2, nchar(highlight))),
+        highlight
+      )
+    ) %>%
     filter(!is.na(logFC), !is.na(P.Value), is.finite(logFC), is.finite(P.Value))
 
   volcano_plot <- labeled_dat %>%
     ggplot(aes(x = logFC, y = -log10(P.Value), color = color_tag)) +
     geom_point(alpha = 0.5) +
     theme_minimal() +
-    geom_label_repel(aes(label = highlight), max.overlaps = Inf, show.legend = FALSE) +
+    geom_label_repel(aes(label = label_display), max.overlaps = Inf, show.legend = FALSE) +
     scale_color_manual(values = c("firebrick", "steelblue")) +
     geom_hline(yintercept = -log10(p_thresh), col = "red", linetype = 2) +
     geom_vline(xintercept = c(-lfc, lfc)) +
