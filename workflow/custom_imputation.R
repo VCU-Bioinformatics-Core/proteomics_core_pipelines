@@ -70,11 +70,10 @@ impute_3by3 <- function(mat, groups, q = 0.01, ...) {
   # A peptide is discarded when every group has <= 1 valid observation across
   # the entire row. In that case there is no group-level signal to anchor
   # imputation, so keeping the row would only add noise.
-  not_imputable <- apply(mat, 1, function(row) {
-    all(vapply(unique_groups, function(grp) {
-      sum(!is.na(row[groups == grp])) <= 1
-    }, logical(1)))
-  })
+  obs_count_per_group <- function(row) {
+    vapply(unique_groups, function(grp) sum(!is.na(row[groups == grp])), integer(1))
+  }
+  not_imputable <- apply(mat, 1, function(row) all(obs_count_per_group(row) <= 1))
   n_not_imputable <- sum(not_imputable)
   if (n_not_imputable > 0) {
     mat <- mat[!not_imputable, , drop = FALSE]
@@ -98,11 +97,12 @@ impute_3by3 <- function(mat, groups, q = 0.01, ...) {
 
       if (length(miss_pos) == 0) next
 
-      n_obs <- sum(!is.na(vals))
+      obs_vals <- vals[!is.na(vals)]
+      n_obs    <- length(obs_vals)
 
       if (n_obs >= 2) {
         # Impute all missing in this group as the median of the observed values
-        mat[i, miss_pos] <- median(vals[!is.na(vals)])
+        mat[i, miss_pos] <- median(obs_vals)
 
       } else {
         # n_obs == 1 or 0: sample from the global left-tail distribution
