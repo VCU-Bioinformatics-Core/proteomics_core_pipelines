@@ -29,6 +29,7 @@ setup_directories <- function(base_dir) {
     de_data = file.path(base_dir, "data/de_data"),
     gsea_data = file.path(base_dir, "data/gsea_data"),
     volcano = file.path(base_dir, "figures/volcano"),
+    ma = file.path(base_dir, "figures/ma"),
     heatmap = file.path(base_dir, "figures/heatmap"),
     gsea = file.path(base_dir, "figures/gsea"),
     pca = file.path(base_dir, "figures/pca")
@@ -118,7 +119,50 @@ generate_volcano <- function(data, exp_name, ctrl_name, p_thresh = 0.05, lfc = 0
          y = "-log10( P-value )",
          title = create_comparison_name(exp_name, ctrl_name, "Differentially expressed genes - ")
     )
-  return(volcano_plot)
+  return(list(plot = volcano_plot, highlighted_ids = c(top_10_genes_up, top_10_genes_dn)))
+}
+
+
+generate_ma_plot <- function(data, exp_name, ctrl_name, highlighted_ids = NULL,
+                              p_thresh = 0.05, lfc = 0.58,
+                              label_col = "uniprotswissprot") {
+  ma_df <- data %>%
+    filter(!is.na(AveExpr), !is.na(logFC), is.finite(AveExpr), is.finite(logFC)) %>%
+    mutate(sig = case_when(
+      adj.P.Val < p_thresh & logFC >  lfc ~ "Up",
+      adj.P.Val < p_thresh & logFC < -lfc ~ "Down",
+      TRUE ~ "NS"
+    ))
+
+  ma_labeled <- if (!is.null(highlighted_ids)) {
+    ma_df %>%
+      filter(.data[[label_col]] %in% highlighted_ids) %>%
+      mutate(label_display = ifelse(
+        nchar(.data[[label_col]]) > 9,
+        paste0(substr(.data[[label_col]], 1, 3), "...",
+               substr(.data[[label_col]], nchar(.data[[label_col]]) - 2, nchar(.data[[label_col]]))),
+        .data[[label_col]]
+      ))
+  } else NULL
+
+  p <- ggplot(ma_df, aes(x = AveExpr, y = logFC, color = sig)) +
+    geom_point(alpha = 0.4, size = 1) +
+    scale_color_manual(values = c("Up" = "firebrick", "Down" = "steelblue", "NS" = "gray60"),
+                       name = NULL) +
+    geom_hline(yintercept = 0,    linetype = "dashed", color = "black") +
+    geom_hline(yintercept =  lfc, linetype = "dotted", color = "gray40") +
+    geom_hline(yintercept = -lfc, linetype = "dotted", color = "gray40") +
+    labs(x = "Average log2 intensity (AveExpr)",
+         y = "log2 fold-change",
+         title = create_comparison_name(exp_name, ctrl_name, "MA Plot - ")) +
+    theme_bw() +
+    theme(legend.position = "top")
+
+  if (!is.null(ma_labeled) && nrow(ma_labeled) > 0) {
+    p <- p + geom_label_repel(data = ma_labeled, aes(label = label_display),
+                               max.overlaps = Inf, show.legend = FALSE, size = 3)
+  }
+  p
 }
 
 
@@ -383,8 +427,14 @@ run_analysis <- function(comparison, limma_params, normalized_counts, out_dirs, 
     write.csv(annotated_results, output_file)
     
     print('Generating the volcano plot')
-    volcano_plot <- generate_volcano(annotated_results, comparison$exp, comparison$ctrl)
-    save_plot(volcano_plot, create_file_path(out_dirs$volcano, "", comparison$name, "_volcano.png"),
+    volcano_result <- generate_volcano(annotated_results, comparison$exp, comparison$ctrl)
+    save_plot(volcano_result$plot, create_file_path(out_dirs$volcano, "", comparison$name, "_volcano.png"),
+              width = 10, height = 8)
+
+    print('Generating the MA plot')
+    ma_plot <- generate_ma_plot(annotated_results, comparison$exp, comparison$ctrl,
+                                highlighted_ids = volcano_result$highlighted_ids)
+    save_plot(ma_plot, create_file_path(out_dirs$ma, "", comparison$name, "_ma.png"),
               width = 10, height = 8)
 
     print('Generating the heatmap')
@@ -412,7 +462,7 @@ run_analysis <- function(comparison, limma_params, normalized_counts, out_dirs, 
                 width = 10, height = 12)
     }
 
-    return(list(limma = annotated_results, gsea = gse))
+    return(list(limma = annotated_results, gsea = gse, highlighted_ids = volcano_result$highlighted_ids))
     
     
   }, error = function(e) {
@@ -461,9 +511,16 @@ run_analysis_phospho <- function(comparison, limma_params, normalized_counts, ou
     write.csv(limma_results, output_file)
 
     print('Generating the volcano plot')
-    volcano_plot <- generate_volcano(limma_results, comparison$exp, comparison$ctrl,
-                                     label_col = "peptide_id")
-    save_plot(volcano_plot, create_file_path(out_dirs$volcano, "", comparison$name, "_volcano.png"),
+    volcano_result <- generate_volcano(limma_results, comparison$exp, comparison$ctrl,
+                                       label_col = "peptide_id")
+    save_plot(volcano_result$plot, create_file_path(out_dirs$volcano, "", comparison$name, "_volcano.png"),
+              width = 10, height = 8)
+
+    print('Generating the MA plot')
+    ma_plot <- generate_ma_plot(limma_results, comparison$exp, comparison$ctrl,
+                                highlighted_ids = volcano_result$highlighted_ids,
+                                label_col = "peptide_id")
+    save_plot(ma_plot, create_file_path(out_dirs$ma, "", comparison$name, "_ma.png"),
               width = 10, height = 8)
 
     print('Generating the heatmap')
@@ -504,7 +561,7 @@ run_analysis_phospho <- function(comparison, limma_params, normalized_counts, ou
       })
     }
 
-    return(list(limma = limma_results, gsea = gse, protein_counts = protein_counts))
+    return(list(limma = limma_results, gsea = gse, protein_counts = protein_counts, highlighted_ids = volcano_result$highlighted_ids))
     
     
   }, error = function(e) {

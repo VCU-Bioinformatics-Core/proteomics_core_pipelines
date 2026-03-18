@@ -117,6 +117,8 @@ As part of this pipeline we produce the following files for your downstream use:
     ├── heatmap
     │   ├── global_heatmap.png
     │   └── [comparison]_heatmap.png
+    ├── ma
+    │   └── [comparison]_ma.png
     ├── pca
     │   └── PCA_plot.png
     └── volcano
@@ -321,27 +323,10 @@ if (file.exists(volcano_path)) {{
 - X-axis: average log2 intensity across all samples (AveExpr)
 - Y-axis: log2 fold-change ({exp} / {ctrl})
 
-```{{r ma-plot-{i}, fig.width=8, fig.height=6}}
-if (!is.null(results[[{i}]]) && !is.null(results[[{i}]]$limma)) {{
-  ma_df <- results[[{i}]]$limma %>%
-    filter(!is.na(AveExpr), !is.na(logFC), is.finite(AveExpr), is.finite(logFC)) %>%
-    mutate(sig = case_when(
-      adj.P.Val < 0.05 & logFC >  0.58 ~ "Up",
-      adj.P.Val < 0.05 & logFC < -0.58 ~ "Down",
-      TRUE ~ "NS"
-    ))
-  ggplot(ma_df, aes(x = AveExpr, y = logFC, color = sig)) +
-    geom_point(alpha = 0.4, size = 1) +
-    scale_color_manual(values = c("Up" = "firebrick", "Down" = "steelblue", "NS" = "gray60"),
-                       name = NULL) +
-    geom_hline(yintercept = 0,     linetype = "dashed", color = "black") +
-    geom_hline(yintercept =  0.58, linetype = "dotted", color = "gray40") +
-    geom_hline(yintercept = -0.58, linetype = "dotted", color = "gray40") +
-    labs(x = "Average log2 intensity (AveExpr)",
-         y = "log2 fold-change",
-         title = "MA Plot: {name}") +
-    theme_bw() +
-    theme(legend.position = "top")
+```{{r ma-plot-{i}, out.width="90%"}}
+ma_path <- file.path(out_dirs$ma, paste0("{name}_ma.png"))
+if (file.exists(ma_path)) {{
+  knitr::include_graphics(ma_path)
 }} else {{
   cat("MA plot not available for this comparison")
 }}
@@ -576,7 +561,8 @@ ggplot(imp_df, aes(x = factor(n_imputed), y = total_val, fill = bar_type)) +
        title = "Total imputed values by imputation count per protein",
        fill = NULL) +
   theme_bw() +
-  theme(legend.position = "top")
+  theme(legend.position = "top",
+        axis.text.x = element_text(angle = 60, hjust = 1))
 ```
 
 ### Distribution of Imputed Values per Protein
@@ -592,7 +578,8 @@ ggplot(imp_df, aes(x = factor(n_imputed), y = n_proteins)) +
   labs(x = "Number of imputed values per protein",
        y = "Number of proteins",
        title = "Distribution of imputed values per protein") +
-  theme_bw()
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 60, hjust = 1))
 ```
 '
 
