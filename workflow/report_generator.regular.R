@@ -131,10 +131,15 @@ As part of this pipeline we produce the following files for your downstream use:
 ### Global Summary
 
 ```{{r global-summary}}
-if (!is.null(protein_counts) && !is.null(protein_counts$not_imputable) && protein_counts$not_imputable > 0) {{
-  steps  <- c("Not-imputable (discarded)", "Curated proteins (used downstream)")
-  counts <- c(protein_counts$not_imputable,
-              nrow(intensity_matrix))
+if (!is.null(protein_counts)) {{
+  steps  <- c("Total proteins", "After cRAP removal")
+  counts <- c(protein_counts$total, protein_counts$no_crap)
+  if (!is.null(protein_counts$not_imputable) && protein_counts$not_imputable > 0) {{
+    steps  <- c(steps,  "Not-imputable (discarded)")
+    counts <- c(counts, protein_counts$not_imputable)
+    steps  <- c(steps,  "Curated proteins (used downstream)")
+    counts <- c(counts, protein_counts$no_crap - protein_counts$not_imputable)
+  }}
   summary_df <- data.frame(Step = steps, Count = counts, stringsAsFactors = FALSE)
   knitr::kable(summary_df, caption = "Protein filtering summary")
 }}

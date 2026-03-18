@@ -142,6 +142,12 @@ if (genome == "human") {
 out_dirs <- setup_directories(outDir)
 full_prot_levels <- data.frame(read_csv(countData, col_names = TRUE))
 full_prot_levels <- full_prot_levels %>% filter(!is.na(PG.Genes)) # remove prots with missing names
+n_proteins_total <- nrow(full_prot_levels)
+
+# remove proteins that come from the cRAP database
+full_prot_levels <- full_prot_levels %>% filter(!grepl("cRAP[0-9]+", PG.ProteinAccessions))
+n_proteins_no_crap <- nrow(full_prot_levels)
+
 print("WARNING JR: NEED TO ADDRESS THE DROPPING OF DUPLICATES")
 full_prot_levels <- full_prot_levels %>% distinct(PG.ProteinAccessions, .keep_all = TRUE) # drop duplicate (temporarily)
 colnames(full_prot_levels) <- sub("^X\\.\\d+\\.\\.", "", colnames(full_prot_levels)) # Remove the "X.#.." prefix only from columns that start with "X."
@@ -347,7 +353,7 @@ generate_global_heatmap(intensity_matrix, out_dirs, top_n = heatmap_top_n)
 print('Save RDS')
 #rds <- list(results, comparisons, out_dirs, pca_plot, fig, fig3D)
 imputation_params <- list(method = imputation_method, q = imputation_q)
-protein_counts <- list(not_imputable = n_peptides_not_imputable)
+protein_counts <- list(total = n_proteins_total, no_crap = n_proteins_no_crap, not_imputable = n_peptides_not_imputable)
 rds <- list(results, comparisons, out_dirs, pca_plot, intensity_matrix_raw, intensity_matrix, imputation_params, sample_info, protein_counts)
 timestamp <- format(Sys.time(), "%Y%m%d_%H%M%S")
 #rds_path <- glue("analysis_results_{timestamp}.rds")
