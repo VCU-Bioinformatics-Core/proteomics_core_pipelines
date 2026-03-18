@@ -597,31 +597,24 @@ max_imp <- ncol(obs_mask)
 imp_counts <- table(factor(imp_per_peptide, levels = 0:max_imp))
 imp_df <- data.frame(n_imputed = as.integer(names(imp_counts)),
                      n_peptides = as.integer(imp_counts))
+imp_df$pct <- round(100 * imp_df$n_peptides / nrow(obs_mask), 1)
 
 ggplot(imp_df, aes(x = factor(n_imputed), y = n_peptides)) +
   geom_bar(stat = "identity", fill = "steelblue", color = "white") +
+  geom_text(aes(label = paste0(pct, "%")), vjust = -0.4, size = 3) +
   labs(x = "Number of imputed values per peptide",
        y = "Number of peptides",
        title = "Distribution of imputed values per peptide") +
   theme_bw()
 ```
 
-```{r imputation-per-peptide-table}
-imp_summary <- data.frame(
-  `Imputed values per peptide` = 0:max_imp,
-  `Number of peptides`         = as.integer(imp_counts),
-  `Percent of peptides`        = paste0(round(100 * as.integer(imp_counts) / nrow(raw_mat), 1), "%"),
-  stringsAsFactors = FALSE,
-  check.names = FALSE
-)
-kable(imp_summary, caption = "Number of peptides by imputed value count")
-```
-
 ```{r imputation-total-counts, fig.width=6, fig.height=4}
 imp_df$total_imputed <- imp_df$n_imputed * imp_df$n_peptides
+imp_df$pct_total <- round(100 * imp_df$total_imputed / sum(imp_df$total_imputed), 1)
 
 ggplot(imp_df, aes(x = factor(n_imputed), y = total_imputed)) +
   geom_bar(stat = "identity", fill = "firebrick", color = "white") +
+  geom_text(aes(label = paste0(pct_total, "%")), vjust = -0.4, size = 3) +
   labs(x = "Number of imputed values per peptide",
        y = "Total imputed values",
        title = "Total imputed values by imputation count per peptide") +

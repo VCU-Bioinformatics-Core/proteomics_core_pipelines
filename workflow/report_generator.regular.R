@@ -512,6 +512,25 @@ ggplot(all_vals, aes(x = value, fill = type)) +
   theme(legend.position = "top") +
   guides(fill = guide_legend(override.aes = list(alpha = 1)))
 ```
+
+### Imputed Values per Protein
+
+```{r imputation-per-peptide, fig.width=6, fig.height=4}
+imp_per_protein <- rowSums(!obs_mask)
+max_imp <- ncol(obs_mask)
+imp_counts <- table(factor(imp_per_protein, levels = 0:max_imp))
+imp_df <- data.frame(n_imputed = as.integer(names(imp_counts)),
+                     n_proteins = as.integer(imp_counts))
+imp_df$pct <- round(100 * imp_df$n_proteins / nrow(obs_mask), 1)
+
+ggplot(imp_df, aes(x = factor(n_imputed), y = n_proteins)) +
+  geom_bar(stat = "identity", fill = "steelblue", color = "white") +
+  geom_text(aes(label = paste0(pct, "%")), vjust = -0.4, size = 3) +
+  labs(x = "Number of imputed values per protein",
+       y = "Number of proteins",
+       title = "Distribution of imputed values per protein") +
+  theme_bw()
+```
 '
 
 manuscript_content <- '\n
