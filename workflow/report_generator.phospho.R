@@ -58,7 +58,8 @@ output:
 ---
 
 ```{{r setup, include=FALSE}}
-knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE,
+                      dpi = 150, fig.retina = 2)
 library(knitr)
 library(dplyr)
 library(ggplot2)
@@ -151,7 +152,7 @@ samples and to identify potential batch effects or outliers. **What we expect:**
 Samples with similar profiles should cluster together, while dissimilar samples
 are expected to separate into distinct clusters.
 
-```{{r pca-plot, fig.width=6, fig.height=4 }}
+```{{r pca-plot, fig.width=7, fig.height=6 }}
 pca_plot
 ```
 
@@ -204,7 +205,7 @@ The heatmap below shows z-score normalized expression of the top 1000
 phosphopeptides by coefficient of variation (CV) across all samples, clustered
 by similarity.
 
-```{{r global-heatmap, fig.width=10, fig.height=10}}
+```{{r global-heatmap, out.width="100%"}}
 global_heatmap_path <- file.path(out_dirs$heatmap, "global_heatmap.png")
 if (file.exists(global_heatmap_path)) {{
   knitr::include_graphics(global_heatmap_path)
@@ -311,7 +312,7 @@ kable(summary_table, caption = "")
 - X-axis: log2 fold-change (group1/group2)
 - Y-axis: -log10(p-value)
 
-```{{r volcano-{i}, out.width="80%", out.height="80%" }}
+```{{r volcano-{i}, out.width="90%" }}
 # Display volcano plot from file
 volcano_path <- file.path(out_dirs$volcano, paste0("{name}_volcano.png"))
 if (file.exists(volcano_path)) {{
@@ -331,7 +332,7 @@ if (file.exists(volcano_path)) {{
 - X-axis: average log2 intensity across all samples (AveExpr)
 - Y-axis: log2 fold-change ({exp} / {ctrl})
 
-```{{r ma-plot-{i}, fig.width=7, fig.height=5}}
+```{{r ma-plot-{i}, fig.width=8, fig.height=6}}
 if (!is.null(results[[{i}]]) && !is.null(results[[{i}]]$limma)) {{
   ma_df <- results[[{i}]]$limma %>%
     filter(!is.na(AveExpr), !is.na(logFC), is.finite(AveExpr), is.finite(logFC)) %>%
@@ -496,7 +497,7 @@ if (!is.null(pc)) {{
 }}
 ```
 
-```{{r gsea-{i}, out.width="100%", out.height="100%"}}
+```{{r gsea-{i}, out.width="100%"}}
 # Display GSEA results from file
 gsea_path <- file.path(out_dirs$gsea, paste0("{name}_GSEA.png"))
 if (file.exists(gsea_path)) {{
@@ -572,7 +573,7 @@ values typically appear as a secondary peak shifted towards the lower end of the
 distribution, reflecting the left-censored nature of missing-not-at-random
 (MNAR) data in proteomics.
 
-```{r imputation-histogram, fig.width=8, fig.height=5}
+```{r imputation-histogram, fig.width=9, fig.height=5}
 intensity_raw      <- rds_data[[5]]
 intensity_imputed  <- rds_data[[6]]
 
@@ -627,7 +628,7 @@ kable(counts_table, caption = "Observed vs. imputed value counts")
 
 ### Total Imputed Values per Peptide
 
-```{r imputation-total-counts, fig.width=6, fig.height=4}
+```{r imputation-total-counts, fig.width=7, fig.height=5}
 imp_per_peptide <- rowSums(!obs_mask)
 max_imp <- ncol(obs_mask)
 imp_counts <- table(factor(imp_per_peptide, levels = 0:max_imp))
@@ -654,7 +655,7 @@ ggplot(imp_df, aes(x = factor(n_imputed), y = total_val, fill = bar_type)) +
 
 ### Distribution of Imputed Values per Peptide
 
-```{r imputation-per-peptide, fig.width=6, fig.height=4}
+```{r imputation-per-peptide, fig.width=7, fig.height=5}
 imp_df$pct <- round(100 * imp_df$n_peptides / nrow(obs_mask), 1)
 x_labels <- setNames(c("no-imputation", as.character(seq_len(max_imp))), 0:max_imp)
 

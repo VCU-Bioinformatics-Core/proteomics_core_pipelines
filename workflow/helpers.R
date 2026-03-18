@@ -9,8 +9,8 @@ create_comparison_name <- function(exp, ctrl, prefix = "") {
   paste0(prefix, exp, " vs. ", ctrl)
 }
 
-save_plot <- function(plot, filename, width = 15, height = 17) {
-  ggsave(plot, filename = filename, width = width, height = height, bg = "white")
+save_plot <- function(plot, filename, width = 10, height = 8, dpi = 300) {
+  ggsave(plot, filename = filename, width = width, height = height, dpi = dpi, bg = "white")
 }
 
 export_plotly_to_html <- function(plotly_obj, file_path) {
@@ -134,7 +134,7 @@ generate_global_heatmap <- function(intensity_matrix, out_dirs, top_n = 1000, mo
   zscores[is.nan(zscores) | is.infinite(zscores)] <- 0
 
   out_path <- file.path(out_dirs$heatmap, "global_heatmap.png")
-  png(out_path, width = 1200, height = 1600, res = 300)
+  png(out_path, width = 2400, height = 3200, res = 300)
   ht <- Heatmap(
     zscores,
     name = "Z-score",
@@ -377,11 +377,12 @@ run_analysis <- function(comparison, limma_params, normalized_counts, out_dirs, 
     
     print('Generating the volcano plot')
     volcano_plot <- generate_volcano(annotated_results, comparison$exp, comparison$ctrl)
-    save_plot(volcano_plot, create_file_path(out_dirs$volcano, "", comparison$name, "_volcano.png"))
-    
+    save_plot(volcano_plot, create_file_path(out_dirs$volcano, "", comparison$name, "_volcano.png"),
+              width = 10, height = 8)
+
     print('Generating the heatmap')
     png(create_file_path(out_dirs$heatmap, "", comparison$name, "_heatmap.png"),
-        width = 1200, height = 1600, res = 300)
+        width = 2400, height = 3200, res = 300)
     ht <- generate_heatmap(limma_results, intensity_matrix,
                      exp_name = comparison$exp, ctrl_name = comparison$ctrl,
                      fig_dir = out_dirs$heatmap, design = limma_params$design)
@@ -400,9 +401,10 @@ run_analysis <- function(comparison, limma_params, normalized_counts, out_dirs, 
       gsea_plot <- create_dotplot(gse, create_comparison_name(comparison$exp, comparison$ctrl, "GSEA "))
       
       print('save plot')
-      save_plot(gsea_plot, create_file_path(out_dirs$gsea, "", comparison$name, "_GSEA.png"))
+      save_plot(gsea_plot, create_file_path(out_dirs$gsea, "", comparison$name, "_GSEA.png"),
+                width = 10, height = 12)
     }
-    
+
     return(list(limma = annotated_results, gsea = gse))
     
     
@@ -454,11 +456,12 @@ run_analysis_phospho <- function(comparison, limma_params, normalized_counts, ou
     print('Generating the volcano plot')
     volcano_plot <- generate_volcano(limma_results, comparison$exp, comparison$ctrl,
                                      label_col = "peptide_id")
-    save_plot(volcano_plot, create_file_path(out_dirs$volcano, "", comparison$name, "_volcano.png"))
+    save_plot(volcano_plot, create_file_path(out_dirs$volcano, "", comparison$name, "_volcano.png"),
+              width = 10, height = 8)
 
     print('Generating the heatmap')
     png(create_file_path(out_dirs$heatmap, "", comparison$name, "_heatmap.png"),
-        width = 1200, height = 1600, res = 300)
+        width = 2400, height = 3200, res = 300)
     ht <- generate_heatmap(limma_results, normalized_counts,
                            exp_name = comparison$exp, ctrl_name = comparison$ctrl,
                            fig_dir = out_dirs$heatmap, design = limma_params$design,
@@ -487,7 +490,8 @@ run_analysis_phospho <- function(comparison, limma_params, normalized_counts, ou
         gsea_plot <- create_dotplot(gse, create_comparison_name(comparison$ctrl, comparison$exp, "GSEA "))
 
         print('save plot')
-        save_plot(gsea_plot, create_file_path(out_dirs$gsea, "", comparison$name, "_GSEA.png"))
+        save_plot(gsea_plot, create_file_path(out_dirs$gsea, "", comparison$name, "_GSEA.png"),
+                  width = 10, height = 12)
       }, error = function(e) {
         message("Error saving phospho GSEA outputs: ", e$message)
       })
