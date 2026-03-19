@@ -9,7 +9,7 @@ library(limma)
 
 # Function to generate automated R Markdown report
 # source("report_generator.R"); generate_report('analysis.rds', output_dir = getwd()) # test below
-generate_report <- function(analysis_results_path, output_dir = "./", report_prefix = "proteomics_analysis", analyst="Joaquin Reyna") {
+generate_report <- function(analysis_results_path, output_dir = "./", report_prefix = "phosphopeptide_analysis", analyst="Joaquin Reyna") {
   
   
   # Validate inputs
