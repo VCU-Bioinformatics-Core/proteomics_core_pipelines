@@ -318,7 +318,7 @@ pca_plot <- ggplot(data=two_comps_pca_df, aes(x=X, y=Y, label=Sample, color=Grou
   #geom_text(aes(label = as.character(Sample)), show.legend = FALSE, size = 2.5) +
   xlab(paste("PC1 - ", pca_var_pct[1], "%", sep="")) +
   ylab(paste("PC2 - ", pca_var_pct[2], "%", sep=""))
-ggsave(pca_plot, filename = str_c(out_dirs$pca, "/pca_plot.png"))
+ggsave(pca_plot, filename = str_c(out_dirs$pca, "/global_pca_plot.png"))
 
 # # Interactive PCA 2D/3D # removing for proteomic core analyses
 # print("# Interactive PCA 2D/3D")
@@ -392,7 +392,7 @@ analysis_params <- list(genome = genome, gsea_ont = gsea_ont, skip_gsea = skip_g
 rds <- list(results, comparisons, out_dirs, pca_plot, intensity_matrix_raw, intensity_matrix, imputation_params, sample_info, peptide_counts, analysis_params, anova_summary)
 timestamp <- format(Sys.time(), "%Y%m%d_%H%M%S")
 #rds_path <- glue("analysis_results_{timestamp}.rds")
-rds_path <- file.path(outDir, "data/analysis_results.rds")
+rds_path <- file.path(outDir, "analysis_results.rds")
 saveRDS(rds, rds_path)
 
 # ==========================

@@ -39,6 +39,73 @@ setup_directories <- function(base_dir) {
   dirs
 }
 
+# Build a tree string of actual output files under out_dirs$data and out_dirs$figures.
+# Returns a single character string suitable for printing inside a code block.
+build_output_tree <- function(out_dirs) {
+  B <- "\u251C\u2500\u2500 "  # branch:  ├──
+  L <- "\u2514\u2500\u2500 "  # last:    └──
+  P <- "\u2502   "            # pipe:    │
+  S <- "    "                 # space
+
+  # Helper: render a named list of subdirs as tree lines
+  render_dir <- function(path, prefix = "") {
+    files <- sort(list.files(path, full.names = FALSE))
+    if (length(files) == 0) return(character(0))
+    lines <- character(0)
+    for (i in seq_along(files)) {
+      connector <- if (i < length(files)) B else L
+      lines <- c(lines, paste0(prefix, connector, files[i]))
+    }
+    lines
+  }
+
+  # Top-level dirs to render, in display order
+  top_dirs <- list(
+    data    = out_dirs$data,
+    figures = out_dirs$figures
+  )
+
+  # Second-level subdirs under data/ and figures/
+  data_subdirs    <- list(de_data = out_dirs$de_data, gsea_data = out_dirs$gsea_data)
+  figures_subdirs <- list(gsea    = out_dirs$gsea,
+                          heatmap = out_dirs$heatmap,
+                          ma      = out_dirs$ma,
+                          pca     = out_dirs$pca,
+                          volcano = out_dirs$volcano)
+
+  render_section <- function(subdirs, outer_prefix, last_top) {
+    lines <- character(0)
+    subnames <- names(subdirs)
+    # filter to only dirs that exist and have files
+    subnames <- subnames[sapply(subdirs[subnames], function(d)
+      dir.exists(d) && length(list.files(d)) > 0)]
+    for (j in seq_along(subnames)) {
+      nm   <- subnames[j]
+      path <- subdirs[[nm]]
+      is_last_sub <- j == length(subnames)
+      sub_conn  <- if (is_last_sub) L else B
+      sub_pipe  <- if (last_top) S else P
+      file_pipe <- if (is_last_sub) paste0(outer_prefix, sub_pipe, S) else paste0(outer_prefix, sub_pipe, P)
+      lines <- c(lines, paste0(outer_prefix, sub_pipe, sub_conn, nm))
+      lines <- c(lines, render_dir(path, prefix = file_pipe))
+    }
+    lines
+  }
+
+  all_lines <- "."
+  top_names <- names(top_dirs)
+  for (i in seq_along(top_names)) {
+    nm      <- top_names[i]
+    is_last <- i == length(top_names)
+    conn    <- if (is_last) L else B
+    all_lines <- c(all_lines, paste0(conn, nm))
+    subdirs <- if (nm == "data") data_subdirs else figures_subdirs
+    all_lines <- c(all_lines, render_section(subdirs, outer_prefix = "", last_top = is_last))
+  }
+
+  paste(all_lines, collapse = "\n")
+}
+
 # ==========================
 # limma analysis functions
 # ==========================
@@ -534,9 +601,9 @@ run_analysis <- function(comparison, limma_params, normalized_counts, out_dirs, 
       print(table(annotated_results$imputation_category))
     }
 
-    output_file <- create_file_path(out_dirs$de_data, "limma_", comparison$name)
+    output_file <- create_file_path(out_dirs$de_data, comparison$name, "_limma")
     write.csv(annotated_results, output_file)
-    
+
     print('Generating the volcano plot')
     volcano_result <- generate_volcano_protein(annotated_results, comparison$exp, comparison$ctrl)
     save_plot(volcano_result$plot, create_file_path(out_dirs$volcano, "", comparison$name, "_volcano.png"),
@@ -567,13 +634,13 @@ run_analysis <- function(comparison, limma_params, normalized_counts, out_dirs, 
 
       if(!is.null(gse)) {
         print('GSE has data')
-        write.csv(as.data.frame(gse), create_file_path(out_dirs$gsea_data, "GO_Analysis_", comparison$name))
+        write.csv(as.data.frame(gse), create_file_path(out_dirs$gsea_data, "go_analysis_", comparison$name))
 
         print('create dotplot')
         gsea_plot <- create_dotplot(gse, create_comparison_name(comparison$exp, comparison$ctrl, "GSEA "))
 
         print('save plot')
-        save_plot(gsea_plot, create_file_path(out_dirs$gsea, "", comparison$name, "_GSEA.png"),
+        save_plot(gsea_plot, create_file_path(out_dirs$gsea, "", comparison$name, "_gsea.png"),
                   width = 10, height = 12)
       }
     }
@@ -643,7 +710,7 @@ run_analysis_phospho <- function(comparison, limma_params, normalized_counts, ou
       print(table(limma_results$imputation_category))
     }
 
-    output_file <- create_file_path(out_dirs$de_data, "limma_", comparison$name)
+    output_file <- create_file_path(out_dirs$de_data, comparison$name, "_limma")
     write.csv(limma_results, output_file)
 
     print('Generating the volcano plot')
@@ -687,13 +754,13 @@ run_analysis_phospho <- function(comparison, limma_params, normalized_counts, ou
       if(!is.null(gse)) {
         print('GSE has data')
         tryCatch({
-          write.csv(as.data.frame(gse), create_file_path(out_dirs$gsea_data, "GO_Analysis_", comparison$name))
+          write.csv(as.data.frame(gse), create_file_path(out_dirs$gsea_data, comparison$name, "_go_analysis.csv"))
 
           print('create dotplot')
           gsea_plot <- create_dotplot(gse, create_comparison_name(comparison$ctrl, comparison$exp, "GSEA "))
 
           print('save plot')
-          save_plot(gsea_plot, create_file_path(out_dirs$gsea, "", comparison$name, "_GSEA.png"),
+          save_plot(gsea_plot, create_file_path(out_dirs$gsea, "", comparison$name, "_gsea.png"),
                     width = 10, height = 12)
         }, error = function(e) {
           message("Error saving phospho GSEA outputs: ", e$message)

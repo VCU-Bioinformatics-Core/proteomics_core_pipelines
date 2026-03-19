@@ -111,19 +111,19 @@ As part of this pipeline we produce the following files for your downstream use:
 .
 ├── data
 │   ├── de_data
-│   │   └── limma_[comparison].csv
+│   │   └── [comparison]_limma.csv
 │   └── gsea_data
-│       └── GO_Analysis_[comparison].csv
+│       └── [comparison]_go_analysis_.csv
 └── figures
     ├── gsea
-    │   └── [comparison]_GSEA.png
+    │   └── [comparison]_gsea.png
     ├── heatmap
     │   ├── global_heatmap.png
     │   └── [comparison]_heatmap.png
     ├── ma
     │   └── [comparison]_ma.png
     ├── pca
-    │   └── PCA_plot.png
+    │   └── global_pca_plot.png
     └── volcano
         └── [comparison]_volcano.png
 ```
@@ -730,15 +730,8 @@ Please include the following statements in your acknowledgements manuscript sect
   writeLines(rmd_content[[1]], rmd_file)
   
   # Render the R Markdown to HTML
-  # rmarkdown::render(rmd_file, output_file = output_file, quiet = FALSE)
+  rmarkdown::render(rmd_file, output_file = output_file, quiet = FALSE)
   
   # Return the path to the generated report
   return(output_file)
 }
-
-#debug = TRUE
-#if (debug == TRUE){
-#  rds_fn = '/global/projects/proteomics_core/analyst_workspace/pipeline_test_data/analyses/data/analysis_results.rds'
-#  output_dir = '/global/home/reynaj/Projects/proteomics_core/analyst_workspace/pipeline_test_data/analyses/data/'
-#  generate_report(rds_fn, output_dir = output_dir)
-#}
