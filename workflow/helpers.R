@@ -343,8 +343,8 @@ generate_heatmap <- function(results_df, normalized_counts, p = 0.05, lfc = 0.58
   zscores <- t(scale(t(values)))
   
   # Replace NaN with row means
-  print("WARNING JR: REMOVE THIS REPLACING OF NAN WITH SOMETHING MORE ACCURATE WHEN READY")
-  zscores[is.na(zscores) | is.nan(zscores) | is.infinite(zscores)] <- 0
+  #print("WARNING JR: REMOVE THIS REPLACING OF NAN WITH SOMETHING MORE ACCURATE WHEN READY")
+  #zscores[is.na(zscores) | is.nan(zscores) | is.infinite(zscores)] <- 0
   
   # plot the heatmap
   ht <- Heatmap(
@@ -490,7 +490,7 @@ create_dotplot <- function(gse, title) {
 # centralizing function
 # ==========================
 
-run_analysis <- function(comparison, limma_params, normalized_counts, out_dirs, intensity_matrix_raw = NULL, ont_option = "BP") {
+run_analysis <- function(comparison, limma_params, normalized_counts, out_dirs, intensity_matrix_raw = NULL, ont_option = "BP", skip_gsea = FALSE) {
   tryCatch({
     print(paste("\nStarting analysis for comparison:", comparison$name))
 
@@ -564,20 +564,25 @@ run_analysis <- function(comparison, limma_params, normalized_counts, out_dirs, 
     draw(ht)
     dev.off()
     
-    print('Running GSEA')
-    gse <- NULL # process_gsea(annotated_results, ont_option = ont_option)
-    #gse <- process_gsea(annotated_results, ont_option = ont_option)
-    
-    if(!is.null(gse)) {
-      print('GSE has data')
-      write.csv(as.data.frame(gse), create_file_path(out_dirs$gsea_data, "GO_Analysis_", comparison$name))
-      
-      print('create dotplot')
-      gsea_plot <- create_dotplot(gse, create_comparison_name(comparison$exp, comparison$ctrl, "GSEA "))
-      
-      print('save plot')
-      save_plot(gsea_plot, create_file_path(out_dirs$gsea, "", comparison$name, "_GSEA.png"),
-                width = 10, height = 12)
+    if (skip_gsea) {
+      message("Skipping GSEA (--skip-gsea)")
+      gse <- NULL
+    } else {
+      print('Running GSEA')
+      gse <- NULL # process_gsea(annotated_results, ont_option = ont_option)
+      #gse <- process_gsea(annotated_results, ont_option = ont_option)
+
+      if(!is.null(gse)) {
+        print('GSE has data')
+        write.csv(as.data.frame(gse), create_file_path(out_dirs$gsea_data, "GO_Analysis_", comparison$name))
+
+        print('create dotplot')
+        gsea_plot <- create_dotplot(gse, create_comparison_name(comparison$exp, comparison$ctrl, "GSEA "))
+
+        print('save plot')
+        save_plot(gsea_plot, create_file_path(out_dirs$gsea, "", comparison$name, "_GSEA.png"),
+                  width = 10, height = 12)
+      }
     }
 
     return(list(limma = annotated_results, gsea = gse, highlighted_ids = volcano_result$highlighted_ids))
@@ -589,7 +594,7 @@ run_analysis <- function(comparison, limma_params, normalized_counts, out_dirs, 
   })
 }
 
-run_analysis_phospho <- function(comparison, limma_params, normalized_counts, out_dirs, intensity_matrix_raw = NULL, peptide_metadata = NULL, ont_option = "BP") {
+run_analysis_phospho <- function(comparison, limma_params, normalized_counts, out_dirs, intensity_matrix_raw = NULL, peptide_metadata = NULL, ont_option = "BP", skip_gsea = FALSE) {
   tryCatch({
     print(paste("Starting analysis for comparison:", comparison$name))
 
@@ -649,32 +654,38 @@ run_analysis_phospho <- function(comparison, limma_params, normalized_counts, ou
     draw(ht)
     dev.off()
     
-    print('Running GSEA')
-    agg_result <- tryCatch(
-      aggregate_phospho_for_gsea(limma_results, peptide_metadata),
-      error = function(e) { message("Error in phospho aggregation: ", e$message); NULL }
-    )
-    protein_counts <- if (!is.null(agg_result)) agg_result$counts else NULL
-    gse <- tryCatch({
-      if (!is.null(agg_result)) process_gsea(agg_result$data, ont_option = ont_option) else NULL
-    }, error = function(e) {
-      message("Error in phospho GSEA: ", e$message)
-      NULL
-    })
-    if(!is.null(gse)) {
-      print('GSE has data')
-      tryCatch({
-        write.csv(as.data.frame(gse), create_file_path(out_dirs$gsea_data, "GO_Analysis_", comparison$name))
-
-        print('create dotplot')
-        gsea_plot <- create_dotplot(gse, create_comparison_name(comparison$ctrl, comparison$exp, "GSEA "))
-
-        print('save plot')
-        save_plot(gsea_plot, create_file_path(out_dirs$gsea, "", comparison$name, "_GSEA.png"),
-                  width = 10, height = 12)
+    if (skip_gsea) {
+      message("Skipping GSEA (--skip-gsea)")
+      gse <- NULL
+      protein_counts <- NULL
+    } else {
+      print('Running GSEA')
+      agg_result <- tryCatch(
+        aggregate_phospho_for_gsea(limma_results, peptide_metadata),
+        error = function(e) { message("Error in phospho aggregation: ", e$message); NULL }
+      )
+      protein_counts <- if (!is.null(agg_result)) agg_result$counts else NULL
+      gse <- tryCatch({
+        if (!is.null(agg_result)) process_gsea(agg_result$data, ont_option = ont_option) else NULL
       }, error = function(e) {
-        message("Error saving phospho GSEA outputs: ", e$message)
+        message("Error in phospho GSEA: ", e$message)
+        NULL
       })
+      if(!is.null(gse)) {
+        print('GSE has data')
+        tryCatch({
+          write.csv(as.data.frame(gse), create_file_path(out_dirs$gsea_data, "GO_Analysis_", comparison$name))
+
+          print('create dotplot')
+          gsea_plot <- create_dotplot(gse, create_comparison_name(comparison$ctrl, comparison$exp, "GSEA "))
+
+          print('save plot')
+          save_plot(gsea_plot, create_file_path(out_dirs$gsea, "", comparison$name, "_GSEA.png"),
+                    width = 10, height = 12)
+        }, error = function(e) {
+          message("Error saving phospho GSEA outputs: ", e$message)
+        })
+      }
     }
 
     return(list(limma = limma_results, gsea = gse, protein_counts = protein_counts, highlighted_ids = volcano_result$highlighted_ids))

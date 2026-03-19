@@ -68,7 +68,9 @@ option_list = list(
   make_option(c("--heatmap-top-n"), type = "integer", default = 1000,
               help = "Number of top molecules by CV to show in the global heatmap [default= %default]"),
   make_option(c("--gsea-ont"), type = "character", default = "BP",
-              help = "Gene ontology category for GSEA: 'BP', 'MF', 'CC', or 'ALL' [default= %default]")
+              help = "Gene ontology category for GSEA: 'BP', 'MF', 'CC', or 'ALL' [default= %default]"),
+  make_option(c("--skip-gsea"), action = "store_true", default = FALSE,
+              help = "Skip GSEA analysis (faster runs) [default= %default]")
 )
 
 opt_parser = OptionParser(option_list=option_list)
@@ -84,6 +86,7 @@ imputation_q <- opt$`imputation-q`
 imputation_seed <- opt$seed
 heatmap_top_n <- opt$`heatmap-top-n`
 gsea_ont <- opt$`gsea-ont`
+skip_gsea <- opt$`skip-gsea`
 
 if (is.null(runID) || is.null(countData) || is.null(samplesheet)) {
   print_help(opt_parser)
@@ -264,7 +267,7 @@ results <- vector("list", length(comparisons))
 for (i in seq_along(comparisons)) {
 
   # run the analysis on the current samples
-  curr_result <- run_analysis(comparisons[[i]], limma_params, intensity_matrix, out_dirs, intensity_matrix_raw, ont_option = gsea_ont)
+  curr_result <- run_analysis(comparisons[[i]], limma_params, intensity_matrix, out_dirs, intensity_matrix_raw, ont_option = gsea_ont, skip_gsea = skip_gsea)
   
   # save the current results if successful
   if (!is.null(curr_result)){

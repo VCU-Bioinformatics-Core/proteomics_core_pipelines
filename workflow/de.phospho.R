@@ -72,7 +72,9 @@ option_list = list(
   make_option(c("--heatmap-top-n"), type = "integer", default = 1000,
               help = "Number of top molecules by CV to show in the global heatmap [default= %default]"),
   make_option(c("--gsea-ont"), type = "character", default = "BP",
-              help = "Gene ontology category for GSEA: 'BP', 'MF', 'CC', or 'ALL' [default= %default]")
+              help = "Gene ontology category for GSEA: 'BP', 'MF', 'CC', or 'ALL' [default= %default]"),
+  make_option(c("--skip-gsea"), action = "store_true", default = FALSE,
+              help = "Skip GSEA analysis (faster runs) [default= %default]")
 )
 
 opt_parser = OptionParser(option_list=option_list)
@@ -88,6 +90,7 @@ imputation_q <- opt$`imputation-q`
 imputation_seed <- opt$seed
 heatmap_top_n <- opt$`heatmap-top-n`
 gsea_ont <- opt$`gsea-ont`
+skip_gsea <- opt$`skip-gsea`
 
 if (is.null(runID) || is.null(countData) || is.null(samplesheet)) {
   print_help(opt_parser)
@@ -271,7 +274,7 @@ for (i in seq_along(comparisons)) {
   print(glue('Analysis {i}'))
   
   # run the analysis on the current samples
-  curr_result <- run_analysis_phospho(comparisons[[i]], limma_params, intensity_matrix, out_dirs, intensity_matrix_raw, peptide_metadata, ont_option = gsea_ont)
+  curr_result <- run_analysis_phospho(comparisons[[i]], limma_params, intensity_matrix, out_dirs, intensity_matrix_raw, peptide_metadata, ont_option = gsea_ont, skip_gsea = skip_gsea)
   
   # save the current results if successful
   if (!is.null(curr_result)){
@@ -308,13 +311,11 @@ two_comps_pca_df <- data.frame(Sample=rownames(pc_scores),
 # plot PC1 versus PC2 values
 pca_plot <- ggplot(data=two_comps_pca_df, aes(x=X, y=Y, label=Sample, color=Group)) +
   geom_point(size = 1) +
-  # geom_text_repel(aes(label = as.character(Sample)), show.legend = FALSE, size = 2.5) +
+  geom_text_repel(aes(label = as.character(Sample)), show.legend = FALSE, size = 2.5) +
   #geom_text(aes(label = as.character(Sample)), show.legend = FALSE, size = 2.5) +
   xlab(paste("PC1 - ", pca_var_pct[1], "%", sep="")) +
   ylab(paste("PC2 - ", pca_var_pct[2], "%", sep=""))
-  #theme_bw()
-print(pca_plot)
-ggsave(pca_plot, filename = str_c(out_dirs$pca, "/PCA_plot.png"))
+ggsave(pca_plot, filename = str_c(out_dirs$pca, "/pca_plot.png"))
 
 # # Interactive PCA 2D/3D # removing for proteomic core analyses
 # print("# Interactive PCA 2D/3D")
