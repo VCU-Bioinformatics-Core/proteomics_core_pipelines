@@ -305,13 +305,10 @@ two_comps_pca_df <- data.frame(Sample=rownames(pc_scores),
 # plot PC1 versus PC2 values
 pca_plot <- ggplot(data=two_comps_pca_df, aes(x=X, y=Y, label=Sample, color=Group)) +
   geom_point(size = 1) +
-  # geom_text_repel(aes(label = as.character(Sample)), show.legend = FALSE, size = 2.5) +
-  #geom_text(aes(label = as.character(Sample)), show.legend = FALSE, size = 2.5) +
+  geom_text_repel(aes(label = as.character(Sample)), show.legend = FALSE, size = 2.5) +
   xlab(paste("PC1 - ", pca_var_pct[1], "%", sep="")) +
   ylab(paste("PC2 - ", pca_var_pct[2], "%", sep=""))
-  #theme_bw()
-print(pca_plot)
-ggsave(pca_plot, filename = str_c(out_dirs$pca, "/PCA_plot.png"))
+ggsave(pca_plot, filename = str_c(out_dirs$pca, "/pca_plot.png"))
 
 # # Interactive PCA 2D/3D # removing for proteomic core analyses
 # print("# Interactive PCA 2D/3D")
@@ -346,7 +343,8 @@ print('Save RDS')
 #rds <- list(results, comparisons, out_dirs, pca_plot, fig, fig3D)
 imputation_params <- list(method = imputation_method, q = imputation_q)
 protein_counts <- list(total = n_proteins_total, no_crap = n_proteins_no_crap, not_imputable = n_peptides_not_imputable)
-rds <- list(results, comparisons, out_dirs, pca_plot, intensity_matrix_raw, intensity_matrix, imputation_params, sample_info, protein_counts)
+analysis_params <- list(genome = genome, gsea_ont = gsea_ont, skip_gsea = skip_gsea, heatmap_top_n = heatmap_top_n)
+rds <- list(results, comparisons, out_dirs, pca_plot, intensity_matrix_raw, intensity_matrix, imputation_params, sample_info, protein_counts, analysis_params)
 timestamp <- format(Sys.time(), "%Y%m%d_%H%M%S")
 #rds_path <- glue("analysis_results_{timestamp}.rds")
 rds_path <- file.path(outDir, "data/analysis_results.rds")

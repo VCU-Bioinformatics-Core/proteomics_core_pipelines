@@ -81,6 +81,7 @@ intensity_matrix <- rds_data[[6]]
 #annotation <- rds_data[[7]]
 sample_info <- rds_data[[8]]
 peptide_counts <- rds_data[[9]]
+analysis_params <- rds_data[[10]]
 ```
 
 ## Overview
@@ -124,6 +125,42 @@ As part of this pipeline we produce the following files for your downstream use:
     │   └── PCA_plot.png
     └── volcano
         └── [comparison]_volcano.png
+```
+
+### Analysis Parameters
+
+```{{r analysis-parameters}}
+if (!is.null(analysis_params)) {{
+  ont_labels <- c(
+    BP  = "Biological Process (BP)",
+    MF  = "Molecular Function (MF)",
+    CC  = "Cellular Component (CC)",
+    ALL = "All ontologies (ALL)"
+  )
+  ont_label <- ifelse(
+    !is.null(analysis_params$gsea_ont) &&
+      analysis_params$gsea_ont %in% names(ont_labels),
+    ont_labels[[analysis_params$gsea_ont]],
+    analysis_params$gsea_ont
+  )
+  gsea_performed <- ifelse(isTRUE(analysis_params$skip_gsea), "No", "Yes")
+  params_df <- data.frame(
+    Parameter = c(
+      "Genome / Annotation",
+      "GSEA Gene Ontology",
+      "GSEA Performed",
+      "Global Heatmap Top-N"
+    ),
+    Value = c(
+      tools::toTitleCase(analysis_params$genome),
+      ont_label,
+      gsea_performed,
+      as.character(analysis_params$heatmap_top_n)
+    ),
+    stringsAsFactors = FALSE
+  )
+  knitr::kable(params_df, caption = "Key analysis parameters")
+}}
 ```
 
 ## Global Sample Exploration
