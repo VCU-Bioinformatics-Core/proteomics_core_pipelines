@@ -133,7 +133,6 @@ if (genome == "human") {
   if (!require("org.Hs.eg.db")) BiocManager::install("org.Hs.eg.db")
   annotation_db <- org.Hs.eg.db
   ensembl <- useMart("ensembl", dataset = "hsapiens_gene_ensembl")
-  
 } else if (genome == "mouse") {
   if (!require("org.Mm.eg.db")) BiocManager::install("org.Mm.eg.db")
   annotation_db <- org.Mm.eg.db
@@ -161,10 +160,10 @@ colnames(full_prot_levels) <- sub("\\.raw\\.PG\\.Quantity", "", colnames(full_pr
 
 rownames(full_prot_levels) <- full_prot_levels$PG.ProteinAccessions # use protein accession as the row name
 
-# Collect UniProt IDs for per-comparison BioMart annotation in run_analysis()
-uniprot_raw <- full_prot_levels$PG.ProteinAccessions
-uniprot_clean <- unlist(strsplit(uniprot_raw, ";"))
-uniprot_clean <- unique(uniprot_clean)
+# Build protein metadata lookup: accession -> gene name (PG.Genes)
+protein_metadata <- full_prot_levels %>%
+  dplyr::select(uniprotswissprot = PG.ProteinAccessions, gene_name = PG.Genes) %>%
+  distinct(uniprotswissprot, .keep_all = TRUE)
 
 # Extract a dataframe with just protein levels
 # counts <- full_prot_levels %>% dplyr::select(where(is.numeric)) 
@@ -270,7 +269,7 @@ results <- vector("list", length(comparisons))
 for (i in seq_along(comparisons)) {
 
   # run the analysis on the current samples
-  curr_result <- run_analysis(comparisons[[i]], limma_params, intensity_matrix, out_dirs, intensity_matrix_raw, ont_option = gsea_ont, skip_gsea = skip_gsea)
+  curr_result <- run_analysis(comparisons[[i]], limma_params, intensity_matrix, out_dirs, intensity_matrix_raw, ont_option = gsea_ont, skip_gsea = skip_gsea, protein_metadata = protein_metadata)
   
   # save the current results if successful
   if (!is.null(curr_result)){

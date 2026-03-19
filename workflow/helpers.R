@@ -409,7 +409,7 @@ aggregate_phospho_for_gsea <- function(limma_results, peptide_metadata, p = 0.05
 
   # Map UniProt IDs to Ensembl IDs via biomart (same approach as regular pipeline)
   mapping <- getBM(
-    attributes = c("uniprotswissprot", "ensembl_gene_id"),
+    attributes = c("uniprotswissprot", "ensembl_gene_id", "hgnc_symbol"),
     filters    = "uniprotswissprot",
     values     = unique(aggregated$uniprot_id),
     mart       = ensembl
@@ -490,7 +490,7 @@ create_dotplot <- function(gse, title) {
 # centralizing function
 # ==========================
 
-run_analysis <- function(comparison, limma_params, normalized_counts, out_dirs, intensity_matrix_raw = NULL, ont_option = "BP", skip_gsea = FALSE) {
+run_analysis <- function(comparison, limma_params, normalized_counts, out_dirs, intensity_matrix_raw = NULL, ont_option = "BP", skip_gsea = FALSE, protein_metadata = NULL) {
   tryCatch({
     print(paste("\nStarting analysis for comparison:", comparison$name))
 
@@ -498,20 +498,13 @@ run_analysis <- function(comparison, limma_params, normalized_counts, out_dirs, 
     limma_results <- perform_limma_analysis(limma_params, comparison$exp, comparison$ctrl)
     limma_results <- limma_results %>% rownames_to_column(var = "uniprotswissprot")
 
-    print('Annotating the results')
-    mapping <- tryCatch({
-      m <- getBM(
-        attributes = c("uniprotswissprot", "ensembl_gene_id"),
-        filters = "uniprotswissprot",
-        values = uniprot_clean,
-        mart = ensembl
-      )
-      distinct(m, uniprotswissprot, .keep_all = TRUE)
-    }, error = function(e) {
-      message("BioMart annotation failed (GSEA will be skipped): ", e$message)
-      data.frame(uniprotswissprot = character(), ensembl_gene_id = character())
-    })
-    annotated_results <- limma_results %>% left_join(mapping, by = join_by(uniprotswissprot))
+    # Join gene names from input data (PG.Genes column)
+    if (!is.null(protein_metadata)) {
+      annotated_results <- limma_results %>%
+        left_join(protein_metadata, by = "uniprotswissprot")
+    } else {
+      annotated_results <- limma_results
+    }
 
     # Compute per-protein imputation category using pre-imputation NA counts
     if (!is.null(intensity_matrix_raw)) {
@@ -601,6 +594,26 @@ run_analysis_phospho <- function(comparison, limma_params, normalized_counts, ou
     print('Running limma')
     limma_results <- perform_limma_analysis(limma_params, comparison$exp, comparison$ctrl)
     limma_results <- limma_results %>% rownames_to_column(var = "peptide_id")
+
+    # Join peptide metadata to get UniProt IDs, then annotate with gene symbols
+    if (!is.null(peptide_metadata)) {
+      limma_results <- limma_results %>% left_join(peptide_metadata, by = "peptide_id") %>%
+        mutate(uniprot_id = sapply(strsplit(PG.UniProtIds, ";"), `[`, 1))
+      annotation <- tryCatch({
+        m <- getBM(
+          attributes = c("uniprotswissprot", "hgnc_symbol"),
+          filters    = "uniprotswissprot",
+          values     = unique(na.omit(limma_results$uniprot_id)),
+          mart       = ensembl
+        )
+        distinct(m, uniprotswissprot, .keep_all = TRUE)
+      }, error = function(e) {
+        message("BioMart annotation failed for phospho: ", e$message)
+        data.frame(uniprotswissprot = character(), hgnc_symbol = character())
+      })
+      limma_results <- limma_results %>%
+        left_join(annotation, by = c("uniprot_id" = "uniprotswissprot"))
+    }
 
     # Compute per-protein imputation category using pre-imputation NA counts
     if (!is.null(intensity_matrix_raw)) {

@@ -199,7 +199,48 @@ if (!is.null(protein_counts)) {{
   knitr::kable(summary_df, caption = "Protein filtering summary")
 }}
 ```
+\n')
 
+rmd_content <- paste0(rmd_content, '
+### Query Protein/Peptide
+
+Use the search boxes below to look up any protein. The **Significant Comparisons**
+column lists every comparison in which it was significant (adjusted p-value < 0.05,
+|FC| >= 1.5), or "Not Significant" if it did not meet that threshold in any comparison.
+Use the column search boxes (row below the header) to filter by protein name or
+UniProt ID. Multiple proteins can be found by typing partial matches — each column
+search box filters independently.
+
+```{r query-protein}
+all_rows <- dplyr::bind_rows(lapply(seq_along(comparisons), function(i) {
+  res <- results[[i]]$limma
+  if (is.null(res)) return(NULL)
+  res$comparison_name <- comparisons[[i]]$name
+  res$is_sig <- !is.na(res$adj.P.Val) & res$adj.P.Val < 0.05 & abs(res$logFC) >= 0.58
+  res[, intersect(c("gene_name", "uniprotswissprot", "comparison_name", "is_sig"), colnames(res))]
+}))
+query_df <- all_rows %>%
+  dplyr::group_by(gene_name, uniprotswissprot) %>%
+  dplyr::summarise(
+    Significant_Comparisons = {
+      sig_comps <- comparison_name[is_sig]
+      if (length(sig_comps) == 0) "Not Significant" else paste(sig_comps, collapse = "<br>")
+    },
+    .groups = "drop"
+  ) %>%
+  dplyr::arrange(Significant_Comparisons == "Not Significant", gene_name) %>%
+  dplyr::rename(dplyr::any_of(c("Protein Name" = "gene_name", "UniProt ID" = "uniprotswissprot")))
+DT::datatable(query_df,
+              caption = "Protein significance across all comparisons",
+              rownames = FALSE,
+              escape = FALSE,
+              filter = "top",
+              options = list(pageLength = 15, dom = "tip"))
+```
+
+')
+
+rmd_content <- paste0(rmd_content, glue('
 ### Principal Component Analysis
 
 PCA was performed to visualize the overall patterns of protein levels across samples and
@@ -316,7 +357,7 @@ for each case.
 ```{{r display-summary-table}}
 # Display the summary table
 kable(summary_table, caption = "")
-```\n')
+```\n'))
   
   # Add detailed sections for each comparison
   for (i in seq_along(comparisons)) {
@@ -453,9 +494,14 @@ if (dap_flag > 0){{
   # DT::datatable(top_down %>% select(ENSEMBL_ID, SYMBOL, log2FoldChange, pvalue, padj, GENENAME),
   #             caption = "Top Down Regulated Proteins")
   
-  DT::datatable(combined_sigs %>% dplyr::select(ensembl_gene_id, uniprotswissprot, logFC, pvalue, padj, imputation_category),
-                caption = "Differentially Abundance Proteins",
-                filter = "top")
+  DT::datatable(
+    combined_sigs %>%
+      dplyr::select(dplyr::any_of(c("gene_name", "uniprotswissprot")),
+                    logFC, pvalue, padj, imputation_category) %>%
+      dplyr::rename(dplyr::any_of(c("Protein Name" = "gene_name",
+                                    "UniProt ID"   = "uniprotswissprot"))),
+    caption = "Differentially Abundance Proteins",
+    filter = "top")
   
 }} else {{
   cat("No differential abundance results available for this comparison\n")

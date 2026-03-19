@@ -201,7 +201,44 @@ if (!is.null(peptide_counts)) {{
   cat("Peptide count summary not available.")
 }}
 ```
+\n')
 
+rmd_content <- paste0(rmd_content, '
+### Query Protein/Peptide
+
+Use the search box below to look up any phosphopeptide. The **Significant Comparisons**
+column lists every comparison in which it was significant (adjusted p-value < 0.05,
+|FC| >= 1.5), or "Not Significant" if it did not meet that threshold in any comparison.
+
+```{r query-protein}
+all_rows <- dplyr::bind_rows(lapply(seq_along(comparisons), function(i) {
+  res <- results[[i]]$limma
+  if (is.null(res)) return(NULL)
+  res$comparison_name <- comparisons[[i]]$name
+  res$is_sig <- !is.na(res$adj.P.Val) & res$adj.P.Val < 0.05 & abs(res$logFC) >= 0.58
+  res[, intersect(c("peptide_id", "hgnc_symbol", "uniprot_id", "comparison_name", "is_sig"), colnames(res))]
+}))
+query_df <- all_rows %>%
+  dplyr::group_by(dplyr::across(dplyr::any_of(c("peptide_id", "hgnc_symbol", "uniprot_id")))) %>%
+  dplyr::summarise(
+    Significant_Comparisons = {
+      sig_comps <- comparison_name[is_sig]
+      if (length(sig_comps) == 0) "Not Significant" else paste(sig_comps, collapse = "<br>")
+    },
+    .groups = "drop"
+  ) %>%
+  dplyr::arrange(Significant_Comparisons == "Not Significant", peptide_id)
+DT::datatable(query_df,
+              caption = "Phosphopeptide significance across all comparisons",
+              rownames = FALSE,
+              escape = FALSE,
+              filter = "none",
+              options = list(pageLength = 15, dom = "ftip"))
+```
+
+')
+
+rmd_content <- paste0(rmd_content, glue('
 ### Principal Component Analysis
 
 PCA was performed to visualize the overall patterns of phosphopeptide levels across
@@ -320,7 +357,7 @@ for each case.
 ```{{r display-summary-table}}
 # Display the summary table
 kable(summary_table, caption = "")
-```\n')
+```\n'))
   
   # Add detailed sections for each comparison
   for (i in seq_along(comparisons)) {
@@ -468,7 +505,7 @@ if (dap_flags[1] > 0){{
     #           caption = "Top Up Regulated Proteins")
     
     DT::formatSignif(
-      DT::datatable(top_up %>% dplyr::select(peptide_id, logFC, pvalue, padj, imputation_category),
+      DT::datatable(top_up %>% dplyr::select(dplyr::any_of(c("hgnc_symbol", "uniprot_id", "peptide_id")), logFC, pvalue, padj, imputation_category),
                caption = "Top Up Regulated Proteins",
                filter = "top"),
       columns = c("pvalue", "padj"), digits = 3)
@@ -485,7 +522,7 @@ if (dap_flags[2] > 0){{
   #             caption = "Top Down Regulated Proteins")
   
   DT::formatSignif(
-    DT::datatable(top_down %>% dplyr::select(peptide_id, logFC, pvalue, padj, imputation_category),
+    DT::datatable(top_down %>% dplyr::select(dplyr::any_of(c("hgnc_symbol", "uniprot_id", "peptide_id")), logFC, pvalue, padj, imputation_category),
                 caption = "Top Down Regulated Proteins",
                 filter = "top"),
     columns = c("pvalue", "padj"), digits = 3)
