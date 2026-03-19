@@ -70,7 +70,9 @@ option_list = list(
   make_option(c("--gsea-ont"), type = "character", default = "BP",
               help = "Gene ontology category for GSEA: 'BP', 'MF', 'CC', or 'ALL' [default= %default]"),
   make_option(c("--skip-gsea"), action = "store_true", default = FALSE,
-              help = "Skip GSEA analysis (faster runs) [default= %default]")
+              help = "Skip GSEA analysis (faster runs) [default= %default]"),
+  make_option(c("--skip-anova"), action = "store_true", default = FALSE,
+              help = "Skip one-way ANOVA (faster runs) [default= %default]")
 )
 
 opt_parser = OptionParser(option_list=option_list)
@@ -87,6 +89,7 @@ imputation_seed <- opt$seed
 heatmap_top_n <- opt$`heatmap-top-n`
 gsea_ont <- opt$`gsea-ont`
 skip_gsea <- opt$`skip-gsea`
+skip_anova <- opt$`skip-anova`
 
 if (is.null(runID) || is.null(countData) || is.null(samplesheet)) {
   print_help(opt_parser)
@@ -331,6 +334,40 @@ ggsave(pca_plot, filename = str_c(out_dirs$pca, "/pca_plot.png"))
 # export_plotly_to_html(fig3D, paste0(out_dirs$pca, "/allsamples_PCA_plot3D.html"))
 
 # ==========================
+# One-Way ANOVA
+# ==========================
+print('Running one-way ANOVA')
+n_anova_groups <- length(unique(sample_info$condition))
+if (skip_anova) {
+  message("Skipping ANOVA (--skip-anova)")
+  n_anova_sig   <- NULL
+  n_anova_total <- NULL
+} else if (n_anova_groups > 2) {
+  group <- factor(sample_info$condition)
+  mat   <- as.matrix(intensity_matrix)
+  anova_pvals <- apply(mat, 1, function(x) {
+    tryCatch(
+      summary(aov(x ~ group))[[1]][["Pr(>F)"]][1],
+      error = function(e) NA_real_
+    )
+  })
+  anova_padj  <- p.adjust(anova_pvals, method = "BH")
+  n_anova_sig   <- sum(anova_padj < 0.05, na.rm = TRUE)
+  n_anova_total <- nrow(mat)
+  anova_df <- data.frame(
+    Protein     = rownames(mat),
+    P_Value     = signif(anova_pvals, 3),
+    Adj_P_Value = signif(anova_padj, 3),
+    stringsAsFactors = FALSE
+  ) %>% dplyr::arrange(Adj_P_Value)
+  write.csv(anova_df, file.path(out_dirs$de_data, "anova_results.csv"), row.names = FALSE)
+} else {
+  n_anova_sig   <- NULL
+  n_anova_total <- NULL
+}
+anova_summary <- list(n_groups = n_anova_groups, n_sig = n_anova_sig, n_total = n_anova_total, skipped = skip_anova)
+
+# ==========================
 # Generate global heatmap
 # ==========================
 print('Generating global heatmap')
@@ -344,7 +381,7 @@ print('Save RDS')
 imputation_params <- list(method = imputation_method, q = imputation_q)
 protein_counts <- list(total = n_proteins_total, no_crap = n_proteins_no_crap, not_imputable = n_peptides_not_imputable)
 analysis_params <- list(genome = genome, gsea_ont = gsea_ont, skip_gsea = skip_gsea, heatmap_top_n = heatmap_top_n)
-rds <- list(results, comparisons, out_dirs, pca_plot, intensity_matrix_raw, intensity_matrix, imputation_params, sample_info, protein_counts, analysis_params)
+rds <- list(results, comparisons, out_dirs, pca_plot, intensity_matrix_raw, intensity_matrix, imputation_params, sample_info, protein_counts, analysis_params, anova_summary)
 timestamp <- format(Sys.time(), "%Y%m%d_%H%M%S")
 #rds_path <- glue("analysis_results_{timestamp}.rds")
 rds_path <- file.path(outDir, "data/analysis_results.rds")

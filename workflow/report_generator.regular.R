@@ -82,6 +82,7 @@ intensity_matrix <- rds_data[[6]]
 sample_info <- rds_data[[8]]
 protein_counts <- rds_data[[9]]
 analysis_params <- rds_data[[10]]
+anova_summary <- rds_data[[11]]
 ```
 
 ## Overview
@@ -125,6 +126,23 @@ As part of this pipeline we produce the following files for your downstream use:
     │   └── PCA_plot.png
     └── volcano
         └── [comparison]_volcano.png
+```
+
+### Run Summary
+
+```{{r run-summary}}
+analyses <- data.frame(
+  Level = c("Global", "Per-Comparison", "Per-Comparison"),
+  Analysis = c("One-Way ANOVA", "Differential Abundance (Limma)", "GSEA"),
+  Status = c(
+    ifelse(isTRUE(anova_summary$skipped), "\U1F6AB",
+           ifelse(anova_summary$n_groups > 2, "\u2705", "N/A")),
+    "\u2705",
+    ifelse(isTRUE(analysis_params$skip_gsea), "\U1F6AB", "\u2705")
+  ),
+  stringsAsFactors = FALSE
+)
+knitr::kable(analyses, col.names = c("Level", "Analysis", "Status"))
 ```
 
 ### Analysis Parameters
@@ -196,41 +214,24 @@ pca_plot
 ### One-Way ANOVA
 
 ```{{r anova-analysis, results="asis"}}
-n_groups <- length(unique(sample_info$condition))
-if (n_groups > 2) {{
-  cat("A one-way ANOVA was performed across all", n_groups, "groups to identify",
-      "proteins that vary significantly beyond any single pairwise comparison.",
-      "P-values were adjusted using the Benjamini-Hochberg (BH) method.\n\n")
-
-  group <- factor(sample_info$condition)
-  mat   <- as.matrix(intensity_matrix)
-
-  anova_pvals <- apply(mat, 1, function(x) {{
-    tryCatch(
-      summary(aov(x ~ group))[[1]][["Pr(>F)"]][1],
-      error = function(e) NA_real_
-    )
-  }})
-
-  anova_padj <- p.adjust(anova_pvals, method = "BH")
-  n_sig <- sum(anova_padj < 0.05, na.rm = TRUE)
-
-  cat(paste0("**", n_sig, "** out of **", nrow(mat), "** proteins are ",
-             "significantly variable across groups (ANOVA FDR < 0.05).\n\n"))
-
-  anova_results <- data.frame(
-    Protein     = rownames(mat),
-    P_Value     = signif(anova_pvals, 3),
-    Adj_P_Value = signif(anova_padj, 3)
-  ) %>%
-    dplyr::arrange(Adj_P_Value) %>%
-    head(20)
-
-  print(knitr::kable(anova_results,
-    caption = "Top 20 proteins by one-way ANOVA (sorted by adjusted p-value)",
-    row.names = FALSE))
-}} else {{
-  cat("*One-way ANOVA is only reported when more than two groups are present.*\n\n")
+if (!isTRUE(anova_summary$skipped)) {{
+  if (anova_summary$n_groups > 2) {{
+    anova_path <- file.path(out_dirs$de_data, "anova_results.csv")
+    if (file.exists(anova_path)) {{
+      anova_df <- read.csv(anova_path)
+      cat("A one-way ANOVA was performed across all", anova_summary$n_groups, "groups to identify",
+          "proteins that vary significantly beyond any single pairwise comparison.",
+          "P-values were adjusted using the Benjamini-Hochberg (BH) method.\n\n")
+      cat(paste0("**", anova_summary$n_sig, "** out of **", anova_summary$n_total,
+                 "** proteins are significantly variable across groups",
+                 " (ANOVA FDR < 0.05).\n\n"))
+      print(knitr::kable(head(anova_df, 20),
+        caption = "Top 20 proteins by one-way ANOVA (sorted by adjusted p-value)",
+        row.names = FALSE))
+    }}
+  }} else {{
+    cat("*One-way ANOVA is only reported when more than two groups are present.*\n\n")
+  }}
 }}
 ```
 
