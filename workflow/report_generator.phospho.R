@@ -204,6 +204,30 @@ if (!is.null(peptide_counts)) {{
 \n')
 
 rmd_content <- paste0(rmd_content, '
+### Peptide Levels Across Observed Values Per Sample
+
+```{r peptide-boxplot, fig.width=max(8, ncol(intensity_matrix_raw) * 0.6), fig.height=5}
+# Reshape raw matrix (pre-imputation) to long format, keeping only observed (non-NA) values
+bp_long <- as.data.frame(intensity_matrix_raw) %>%
+  tibble::rownames_to_column("peptide") %>%
+  tidyr::pivot_longer(-peptide, names_to = "sample", values_to = "intensity") %>%
+  dplyr::filter(!is.na(intensity))
+
+# Preserve sample order from the matrix columns
+bp_long$sample <- factor(bp_long$sample, levels = colnames(intensity_matrix_raw))
+
+ggplot(bp_long, aes(x = sample, y = intensity)) +
+  geom_boxplot(fill = "#4A90D9", outlier.size = 0.8, outlier.alpha = 0.5) +
+  labs(title = "Peptide Levels Across Observed Values Per Sample",
+       x = "Sample", y = "Intensity") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(hjust = 0.5))
+```
+
+')
+
+rmd_content <- paste0(rmd_content, '
 ### Query Protein/Peptide
 
 Use the search box below to look up any phosphopeptide. The **Significant Comparisons**
@@ -683,6 +707,25 @@ counts_table <- data.frame(
   stringsAsFactors = FALSE
 )
 kable(counts_table, caption = "Observed vs. imputed value counts")
+```
+
+### Number of Missing Values per Sample
+
+```{r imputation-missing-per-sample, fig.width=max(6, ncol(obs_mask) * 0.6), fig.height=5}
+miss_per_sample <- colSums(is.na(raw_mat))
+miss_df <- data.frame(
+  sample  = factor(names(miss_per_sample), levels = names(miss_per_sample)),
+  missing = as.integer(miss_per_sample)
+)
+
+ggplot(miss_df, aes(x = sample, y = missing)) +
+  geom_bar(stat = "identity", fill = "#4A90D9", color = "white") +
+  geom_text(aes(label = missing), vjust = -0.4, size = 3) +
+  labs(x = "Sample", y = "Number of missing values",
+       title = "Number of Missing Values per Sample") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(hjust = 0.5))
 ```
 
 ### Total Imputed Values per Peptide
