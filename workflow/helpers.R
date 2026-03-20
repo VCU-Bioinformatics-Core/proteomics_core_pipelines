@@ -27,10 +27,12 @@ setup_directories <- function(base_dir) {
     data = file.path(base_dir, "data"),
     figures = file.path(base_dir, "figures"),
     de_data = file.path(base_dir, "data/de_data"),
+    anova = file.path(base_dir, "data/anova"),
     gsea_data = file.path(base_dir, "data/gsea_data"),
     volcano = file.path(base_dir, "figures/volcano"),
     ma = file.path(base_dir, "figures/ma"),
     heatmap = file.path(base_dir, "figures/heatmap"),
+    imputation = file.path(base_dir, "figures/imputation"),
     gsea = file.path(base_dir, "figures/gsea"),
     pca = file.path(base_dir, "figures/pca")
   )
@@ -66,12 +68,13 @@ build_output_tree <- function(out_dirs) {
   )
 
   # Second-level subdirs under data/ and figures/
-  data_subdirs    <- list(de_data = out_dirs$de_data, gsea_data = out_dirs$gsea_data)
-  figures_subdirs <- list(gsea    = out_dirs$gsea,
-                          heatmap = out_dirs$heatmap,
-                          ma      = out_dirs$ma,
-                          pca     = out_dirs$pca,
-                          volcano = out_dirs$volcano)
+  data_subdirs    <- list(anova = out_dirs$anova, de_data = out_dirs$de_data, gsea_data = out_dirs$gsea_data)
+  figures_subdirs <- list(gsea       = out_dirs$gsea,
+                          heatmap    = out_dirs$heatmap,
+                          imputation = out_dirs$imputation,
+                          ma         = out_dirs$ma,
+                          pca        = out_dirs$pca,
+                          volcano    = out_dirs$volcano)
 
   render_section <- function(subdirs, outer_prefix, last_top) {
     lines <- character(0)
@@ -134,7 +137,8 @@ perform_limma_analysis <- function(limma_params, exp, ctrl, min_valid_samples=2)
 
 generate_volcano_protein <- function(data, exp_name, ctrl_name, p_thresh = 0.05, lfc = 0.58,
                                      sig = "adj.P.Val", label_col = "uniprotswissprot",
-                                     out_dir = ".") {
+                                     out_dir = ".",
+                                     color1 = "#D55E00", color2 = "#0072B2") {
 
   print('Labeling the data')
   labeled_dat <- data %>%
@@ -178,8 +182,8 @@ generate_volcano_protein <- function(data, exp_name, ctrl_name, p_thresh = 0.05,
     geom_point(alpha = 0.5) +
     theme_minimal() +
     geom_label_repel(aes(label = label_display), max.overlaps = Inf, show.legend = FALSE) +
-    scale_color_manual(values = c("firebrick", "steelblue")) +
-    geom_hline(yintercept = -log10(p_thresh), col = "red", linetype = 2) +
+    scale_color_manual(values = c(color1, color2)) +
+    geom_hline(yintercept = -log10(p_thresh), col = color1, linetype = 2) +
     geom_vline(xintercept = c(-lfc, lfc)) +
     theme(legend.title = element_blank()) +
     labs(x = "Log2 Fold-Change (FC)",
@@ -191,7 +195,8 @@ generate_volcano_protein <- function(data, exp_name, ctrl_name, p_thresh = 0.05,
 
 
 generate_volcano_phospho <- function(data, exp_name, ctrl_name, p_thresh = 0.05, lfc = 0.58,
-                                     sig = "adj.P.Val", out_dir = ".") {
+                                     sig = "adj.P.Val", out_dir = ".",
+                                     color1 = "#D55E00", color2 = "#0072B2") {
 
   print('Labeling the data')
   labeled_dat <- data %>%
@@ -244,8 +249,8 @@ generate_volcano_phospho <- function(data, exp_name, ctrl_name, p_thresh = 0.05,
     geom_point(alpha = 0.5) +
     theme_minimal() +
     geom_label_repel(aes(label = label_display), max.overlaps = Inf, show.legend = FALSE) +
-    scale_color_manual(values = c("firebrick", "steelblue")) +
-    geom_hline(yintercept = -log10(p_thresh), col = "red", linetype = 2) +
+    scale_color_manual(values = c(color1, color2)) +
+    geom_hline(yintercept = -log10(p_thresh), col = color1, linetype = 2) +
     geom_vline(xintercept = c(-lfc, lfc)) +
     theme(legend.title = element_blank()) +
     labs(x = "Log2 Fold-Change (FC)",
@@ -258,7 +263,8 @@ generate_volcano_phospho <- function(data, exp_name, ctrl_name, p_thresh = 0.05,
 
 generate_ma_plot_protein <- function(data, exp_name, ctrl_name, highlighted_ids = NULL,
                                       p_thresh = 0.05, lfc = 0.58,
-                                      label_col = "uniprotswissprot") {
+                                      label_col = "uniprotswissprot",
+                                      color1 = "#D55E00", color2 = "#0072B2") {
   ma_df <- data %>%
     filter(!is.na(AveExpr), !is.na(logFC), is.finite(AveExpr), is.finite(logFC)) %>%
     mutate(sig = case_when(
@@ -280,7 +286,7 @@ generate_ma_plot_protein <- function(data, exp_name, ctrl_name, highlighted_ids 
 
   p <- ggplot(ma_df, aes(x = AveExpr, y = logFC, color = sig)) +
     geom_point(alpha = 0.4, size = 1) +
-    scale_color_manual(values = c("Up" = "firebrick", "Down" = "steelblue", "NS" = "gray60"),
+    scale_color_manual(values = c("Up" = color1, "Down" = color2, "NS" = "gray60"),
                        name = NULL) +
     geom_hline(yintercept = 0,    linetype = "dashed", color = "black") +
     geom_hline(yintercept =  lfc, linetype = "dotted", color = "gray40") +
@@ -300,7 +306,8 @@ generate_ma_plot_protein <- function(data, exp_name, ctrl_name, highlighted_ids 
 
 
 generate_ma_plot_phospho <- function(data, exp_name, ctrl_name, highlighted_ids = NULL,
-                                      p_thresh = 0.05, lfc = 0.58) {
+                                      p_thresh = 0.05, lfc = 0.58,
+                                      color1 = "#D55E00", color2 = "#0072B2") {
   ma_df <- data %>%
     filter(!is.na(AveExpr), !is.na(logFC), is.finite(AveExpr), is.finite(logFC)) %>%
     mutate(sig = case_when(
@@ -327,7 +334,7 @@ generate_ma_plot_phospho <- function(data, exp_name, ctrl_name, highlighted_ids 
 
   p <- ggplot(ma_df, aes(x = AveExpr, y = logFC, color = sig)) +
     geom_point(alpha = 0.4, size = 1) +
-    scale_color_manual(values = c("Up" = "firebrick", "Down" = "steelblue", "NS" = "gray60"),
+    scale_color_manual(values = c("Up" = color1, "Down" = color2, "NS" = "gray60"),
                        name = NULL) +
     geom_hline(yintercept = 0,    linetype = "dashed", color = "black") +
     geom_hline(yintercept =  lfc, linetype = "dotted", color = "gray40") +
@@ -346,7 +353,8 @@ generate_ma_plot_phospho <- function(data, exp_name, ctrl_name, highlighted_ids 
 }
 
 
-generate_global_heatmap <- function(intensity_matrix, out_dirs, top_n = 1000, molecule_label = "Proteins") {
+generate_global_heatmap <- function(intensity_matrix, out_dirs, top_n = 1000, molecule_label = "Proteins",
+                                    color1 = "#D55E00", color2 = "#0072B2") {
   mat <- as.matrix(intensity_matrix)
 
   # Drop rows with any non-finite values before clustering
@@ -369,7 +377,7 @@ generate_global_heatmap <- function(intensity_matrix, out_dirs, top_n = 1000, mo
   ht <- Heatmap(
     zscores,
     name = "Z-score",
-    col = colorRamp2(c(-2, 0, 2), c("blue", "white", "firebrick")),
+    col = colorRamp2(c(-2, 0, 2), c(color2, "white", color1)),
     cluster_rows = TRUE,
     cluster_columns = TRUE,
     show_row_names = FALSE,
@@ -387,9 +395,102 @@ generate_global_heatmap <- function(intensity_matrix, out_dirs, top_n = 1000, mo
   return(out_path)
 }
 
+# Generate four imputation QC figures and save them to figures/imputation/.
+# molecule_label: "protein" or "peptide" — used in axis labels and filenames.
+generate_imputation_figures <- function(intensity_raw, intensity_imputed, out_dirs,
+                                        molecule_label = "protein",
+                                        color1 = "#D55E00", color2 = "#0072B2") {
+  fig_dir <- out_dirs$imputation
+
+  raw_mat     <- as.matrix(intensity_raw)
+  imputed_mat <- as.matrix(intensity_imputed)
+  # Align raw_mat to post-filter rows (not-imputable rows may have been dropped)
+  raw_mat  <- raw_mat[rownames(imputed_mat), , drop = FALSE]
+  obs_mask <- !is.na(raw_mat)
+
+  # --- 1. Observed vs Imputed histogram ---
+  raw_vals <- data.frame(value = raw_mat[obs_mask],  type = "Observed")
+  imp_vals <- data.frame(value = imputed_mat[!obs_mask], type = "Imputed")
+  all_vals      <- rbind(raw_vals, imp_vals)
+  all_vals$type <- factor(all_vals$type, levels = c("Observed", "Imputed"))
+
+  p1 <- ggplot(all_vals, aes(x = value, fill = type)) +
+    geom_histogram(alpha = 0.6, bins = 80, position = "identity") +
+    scale_fill_manual(values = c("Observed" = color2, "Imputed" = color1)) +
+    labs(x = "log2 Intensity", y = "Count", fill = NULL,
+         title = "Observed vs. imputed intensity values") +
+    theme_bw() +
+    theme(legend.position = "top") +
+    guides(fill = guide_legend(override.aes = list(alpha = 1)))
+  save_plot(p1, file.path(fig_dir, "global_imputation_histogram.png"), width = 9, height = 5)
+
+  # --- 2. Missing values per sample ---
+  miss_per_sample <- colSums(is.na(raw_mat))
+  miss_df <- data.frame(
+    sample  = factor(names(miss_per_sample), levels = names(miss_per_sample)),
+    missing = as.integer(miss_per_sample)
+  )
+  p2 <- ggplot(miss_df, aes(x = sample, y = missing)) +
+    geom_bar(stat = "identity", fill = color2, color = "white") +
+    geom_text(aes(label = missing), vjust = -0.4, size = 3) +
+    labs(x = "Sample", y = "Number of missing values",
+         title = "Number of Missing Values per Sample") +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1),
+          plot.title = element_text(hjust = 0.5))
+  fig_width_samples <- max(6, ncol(obs_mask) * 0.6)
+  save_plot(p2, file.path(fig_dir, "global_imputation_missing_per_sample.png"),
+            width = fig_width_samples, height = 5)
+
+  # --- 3. Total imputed values per molecule ---
+  n_obs  <- sum(obs_mask)
+  n_tot  <- length(obs_mask)
+  imp_per_mol <- rowSums(!obs_mask)
+  max_imp     <- ncol(obs_mask)
+  imp_counts  <- table(factor(imp_per_mol, levels = 0:max_imp))
+  imp_df <- data.frame(n_imputed  = as.integer(names(imp_counts)),
+                       n_molecules = as.integer(imp_counts))
+  imp_df$total_val <- imp_df$n_imputed * imp_df$n_molecules
+  imp_df$total_val[imp_df$n_imputed == 0] <- n_obs
+  imp_df$bar_type  <- ifelse(imp_df$n_imputed == 0, "Observed", "Imputed")
+  imp_df$pct_total <- round(100 * imp_df$total_val / n_tot, 1)
+  x_labels <- setNames(c("no-imputation", as.character(seq_len(max_imp))), 0:max_imp)
+
+  p3 <- ggplot(imp_df, aes(x = factor(n_imputed), y = total_val, fill = bar_type)) +
+    geom_bar(stat = "identity", color = "white") +
+    geom_text(aes(label = paste0(pct_total, "%")), vjust = -0.4, size = 3) +
+    scale_fill_manual(values = c("Observed" = color2, "Imputed" = color1)) +
+    scale_x_discrete(labels = x_labels) +
+    labs(x = paste0("Number of imputed values per ", molecule_label),
+         y = "Total values",
+         title = paste0("Total imputed values by imputation count per ", molecule_label),
+         fill = NULL) +
+    theme_bw() +
+    theme(legend.position = "top",
+          axis.text.x = element_text(angle = 60, hjust = 1))
+  save_plot(p3, file.path(fig_dir, "global_imputation_total_counts.png"), width = 7, height = 5)
+
+  # --- 4. Distribution of imputed values per molecule ---
+  imp_df$pct <- round(100 * imp_df$n_molecules / nrow(obs_mask), 1)
+
+  p4 <- ggplot(imp_df, aes(x = factor(n_imputed), y = n_molecules)) +
+    geom_bar(stat = "identity", fill = color2, color = "white") +
+    geom_text(aes(label = paste0(pct, "%")), vjust = -0.4, size = 3) +
+    scale_x_discrete(labels = x_labels) +
+    labs(x = paste0("Number of imputed values per ", molecule_label),
+         y = paste0("Number of ", molecule_label, "s"),
+         title = paste0("Distribution of imputed values per ", molecule_label)) +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 60, hjust = 1))
+  save_plot(p4, file.path(fig_dir, "global_imputation_distribution.png"), width = 7, height = 5)
+
+  invisible(fig_dir)
+}
+
 generate_heatmap <- function(results_df, normalized_counts, p = 0.05, lfc = 0.58,
                              exp_name, ctrl_name, fig_dir, design,
-                             row_id_col = "uniprotswissprot") {
+                             row_id_col = "uniprotswissprot",
+                             color1 = "#D55E00", color2 = "#0072B2") {
 
   # filter the data for certain pvalues and lfc
   filtered_data <- results_df %>%
@@ -419,7 +520,7 @@ generate_heatmap <- function(results_df, normalized_counts, p = 0.05, lfc = 0.58
     name = "Z-score",  # nombre de la leyenda
     col = colorRamp2(
       c(min(zscores), 0, max(zscores)), 
-      c("blue", "white", "firebrick")
+      c(color2, "white", color1)
     ),
     cluster_rows = TRUE,     # dendrograma de filas
     cluster_columns = TRUE,  # dendrograma de columnas
@@ -557,7 +658,7 @@ create_dotplot <- function(gse, title) {
 # centralizing function
 # ==========================
 
-run_analysis <- function(comparison, limma_params, normalized_counts, out_dirs, intensity_matrix_raw = NULL, ont_option = "BP", skip_gsea = FALSE, protein_metadata = NULL) {
+run_analysis <- function(comparison, limma_params, normalized_counts, out_dirs, intensity_matrix_raw = NULL, ont_option = "BP", skip_gsea = FALSE, protein_metadata = NULL, color1 = "#D55E00", color2 = "#0072B2") {
   tryCatch({
     print(paste("\nStarting analysis for comparison:", comparison$name))
 
@@ -605,13 +706,14 @@ run_analysis <- function(comparison, limma_params, normalized_counts, out_dirs, 
     write.csv(annotated_results, output_file)
 
     print('Generating the volcano plot')
-    volcano_result <- generate_volcano_protein(annotated_results, comparison$exp, comparison$ctrl)
+    volcano_result <- generate_volcano_protein(annotated_results, comparison$exp, comparison$ctrl, color1 = color1, color2 = color2)
     save_plot(volcano_result$plot, create_file_path(out_dirs$volcano, "", comparison$name, "_volcano.png"),
               width = 10, height = 8)
 
     print('Generating the MA plot')
     ma_plot <- generate_ma_plot_protein(annotated_results, comparison$exp, comparison$ctrl,
-                                        highlighted_ids = volcano_result$highlighted_ids)
+                                        highlighted_ids = volcano_result$highlighted_ids,
+                                        color1 = color1, color2 = color2)
     save_plot(ma_plot, create_file_path(out_dirs$ma, "", comparison$name, "_ma.png"),
               width = 10, height = 8)
 
@@ -620,7 +722,8 @@ run_analysis <- function(comparison, limma_params, normalized_counts, out_dirs, 
         width = 2400, height = 3200, res = 300)
     ht <- generate_heatmap(limma_results, intensity_matrix,
                      exp_name = comparison$exp, ctrl_name = comparison$ctrl,
-                     fig_dir = out_dirs$heatmap, design = limma_params$design)
+                     fig_dir = out_dirs$heatmap, design = limma_params$design,
+                     color1 = color1, color2 = color2)
     draw(ht)
     dev.off()
     
@@ -654,7 +757,7 @@ run_analysis <- function(comparison, limma_params, normalized_counts, out_dirs, 
   })
 }
 
-run_analysis_phospho <- function(comparison, limma_params, normalized_counts, out_dirs, intensity_matrix_raw = NULL, peptide_metadata = NULL, ont_option = "BP", skip_gsea = FALSE) {
+run_analysis_phospho <- function(comparison, limma_params, normalized_counts, out_dirs, intensity_matrix_raw = NULL, peptide_metadata = NULL, ont_option = "BP", skip_gsea = FALSE, color1 = "#D55E00", color2 = "#0072B2") {
   tryCatch({
     print(paste("Starting analysis for comparison:", comparison$name))
 
@@ -714,13 +817,14 @@ run_analysis_phospho <- function(comparison, limma_params, normalized_counts, ou
     write.csv(limma_results, output_file)
 
     print('Generating the volcano plot')
-    volcano_result <- generate_volcano_phospho(limma_results, comparison$exp, comparison$ctrl)
+    volcano_result <- generate_volcano_phospho(limma_results, comparison$exp, comparison$ctrl, color1 = color1, color2 = color2)
     save_plot(volcano_result$plot, create_file_path(out_dirs$volcano, "", comparison$name, "_volcano.png"),
               width = 10, height = 8)
 
     print('Generating the MA plot')
     ma_plot <- generate_ma_plot_phospho(limma_results, comparison$exp, comparison$ctrl,
-                                        highlighted_ids = volcano_result$highlighted_ids)
+                                        highlighted_ids = volcano_result$highlighted_ids,
+                                        color1 = color1, color2 = color2)
     save_plot(ma_plot, create_file_path(out_dirs$ma, "", comparison$name, "_ma.png"),
               width = 10, height = 8)
 
@@ -730,7 +834,8 @@ run_analysis_phospho <- function(comparison, limma_params, normalized_counts, ou
     ht <- generate_heatmap(limma_results, normalized_counts,
                            exp_name = comparison$exp, ctrl_name = comparison$ctrl,
                            fig_dir = out_dirs$heatmap, design = limma_params$design,
-                           row_id_col = "peptide_id")
+                           row_id_col = "peptide_id",
+                           color1 = color1, color2 = color2)
     draw(ht)
     dev.off()
     

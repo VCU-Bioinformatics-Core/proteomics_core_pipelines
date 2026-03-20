@@ -83,6 +83,8 @@ sample_info <- rds_data[[8]]
 protein_counts <- rds_data[[9]]
 analysis_params <- rds_data[[10]]
 anova_summary <- rds_data[[11]]
+color1 <- if (!is.null(analysis_params$color1)) analysis_params$color1 else "#D55E00"
+color2 <- if (!is.null(analysis_params$color2)) analysis_params$color2 else "#0072B2"
 ```
 
 ## Overview
@@ -215,7 +217,7 @@ bp_long <- as.data.frame(intensity_matrix_raw) %>%
 bp_long$sample <- factor(bp_long$sample, levels = colnames(intensity_matrix_raw))
 
 ggplot(bp_long, aes(x = sample, y = intensity)) +
-  geom_boxplot(fill = "#4A90D9", outlier.size = 0.8, outlier.alpha = 0.5) +
+  geom_boxplot(fill = color2, outlier.size = 0.8, outlier.alpha = 0.5) +
   labs(title = "Protein Levels Across Observed Values Per Sample",
        x = "Sample", y = "Intensity") +
   theme_bw() +
@@ -281,7 +283,7 @@ pca_plot
 ```{{r anova-analysis, results="asis"}}
 if (!isTRUE(anova_summary$skipped)) {{
   if (anova_summary$n_groups > 2) {{
-    anova_path <- file.path(out_dirs$de_data, "anova_results.csv")
+    anova_path <- file.path(out_dirs$anova, "global_anova.csv")
     if (file.exists(anova_path)) {{
       anova_df <- read.csv(anova_path)
       cat("A one-way ANOVA was performed across all", anova_summary$n_groups, "groups to identify",
@@ -402,10 +404,10 @@ kable(summary_table, caption = "")
 **Volcano Plot**
 
 - Description: main visualization for differential abundance results. This rendition uses
-  a **red horizontal line** to indicate the significant p-value threshold of \\< 0.05. Therefore,
-  every point (protein) above that red line can be considered statistically signficant (note:
+  an **orange horizontal line** to indicate the significant p-value threshold of \\< 0.05. Therefore,
+  every point (protein) above that orange line can be considered statistically signficant (note:
   before FDR correction). In addition, the **black vertical lines** indicate 1.5 fold change.
-  Proteins highlighted in red are up-regulated in group1 compared to the group2. Proteins
+  Proteins highlighted in orange are up-regulated in group1 compared to the group2. Proteins
   highlighted in blue are down-regulated in group1 compared to group2. Proteins in gray, do
   not meet the thresholds for both logFC and p-value.
 - Data point: a protein
@@ -612,107 +614,31 @@ kable(param_table, caption = "Imputation parameters used in this analysis")
 
 The histograms below show the distribution of all log2 intensity values across
 all proteins. **Observed** (blue) values are those measured directly, while
-**Imputed** (red) values are those that were missing and filled in. Imputed
+**Imputed** (orange) values are those that were missing and filled in. Imputed
 values typically appear as a secondary peak shifted towards the lower end of
 the distribution, reflecting the left-censored nature of missing-not-at-random
 (MNAR) data in proteomics.
 
-```{r imputation-histogram, fig.width=9, fig.height=5}
-intensity_raw      <- rds_data[[5]]
-intensity_imputed  <- rds_data[[6]]
-
-raw_mat     <- as.matrix(intensity_raw)
-imputed_mat <- as.matrix(intensity_imputed)
-obs_mask    <- !is.na(raw_mat)
-
-raw_vals <- data.frame(
-  value = raw_mat[obs_mask],
-  type  = "Observed"
-)
-
-imp_vals <- data.frame(
-  value = imputed_mat[!obs_mask],
-  type  = "Imputed"
-)
-
-all_vals      <- rbind(raw_vals, imp_vals)
-all_vals$type <- factor(all_vals$type, levels = c("Observed", "Imputed"))
-
-ggplot(all_vals, aes(x = value, fill = type)) +
-  geom_histogram(alpha = 0.6, bins = 80, position = "identity") +
-  scale_fill_manual(values = c("Observed" = "steelblue",
-                               "Imputed"  = "firebrick")) +
-  labs(x = "log2 Intensity", y = "Count", fill = NULL,
-       title = "Observed vs. imputed intensity values") +
-  theme_bw() +
-  theme(legend.position = "top") +
-  guides(fill = guide_legend(override.aes = list(alpha = 1)))
+```{r imputation-histogram, out.width="100%"}
+knitr::include_graphics(file.path(out_dirs$imputation, "global_imputation_histogram.png"))
 ```
 
 ### Number of Missing Values per Sample
 
-```{r imputation-missing-per-sample, fig.width=max(6, ncol(obs_mask) * 0.6), fig.height=5}
-miss_per_sample <- colSums(is.na(raw_mat))
-miss_df <- data.frame(
-  sample  = factor(names(miss_per_sample), levels = names(miss_per_sample)),
-  missing = as.integer(miss_per_sample)
-)
-
-ggplot(miss_df, aes(x = sample, y = missing)) +
-  geom_bar(stat = "identity", fill = "#4A90D9", color = "white") +
-  geom_text(aes(label = missing), vjust = -0.4, size = 3) +
-  labs(x = "Sample", y = "Number of missing values",
-       title = "Number of Missing Values per Sample") +
-  theme_bw() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1),
-        plot.title = element_text(hjust = 0.5))
+```{r imputation-missing-per-sample, out.width="100%"}
+knitr::include_graphics(file.path(out_dirs$imputation, "global_imputation_missing_per_sample.png"))
 ```
 
 ### Total Imputed Values per Protein
 
-```{r imputation-total-counts, fig.width=7, fig.height=5}
-n_obs  <- sum(obs_mask)
-n_tot  <- length(obs_mask)
-imp_per_protein <- rowSums(!obs_mask)
-max_imp <- ncol(obs_mask)
-imp_counts <- table(factor(imp_per_protein, levels = 0:max_imp))
-imp_df <- data.frame(n_imputed = as.integer(names(imp_counts)),
-                     n_proteins = as.integer(imp_counts))
-imp_df$total_val <- imp_df$n_imputed * imp_df$n_proteins
-imp_df$total_val[imp_df$n_imputed == 0] <- n_obs
-imp_df$bar_type <- ifelse(imp_df$n_imputed == 0, "Observed", "Imputed")
-imp_df$pct_total <- round(100 * imp_df$total_val / n_tot, 1)
-x_labels <- setNames(c("no-imputation", as.character(seq_len(max_imp))), 0:max_imp)
-
-ggplot(imp_df, aes(x = factor(n_imputed), y = total_val, fill = bar_type)) +
-  geom_bar(stat = "identity", color = "white") +
-  geom_text(aes(label = paste0(pct_total, "%")), vjust = -0.4, size = 3) +
-  scale_fill_manual(values = c("Observed" = "steelblue", "Imputed" = "firebrick")) +
-  scale_x_discrete(labels = x_labels) +
-  labs(x = "Number of imputed values per protein",
-       y = "Total values",
-       title = "Total imputed values by imputation count per protein",
-       fill = NULL) +
-  theme_bw() +
-  theme(legend.position = "top",
-        axis.text.x = element_text(angle = 60, hjust = 1))
+```{r imputation-total-counts, out.width="100%"}
+knitr::include_graphics(file.path(out_dirs$imputation, "global_imputation_total_counts.png"))
 ```
 
 ### Distribution of Imputed Values per Protein
 
-```{r imputation-per-protein, fig.width=7, fig.height=5}
-imp_df$pct <- round(100 * imp_df$n_proteins / nrow(obs_mask), 1)
-x_labels <- setNames(c("no-imputation", as.character(seq_len(max_imp))), 0:max_imp)
-
-ggplot(imp_df, aes(x = factor(n_imputed), y = n_proteins)) +
-  geom_bar(stat = "identity", fill = "steelblue", color = "white") +
-  geom_text(aes(label = paste0(pct, "%")), vjust = -0.4, size = 3) +
-  scale_x_discrete(labels = x_labels) +
-  labs(x = "Number of imputed values per protein",
-       y = "Number of proteins",
-       title = "Distribution of imputed values per protein") +
-  theme_bw() +
-  theme(axis.text.x = element_text(angle = 60, hjust = 1))
+```{r imputation-per-protein, out.width="100%"}
+knitr::include_graphics(file.path(out_dirs$imputation, "global_imputation_distribution.png"))
 ```
 '
 

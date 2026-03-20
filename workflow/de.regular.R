@@ -72,7 +72,11 @@ option_list = list(
   make_option(c("--skip-gsea"), action = "store_true", default = FALSE,
               help = "Skip GSEA analysis (faster runs) [default= %default]"),
   make_option(c("--skip-anova"), action = "store_true", default = FALSE,
-              help = "Skip one-way ANOVA (faster runs) [default= %default]")
+              help = "Skip one-way ANOVA (faster runs) [default= %default]"),
+  make_option(c("--group-color1"), type = "character", default = "#D55E00",
+              help = "Color for up-regulated / over-expressed group (hex or name) [default= %default]"),
+  make_option(c("--group-color2"), type = "character", default = "#0072B2",
+              help = "Color for down-regulated / under-expressed group (hex or name) [default= %default]")
 )
 
 opt_parser = OptionParser(option_list=option_list)
@@ -90,6 +94,8 @@ heatmap_top_n <- opt$`heatmap-top-n`
 gsea_ont <- opt$`gsea-ont`
 skip_gsea <- opt$`skip-gsea`
 skip_anova <- opt$`skip-anova`
+group_color1 <- opt$`group-color1`
+group_color2 <- opt$`group-color2`
 
 if (is.null(runID) || is.null(countData) || is.null(samplesheet)) {
   print_help(opt_parser)
@@ -269,7 +275,7 @@ results <- vector("list", length(comparisons))
 for (i in seq_along(comparisons)) {
 
   # run the analysis on the current samples
-  curr_result <- run_analysis(comparisons[[i]], limma_params, intensity_matrix, out_dirs, intensity_matrix_raw, ont_option = gsea_ont, skip_gsea = skip_gsea, protein_metadata = protein_metadata)
+  curr_result <- run_analysis(comparisons[[i]], limma_params, intensity_matrix, out_dirs, intensity_matrix_raw, ont_option = gsea_ont, skip_gsea = skip_gsea, protein_metadata = protein_metadata, color1 = group_color1, color2 = group_color2)
   
   # save the current results if successful
   if (!is.null(curr_result)){
@@ -359,7 +365,7 @@ if (skip_anova) {
     Adj_P_Value = signif(anova_padj, 3),
     stringsAsFactors = FALSE
   ) %>% dplyr::arrange(Adj_P_Value)
-  write.csv(anova_df, file.path(out_dirs$de_data, "anova_results.csv"), row.names = FALSE)
+  write.csv(anova_df, file.path(out_dirs$anova, "global_anova.csv"), row.names = FALSE)
 } else {
   n_anova_sig   <- NULL
   n_anova_total <- NULL
@@ -370,7 +376,16 @@ anova_summary <- list(n_groups = n_anova_groups, n_sig = n_anova_sig, n_total = 
 # Generate global heatmap
 # ==========================
 print('Generating global heatmap')
-generate_global_heatmap(intensity_matrix, out_dirs, top_n = heatmap_top_n)
+generate_global_heatmap(intensity_matrix, out_dirs, top_n = heatmap_top_n,
+                        color1 = group_color1, color2 = group_color2)
+
+# ==========================
+# Generate imputation figures
+# ==========================
+print('Generating imputation figures')
+generate_imputation_figures(intensity_matrix_raw, intensity_matrix, out_dirs,
+                            molecule_label = "protein",
+                            color1 = group_color1, color2 = group_color2)
 
 # ==========================
 # Save RDS
@@ -379,7 +394,7 @@ print('Save RDS')
 #rds <- list(results, comparisons, out_dirs, pca_plot, fig, fig3D)
 imputation_params <- list(method = imputation_method, q = imputation_q)
 protein_counts <- list(total = n_proteins_total, no_crap = n_proteins_no_crap, not_imputable = n_peptides_not_imputable)
-analysis_params <- list(genome = genome, gsea_ont = gsea_ont, skip_gsea = skip_gsea, heatmap_top_n = heatmap_top_n)
+analysis_params <- list(genome = genome, gsea_ont = gsea_ont, skip_gsea = skip_gsea, heatmap_top_n = heatmap_top_n, color1 = group_color1, color2 = group_color2)
 rds <- list(results, comparisons, out_dirs, pca_plot, intensity_matrix_raw, intensity_matrix, imputation_params, sample_info, protein_counts, analysis_params, anova_summary)
 timestamp <- format(Sys.time(), "%Y%m%d_%H%M%S")
 #rds_path <- glue("analysis_results_{timestamp}.rds")
