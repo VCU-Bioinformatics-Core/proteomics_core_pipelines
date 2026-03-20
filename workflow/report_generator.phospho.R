@@ -593,13 +593,20 @@ if (i <= length(results) && !is.null(results[[{i}]]) && !is.null(results[[{i}]]$
 }}
 ```
 
-```{{r top-up-daps-{i} }}
+```{{r top-up-daps-{i}, results="asis"}}
 
 if (dap_flags[1] > 0){{
     #DT::datatable(top_up %>% select(SYMBOL, log2FoldChange, pvalue, padj, GENENAME),
     #           caption = "Top Up Regulated Proteins")
 
-    cat("**hgnc_symbol** is the gene symbol; **uniprot_id** is the UniProt accession; **peptide_id** identifies the specific phosphopeptide. **logFC** is the log\u2082 fold-change — positive values indicate higher abundance in the experimental group. **pvalue** is the raw limma p-value; **padj** is the BH-adjusted p-value. **imputation_category** describes how many values were imputed: *complete-data* (none), *imputation-low* (1), *imputation-medium* (2), or *imputation-high* (3+).\n\n")
+    cat("- Description: differentially abundant phosphopeptides table from the limma moderated t-test\n")
+    cat("- **hgnc_symbol**: gene symbol\n")
+    cat("- **uniprot_id**: UniProt accession identifier\n")
+    cat("- **peptide_id**: specific phosphopeptide identifier\n")
+    cat("- **logFC**: log\u2082 fold-change (experimental / control) — positive values indicate higher abundance in the experimental group\n")
+    cat("- **pvalue**: raw p-value from the limma moderated t-test\n")
+    cat("- **padj**: Benjamini-Hochberg FDR-adjusted p-value\n")
+    cat("- **imputation_category**: extent of missing value imputation — *complete-data* (none), *imputation-low* (1), *imputation-medium* (2), *imputation-high* (3+)\n\n")
 
     DT::formatSignif(
       DT::datatable(top_up %>% dplyr::select(dplyr::any_of(c("hgnc_symbol", "uniprot_id", "peptide_id")), logFC, pvalue, padj, imputation_category),
@@ -612,7 +619,7 @@ if (dap_flags[1] > 0){{
   
 ```
 
-```{{r top-down-daps-{i} }}
+```{{r top-down-daps-{i}, results="asis"}}
 
 if (dap_flags[2] > 0){{
   # DT::datatable(top_down %>% select(SYMBOL, log2FoldChange, pvalue, padj, GENENAME),
@@ -676,7 +683,15 @@ if (!isTRUE(analysis_params$skip_gsea)) {{
                p.adjust=formatC(p.adjust, format="e", digits=2),
                qvalue=formatC(qvalue, format="e", digits=2))
     if (nrow(gsea_results) > 0) {{
-      cat("**ID** and **Description** identify the Gene Ontology term. **setSize** is the number of genes in the set present in the analysis. **enrichmentScore** is the raw enrichment score; **NES** (Normalized Enrichment Score) is comparable across gene sets of different sizes. **pvalue** is the nominal p-value; **p.adjust** is the BH-adjusted p-value; **qvalue** is the FDR q-value.\n\n")
+      cat("- Description: Gene Set Enrichment Analysis results table\n")
+      cat("- **ID**: Gene Ontology term identifier\n")
+      cat("- **Description**: Gene Ontology term name\n")
+      cat("- **setSize**: number of genes in the set present in the analysis\n")
+      cat("- **enrichmentScore**: raw enrichment score\n")
+      cat("- **NES**: Normalized Enrichment Score — comparable across gene sets of different sizes\n")
+      cat("- **pvalue**: nominal p-value\n")
+      cat("- **p.adjust**: Benjamini-Hochberg adjusted p-value\n")
+      cat("- **qvalue**: FDR q-value\n\n")
       DT::datatable(gsea_results %>%
                    dplyr::select(ID, Description, setSize, enrichmentScore, NES, pvalue, p.adjust, qvalue) %>%
                    head(20),
@@ -755,9 +770,7 @@ Please include the following statements in your acknowledgements manuscript sect
 - “High Performance Computing resources provided by the High Performance Research Computing (HPRC) core facility at Virginia Commonwealth University (https://hprc.vcu.edu) were used for conducting the research reported in this work.”  
 '
   # pasting together these last sections
-  # skipping IPA for now but will add on later is there is interest
-  #rmd_content <- paste0(rmd_content, ipa_content, manuscript_content)
-  rmd_content <- paste0(rmd_content, manuscript_content)
+  rmd_content <- paste0(rmd_content, ipa_content, manuscript_content)
   
   # Write the R Markdown file
   #fn <- glue('{report_prefix}_{timestamp}.Rmd')
