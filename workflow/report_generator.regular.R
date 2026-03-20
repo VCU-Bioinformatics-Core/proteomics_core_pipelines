@@ -227,44 +227,55 @@ ggplot(bp_long, aes(x = sample, y = intensity)) +
 
 ')
 
-rmd_content <- paste0(rmd_content, '
-### Query Protein/Peptide
+imputation_content <- '\n
+### Imputation Reporting
 
-Use the search boxes below to look up any protein. The **Significant Comparisons**
-column lists every comparison in which it was significant (adjusted p-value < 0.05,
-|FC| >= 1.5), or "Not Significant" if it did not meet that threshold in any comparison.
-Use the column search boxes (row below the header) to filter by protein name or
-UniProt ID. Multiple proteins can be found by typing partial matches — each column
-search box filters independently.
+### Parameters
 
-```{r query-protein}
-all_rows <- dplyr::bind_rows(lapply(seq_along(comparisons), function(i) {
-  res <- results[[i]]$limma
-  if (is.null(res)) return(NULL)
-  res$comparison_name <- comparisons[[i]]$name
-  res$is_sig <- !is.na(res$adj.P.Val) & res$adj.P.Val < 0.05 & abs(res$logFC) >= 0.58
-  res[, intersect(c("gene_name", "uniprotswissprot", "comparison_name", "is_sig"), colnames(res))]
-}))
-query_df <- all_rows %>%
-  dplyr::group_by(gene_name, uniprotswissprot) %>%
-  dplyr::summarise(
-    Significant_Comparisons = {
-      sig_comps <- comparison_name[is_sig]
-      if (length(sig_comps) == 0) "Not Significant" else paste(sig_comps, collapse = "<br>")
-    },
-    .groups = "drop"
-  ) %>%
-  dplyr::arrange(Significant_Comparisons == "Not Significant", gene_name) %>%
-  dplyr::rename(dplyr::any_of(c("Protein Name" = "gene_name", "UniProt ID" = "uniprotswissprot")))
-DT::datatable(query_df,
-              caption = "Protein significance across all comparisons",
-              rownames = FALSE,
-              escape = FALSE,
-              filter = "top",
-              options = list(pageLength = 15, dom = "tip"))
+```{r imputation-params}
+imp_params <- rds_data[[7]]
+imp_method <- if (!is.null(imp_params)) imp_params$method else "unknown"
+imp_q      <- if (!is.null(imp_params)) imp_params$q      else NA
+
+param_table <- data.frame(
+  Parameter = c("Package", "Method", "q (quantile cutoff)"),
+  Value     = c("DEP", imp_method, as.character(imp_q)),
+  stringsAsFactors = FALSE
+)
+kable(param_table, caption = "Imputation parameters used in this analysis")
 ```
 
-')
+The histograms below show the distribution of all log2 intensity values across
+all proteins. **Observed** (blue) values are those measured directly, while
+**Imputed** (orange) values are those that were missing and filled in. Imputed
+values typically appear as a secondary peak shifted towards the lower end of
+the distribution, reflecting the left-censored nature of missing-not-at-random
+(MNAR) data in proteomics.
+
+```{r imputation-histogram, out.width="100%"}
+knitr::include_graphics(file.path(out_dirs$imputation, "global_imputation_histogram.png"))
+```
+
+### Number of Missing Values per Sample
+
+```{r imputation-missing-per-sample, out.width="100%"}
+knitr::include_graphics(file.path(out_dirs$imputation, "global_imputation_missing_per_sample.png"))
+```
+
+### Total Imputed Values per Protein
+
+```{r imputation-total-counts, out.width="100%"}
+knitr::include_graphics(file.path(out_dirs$imputation, "global_imputation_total_counts.png"))
+```
+
+### Distribution of Imputed Values per Protein
+
+```{r imputation-per-protein, out.width="100%"}
+knitr::include_graphics(file.path(out_dirs$imputation, "global_imputation_distribution.png"))
+```
+'
+
+rmd_content <- paste0(rmd_content, imputation_content)
 
 rmd_content <- paste0(rmd_content, glue('
 ### Principal Component Analysis
@@ -278,10 +289,9 @@ separate into distinct clusters.
 pca_plot
 ```
 
-### One-Way ANOVA
-
 ```{{r anova-analysis, results="asis"}}
 if (!isTRUE(anova_summary$skipped)) {{
+  cat("### One-Way ANOVA\n\n")
   if (anova_summary$n_groups > 2) {{
     anova_path <- file.path(out_dirs$anova, "global_anova.csv")
     if (file.exists(anova_path)) {{
@@ -383,7 +393,39 @@ for each case.
 ```{{r display-summary-table}}
 # Display the summary table
 kable(summary_table, caption = "")
-```\n'))
+```
+
+### Query Protein/Peptide
+
+Use the search boxes below to look up any protein. **Protein Name** is the gene symbol; **UniProt ID** is the Swiss-Prot accession. **Significant Comparisons** lists every comparison in which the protein was significant (adj. p-value < 0.05 and |FC| ≥ 1.5), or "Not Significant" if it did not meet that threshold in any comparison. Use the column search boxes (row below the header) to filter by protein name or UniProt ID — each column search box filters independently.
+
+```{{r query-protein}}
+all_rows <- dplyr::bind_rows(lapply(seq_along(comparisons), function(i) {{
+  res <- results[[i]]$limma
+  if (is.null(res)) return(NULL)
+  res$comparison_name <- comparisons[[i]]$name
+  res$is_sig <- !is.na(res$adj.P.Val) & res$adj.P.Val < 0.05 & abs(res$logFC) >= 0.58
+  res[, intersect(c("gene_name", "uniprotswissprot", "comparison_name", "is_sig"), colnames(res))]
+}}))
+query_df <- all_rows %>%
+  dplyr::group_by(gene_name, uniprotswissprot) %>%
+  dplyr::summarise(
+    Significant_Comparisons = {{
+      sig_comps <- comparison_name[is_sig]
+      if (length(sig_comps) == 0) "Not Significant" else paste(sig_comps, collapse = "<br>")
+    }},
+    .groups = "drop"
+  ) %>%
+  dplyr::arrange(Significant_Comparisons == "Not Significant", gene_name) %>%
+  dplyr::rename(dplyr::any_of(c("Protein Name" = "gene_name", "UniProt ID" = "uniprotswissprot")))
+DT::datatable(query_df,
+              caption = "Protein significance across all comparisons",
+              rownames = FALSE,
+              escape = FALSE,
+              filter = "top",
+              options = list(pageLength = 15, dom = "tip"))
+```
+\n'))
   
   # Add detailed sections for each comparison
   for (i in seq_along(comparisons)) {
@@ -519,7 +561,9 @@ if (i <= length(results) && !is.null(results[[{i}]]) && !is.null(results[[{i}]]$
 if (dap_flag > 0){{
   # DT::datatable(top_down %>% select(ENSEMBL_ID, SYMBOL, log2FoldChange, pvalue, padj, GENENAME),
   #             caption = "Top Down Regulated Proteins")
-  
+
+  cat("**Protein Name** and **UniProt ID** identify the protein. **logFC** is the log\u2082 fold-change between experimental and control groups — positive values indicate higher abundance in the experimental group. **pvalue** is the raw p-value from the limma moderated t-test; **padj** is the Benjamini-Hochberg FDR-adjusted p-value. **imputation_category** describes how many intensity values were imputed: *complete-data* (none), *imputation-low* (1 missing), *imputation-medium* (2 missing), or *imputation-high* (3+ missing).\n\n")
+
   DT::datatable(
     combined_sigs %>%
       dplyr::select(dplyr::any_of(c("gene_name", "uniprotswissprot")),
@@ -535,43 +579,47 @@ if (dap_flag > 0){{
   
 ```
 
-**Gene Set Enrichment Analysis**
-
-- Description: Gene Set Enrichment Analysis using (GO) terms with both a bubble plot and
- table
-- X-axis: the protein ratio (# genes related to Gene Set / total number of significant genes) to which
-the term is enriched
-- Y-axis: a given Gene Set
-
-```{{r gsea-{i}, out.width="100%"}}
-# Display GSEA results from file
-gsea_path <- file.path(out_dirs$gsea, paste0("{name}_GSEA.png"))
-if (file.exists(gsea_path)) {{
-  knitr::include_graphics(gsea_path)
+```{{r gsea-header-{i}, results="asis"}}
+if (!isTRUE(analysis_params$skip_gsea)) {{
+  cat("**Gene Set Enrichment Analysis**\n\n")
+  cat("- Description: Gene Set Enrichment Analysis using (GO) terms with both a bubble plot and table\n")
+  cat("- X-axis: the protein ratio (# genes related to Gene Set / total number of significant genes) to which the term is enriched\n")
+  cat("- Y-axis: a given Gene Set\n\n")
 }}
 ```
 
+```{{r gsea-{i}, out.width="100%"}}
+# Display GSEA results from file
+if (!isTRUE(analysis_params$skip_gsea)) {{
+  gsea_path <- file.path(out_dirs$gsea, paste0("{name}_GSEA.png"))
+  if (file.exists(gsea_path)) {{
+    knitr::include_graphics(gsea_path)
+  }}
+}}
+```
 
 ```{{r gsea-table-{i} }}
 # Display top GSEA results
-if (!is.null(results[[{i}]]) && !is.null(results[[{i}]]$gsea)) {{
-  gsea_results <- as.data.frame(results[[{i}]]$gsea) %>%
-      mutate(enrichmentScore=formatC(enrichmentScore, format="e", digits=2),
-             NES=formatC(NES, format="e", digits=2),
-             p.adjust=formatC(p.adjust, format="e", digits=2),
-             qvalue=formatC(qvalue, format="e", digits=2))
-  if (nrow(gsea_results) > 0) {{
-    DT::datatable(gsea_results %>%
-                 dplyr::select(ID, Description, setSize, enrichmentScore, NES, pvalue, p.adjust, qvalue) %>%
-                 head(20),
-                 caption = "Top enriched gene sets")
+if (!isTRUE(analysis_params$skip_gsea)) {{
+  if (!is.null(results[[{i}]]) && !is.null(results[[{i}]]$gsea)) {{
+    gsea_results <- as.data.frame(results[[{i}]]$gsea) %>%
+        mutate(enrichmentScore=formatC(enrichmentScore, format="e", digits=2),
+               NES=formatC(NES, format="e", digits=2),
+               p.adjust=formatC(p.adjust, format="e", digits=2),
+               qvalue=formatC(qvalue, format="e", digits=2))
+    if (nrow(gsea_results) > 0) {{
+      cat("**ID** and **Description** identify the Gene Ontology term. **setSize** is the number of genes in the set present in the analysis. **enrichmentScore** is the raw enrichment score; **NES** (Normalized Enrichment Score) is comparable across gene sets of different sizes. **pvalue** is the nominal p-value; **p.adjust** is the BH-adjusted p-value; **qvalue** is the FDR q-value.\n\n")
+      DT::datatable(gsea_results %>%
+                   dplyr::select(ID, Description, setSize, enrichmentScore, NES, pvalue, p.adjust, qvalue) %>%
+                   head(20),
+                   caption = "Top enriched gene sets")
+    }} else {{
+      cat("No significant enriched gene sets found")
+    }}
   }} else {{
-    cat("No significant enriched gene sets found")
+    cat("No GSEA results available for this comparison")
   }}
-}} else {{
-  cat("No GSEA results available for this comparison")
 }}
-
 ```')
     
     rmd_content <- paste0(rmd_content, comparison_section)
@@ -593,54 +641,6 @@ We host an annual hands-on training for IPA at the beginning of the fall semeste
 email BISR if you would like to be a part of this training. In the meantime, QIAGEN has a
 playlist of user-friendly tutorials available on Youtube titled “QIAGEN IPA Training
 Videos” the **Qiagen Digital Insights Youtube** page.'
-
-imputation_content <- '\n
-## Imputation Reporting
-
-### Parameters
-
-```{r imputation-params}
-imp_params <- rds_data[[7]]
-imp_method <- if (!is.null(imp_params)) imp_params$method else "unknown"
-imp_q      <- if (!is.null(imp_params)) imp_params$q      else NA
-
-param_table <- data.frame(
-  Parameter = c("Package", "Method", "q (quantile cutoff)"),
-  Value     = c("DEP", imp_method, as.character(imp_q)),
-  stringsAsFactors = FALSE
-)
-kable(param_table, caption = "Imputation parameters used in this analysis")
-```
-
-The histograms below show the distribution of all log2 intensity values across
-all proteins. **Observed** (blue) values are those measured directly, while
-**Imputed** (orange) values are those that were missing and filled in. Imputed
-values typically appear as a secondary peak shifted towards the lower end of
-the distribution, reflecting the left-censored nature of missing-not-at-random
-(MNAR) data in proteomics.
-
-```{r imputation-histogram, out.width="100%"}
-knitr::include_graphics(file.path(out_dirs$imputation, "global_imputation_histogram.png"))
-```
-
-### Number of Missing Values per Sample
-
-```{r imputation-missing-per-sample, out.width="100%"}
-knitr::include_graphics(file.path(out_dirs$imputation, "global_imputation_missing_per_sample.png"))
-```
-
-### Total Imputed Values per Protein
-
-```{r imputation-total-counts, out.width="100%"}
-knitr::include_graphics(file.path(out_dirs$imputation, "global_imputation_total_counts.png"))
-```
-
-### Distribution of Imputed Values per Protein
-
-```{r imputation-per-protein, out.width="100%"}
-knitr::include_graphics(file.path(out_dirs$imputation, "global_imputation_distribution.png"))
-```
-'
 
 manuscript_content <- '\n
 ## Manuscript-Ready Text
@@ -689,7 +689,7 @@ Please include the following statements in your acknowledgements manuscript sect
   # pasting together these last sections
   # skipping IPA for now but will add on later is there is interest
   #rmd_content <- paste0(rmd_content, ipa_content, manuscript_content)
-  rmd_content <- paste0(rmd_content, imputation_content, manuscript_content)
+  rmd_content <- paste0(rmd_content, manuscript_content)
   
   # Write the R Markdown file
   #fn <- glue('{report_prefix}_{timestamp}.Rmd')

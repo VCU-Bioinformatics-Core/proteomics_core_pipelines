@@ -397,6 +397,29 @@ generate_imputation_figures(intensity_matrix_raw, intensity_matrix, out_dirs,
                             color1 = group_color1, color2 = group_color2)
 
 # ==========================
+# Master query table
+# ==========================
+print('Building master query table')
+all_rows <- dplyr::bind_rows(lapply(seq_along(comparisons), function(i) {
+  res <- results[[i]]$limma
+  if (is.null(res)) return(NULL)
+  res$comparison_name <- comparisons[[i]]$name
+  res$is_sig <- !is.na(res$adj.P.Val) & res$adj.P.Val < 0.05 & abs(res$logFC) >= 0.58
+  res[, intersect(c("peptide_id", "hgnc_symbol", "uniprot_id", "comparison_name", "is_sig"), colnames(res))]
+}))
+query_df <- all_rows %>%
+  dplyr::group_by(dplyr::across(dplyr::any_of(c("peptide_id", "hgnc_symbol", "uniprot_id")))) %>%
+  dplyr::summarise(
+    Significant_Comparisons = {
+      sig_comps <- comparison_name[is_sig]
+      if (length(sig_comps) == 0) "Not Significant" else paste(sig_comps, collapse = "; ")
+    },
+    .groups = "drop"
+  ) %>%
+  dplyr::arrange(Significant_Comparisons == "Not Significant", peptide_id)
+write.csv(query_df, file.path(out_dirs$de_data, "master_query_table.csv"), row.names = FALSE)
+
+# ==========================
 # Save RDS
 # ==========================
 print('Save RDS')
