@@ -94,7 +94,8 @@ color2 <- if (!is.null(analysis_params$color2)) analysis_params$color2 else "#00
 **Report Guide:** This report details the analysis pipeline, intermediate processing steps, and
 final outputs. We begin with **Global Sample Exploration**, which covers protein-level
 normalization, imputation, and sample relationships visualized through PCA and global heatmaps.
-The **Differential Abundance Results** follow, starting with a master "Query" table for a quick
+The **Differential Abundance Results** follow, starting with a master "Query Differential Expression Hits Across All Analyses
+" table for a quick
 cross-comparison of significant hits. Detailed subsections for each comparison provide volcano
 plots, MA plots, heatmaps, and comprehensive protein tables. For deeper dives into the raw data
 or downstream Ingenuity Pathway Analysis (IPA), please see the output directories or the
@@ -107,15 +108,18 @@ or downstream Ingenuity Pathway Analysis (IPA), please see the output directorie
 
 For this analysis we used the following steps:
 
-1. **Differential abundance**: Limma was used to identify differentially abundant proteins.
-2. **Functional analysis**: Gene Set Enrichment Analysis (GSEA) was performed using clusterProfiler.
-3. **Thresholds**: Proteins with adjusted p-value < 0.05 and |FC| >= 1.5 (equivalent to log2(FC) = 0.58) were considered differentially abundant.
+1. **Imputation**: Missing values were imputed prior to differential abundance testing.
+2. **Differential abundance**: Limma was used to identify differentially abundant proteins.
+3. **Functional analysis**: Gene Set Enrichment Analysis (GSEA) was performed using clusterProfiler.
+4. **Thresholds**: Proteins with adjusted p-value < 0.05 and |FC| >= 1.5 (equivalent to log2(FC) = 0.58) were considered differentially abundant.
 
 As part of this pipeline we produce the following files for your downstream use:
 
 ```
 .
 ├── data
+│   ├── anova
+│   │   └── global_anova.csv
 │   ├── de_data
 │   │   └── [comparison]_limma.csv
 │   └── gsea_data
@@ -148,7 +152,7 @@ analyses <- data.frame(
   ),
   stringsAsFactors = FALSE
 )
-knitr::kable(analyses, col.names = c("Level", "Analysis", "Status"))
+knitr::kable(analyses, col.names = c("Level", "Step", "Status"))
 ```
 
 ### Analysis Parameters
@@ -189,7 +193,9 @@ if (!is.null(analysis_params)) {{
 
 ## Global Sample Exploration
 
-### Global Summary
+### Peptide Filtering Summary
+
+The following table tracks how many peptides remain at each stage of the filtering pipeline — from the initial search results through contaminant (cRAP) removal, phosphopeptide selection, and imputation eligibility checks. Only peptides that pass all filters are carried forward into normalization and differential abundance testing.
 
 ```{{r global-summary}}
 if (!is.null(peptide_counts)) {{
@@ -211,6 +217,8 @@ if (!is.null(peptide_counts)) {{
 
 rmd_content <- paste0(rmd_content, '
 ### Peptide Levels Across Observed Values Per Sample
+
+These boxplots display the distribution of raw (pre-imputation) observed intensities for each sample. Only measured values are included — missing values are excluded. Comparable median intensities and spread across samples indicate consistent sample loading and data quality, while large deviations may suggest normalization issues or outlier samples.
 
 ```{r peptide-boxplot, fig.width=max(8, ncol(intensity_matrix_raw) * 0.6), fig.height=5}
 # Reshape raw matrix (pre-imputation) to long format, keeping only observed (non-NA) values
@@ -235,6 +243,8 @@ ggplot(bp_long, aes(x = sample, y = intensity)) +
 
 imputation_content <- '\n
 ### Imputation Reporting
+
+This section documents the imputation strategy applied to handle missing values in the dataset. The parameters used are recorded for reproducibility, followed by a series of diagnostic plots that characterize the extent and distribution of imputed values across samples and phosphopeptides.
 
 ### Parameters
 
@@ -288,17 +298,23 @@ kable(counts_table, caption = "Observed vs. imputed value counts")
 
 ### Number of Missing Values per Sample
 
+This bar chart shows how many missing values were present in each sample before imputation. Samples with a disproportionately high number of missing values may indicate poor sample quality or technical issues and should be reviewed carefully.
+
 ```{r imputation-missing-per-sample, out.width="100%"}
 knitr::include_graphics(file.path(out_dirs$imputation, "global_imputation_missing_per_sample.png"))
 ```
 
 ### Total Imputed Values per Peptide
 
+This chart summarizes how many values were imputed for each phosphopeptide across all samples. Peptides with a high proportion of imputed values should be interpreted with caution, as their quantification relies heavily on modeled rather than measured intensities.
+
 ```{r imputation-total-counts, out.width="100%"}
 knitr::include_graphics(file.path(out_dirs$imputation, "global_imputation_total_counts.png"))
 ```
 
 ### Distribution of Imputed Values per Peptide
+
+This plot shows the per-peptide distribution of imputed value counts. It helps identify whether imputation is concentrated in a small subset of peptides or spread broadly across the dataset, informing confidence in downstream differential abundance results.
 
 ```{r imputation-per-peptide, out.width="100%"}
 knitr::include_graphics(file.path(out_dirs$imputation, "global_imputation_distribution.png"))
@@ -307,7 +323,7 @@ knitr::include_graphics(file.path(out_dirs$imputation, "global_imputation_distri
 
 rmd_content <- paste0(rmd_content, imputation_content)
 
-rmd_content <- paste0(rmd_content, glue('
+rmd_content <- paste0(rmd_content, glue('\n
 ### Principal Component Analysis
 
 PCA was performed to visualize the overall patterns of phosphopeptide levels across
@@ -478,13 +494,13 @@ DT::datatable(query_df,
 
 - Description: main visualization for differential abundance results. This rendition uses
   an **orange horizontal line** to indicate the significant p-value threshold of \\< 0.05. Therefore,
-  every point (protein) above that orange line can be considered statistically signficant (note:
+  every point (protein) above that orange line can be considered statistically significant (note:
   before FDR correction). In addition, the **black vertical lines** indicate 1.5 fold change.
-  Proteins highlighted in orange are up-regulated in group1 compared to the group2. Proteins
-  highlighted in blue are down-regulated in group1 compared to group2. Proteins in gray, do
-  not meet the thresholds for both logFC and p-value.
-- Data point: a protein
-- X-axis: log2 fold-change (group1/group2)
+  Phosphopeptides highlighted in **orange** are more abundant in **{exp}** relative to **{ctrl}** (positive logFC).
+  Phosphopeptides highlighted in **blue** are more abundant in **{ctrl}** relative to **{exp}** (negative logFC).
+  Phosphopeptides in gray do not meet the thresholds for both logFC and p-value.
+- Data point: a phosphopeptide
+- X-axis: log2 fold-change ({exp} / {ctrl}) — positive = higher in {exp}
 - Y-axis: -log10(p-value)
 
 ```{{r volcano-{i}, out.width="90%" }}
@@ -537,10 +553,7 @@ if (file.exists(heatmap_path)) {{
 ```
 
 
-**Top Differentially Abundant Proteins**
-
-Table of the top differential abundant proteins with both nominal (**pvalue**)
-and adjusted pvalues (**padj**).
+#### Significant DAPs by Imputation Category
 
 ```{{r top-daps-{i} }}
 # Display top DAPs table
@@ -585,6 +598,8 @@ if (sum(dap_flags) == 0) {{
 
 ```
 
+This table breaks down all significant phosphopeptides (adj. p-value < 0.05 and |FC| ≥ 1.5) by their imputation category, giving an overall picture of how much the significant hits relied on imputed values. Peptides classified as *complete-data* had no missing values, while *imputation-low/medium/high* indicate increasing levels of imputation. *on-off* is a special case where the peptide is fully observed in one group but completely missing in the other, representing a presence/absence pattern rather than a continuous abundance difference.
+
 ```{{r imputation-category-summary-{i} }}
 if (i <= length(results) && !is.null(results[[{i}]]) && !is.null(results[[{i}]]$limma)) {{
   sig_df <- results[[{i}]]$limma %>%
@@ -596,6 +611,11 @@ if (i <= length(results) && !is.null(results[[{i}]]) && !is.null(results[[{i}]]$
   }}
 }}
 ```
+
+#### Table of Differentially Abundant Proteins
+
+Table of the top differentially abundant proteins with both nominal (**pvalue**)
+and adjusted p-values (**padj**).
 
 ```{{r top-up-daps-{i}, results="asis"}}
 

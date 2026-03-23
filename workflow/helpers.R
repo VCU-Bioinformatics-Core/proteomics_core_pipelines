@@ -177,17 +177,33 @@ generate_volcano_protein <- function(data, exp_name, ctrl_name, p_thresh = 0.05,
     ) %>%
     filter(!is.na(logFC), !is.na(P.Value), is.finite(logFC), is.finite(P.Value))
 
-  volcano_plot <- labeled_dat %>%
-    ggplot(aes(x = logFC, y = -log10(P.Value), color = color_tag)) +
-    geom_point(alpha = 0.5) +
-    theme_minimal() +
-    geom_label_repel(aes(label = label_display), max.overlaps = Inf, show.legend = FALSE) +
-    scale_color_manual(values = c(color1, color2)) +
-    geom_hline(yintercept = -log10(p_thresh), col = color1, linetype = 2) +
+  ns_dat  <- labeled_dat %>% filter(is.na(color_tag))
+  sig_dat <- labeled_dat %>% filter(!is.na(color_tag))
+  max_lfc <- max(abs(labeled_dat$logFC), na.rm = TRUE)
+
+  volcano_plot <- ggplot() +
+    geom_point(data = ns_dat,  aes(x = logFC, y = -log10(P.Value)),
+               color = "gray70", alpha = 0.4) +
+    geom_point(data = sig_dat, aes(x = logFC, y = -log10(P.Value), color = logFC),
+               alpha = 0.7) +
+    scale_color_gradientn(
+      colours = c(color2, "white", color1),
+      limits  = c(-max_lfc, max_lfc),
+      name    = paste0("higher in\n", exp_name, "\n\u2191\n\n\u2193\nhigher in\n", ctrl_name),
+      guide   = guide_colorbar(direction = "vertical",
+                               title.position = "right",
+                               title.hjust = 0.5,
+                               title.theme = element_text(angle = 90, hjust = 0.5, size = 9))
+    ) +
+    geom_label_repel(data = labeled_dat %>% filter(!is.na(label_display)),
+                     aes(x = logFC, y = -log10(P.Value), label = label_display),
+                     max.overlaps = Inf, show.legend = FALSE) +
+    geom_hline(yintercept = -log10(p_thresh), col = "gray40", linetype = 2) +
     geom_vline(xintercept = c(-lfc, lfc)) +
-    theme(legend.title = element_blank()) +
-    labs(x = "Log2 Fold-Change (FC)",
-         y = "-log10( P-value )",
+    theme_minimal() +
+    theme(legend.position = "right") +
+    labs(x = paste0("log2 fold-change (", exp_name, " / ", ctrl_name, ")"),
+         y = "-log10(P-value)",
          title = create_comparison_name(exp_name, ctrl_name, "Differentially expressed genes - ")
     )
   return(list(plot = volcano_plot, highlighted_ids = c(top_10_genes_up, top_10_genes_dn)))
@@ -244,17 +260,33 @@ generate_volcano_phospho <- function(data, exp_name, ctrl_name, p_thresh = 0.05,
     ) %>%
     filter(!is.na(logFC), !is.na(P.Value), is.finite(logFC), is.finite(P.Value))
 
-  volcano_plot <- labeled_dat %>%
-    ggplot(aes(x = logFC, y = -log10(P.Value), color = color_tag)) +
-    geom_point(alpha = 0.5) +
-    theme_minimal() +
-    geom_label_repel(aes(label = label_display), max.overlaps = Inf, show.legend = FALSE) +
-    scale_color_manual(values = c(color1, color2)) +
-    geom_hline(yintercept = -log10(p_thresh), col = color1, linetype = 2) +
+  ns_dat  <- labeled_dat %>% filter(is.na(color_tag))
+  sig_dat <- labeled_dat %>% filter(!is.na(color_tag))
+  max_lfc <- max(abs(labeled_dat$logFC), na.rm = TRUE)
+
+  volcano_plot <- ggplot() +
+    geom_point(data = ns_dat,  aes(x = logFC, y = -log10(P.Value)),
+               color = "gray70", alpha = 0.4) +
+    geom_point(data = sig_dat, aes(x = logFC, y = -log10(P.Value), color = logFC),
+               alpha = 0.7) +
+    scale_color_gradientn(
+      colours = c(color2, "white", color1),
+      limits  = c(-max_lfc, max_lfc),
+      name    = paste0("higher in\n", exp_name, "\n\u2191\n\n\u2193\nhigher in\n", ctrl_name),
+      guide   = guide_colorbar(direction = "vertical",
+                               title.position = "right",
+                               title.hjust = 0.5,
+                               title.theme = element_text(angle = 90, hjust = 0.5, size = 9))
+    ) +
+    geom_label_repel(data = labeled_dat %>% filter(!is.na(label_display)),
+                     aes(x = logFC, y = -log10(P.Value), label = label_display),
+                     max.overlaps = Inf, show.legend = FALSE) +
+    geom_hline(yintercept = -log10(p_thresh), col = "gray40", linetype = 2) +
     geom_vline(xintercept = c(-lfc, lfc)) +
-    theme(legend.title = element_blank()) +
-    labs(x = "Log2 Fold-Change (FC)",
-         y = "-log10( P-value )",
+    theme_minimal() +
+    theme(legend.position = "right") +
+    labs(x = paste0("log2 fold-change (", exp_name, " / ", ctrl_name, ")"),
+         y = "-log10(P-value)",
          title = create_comparison_name(exp_name, ctrl_name, "Differentially expressed genes - ")
     )
   return(list(plot = volcano_plot, highlighted_ids = c(top_10_genes_up, top_10_genes_dn)))
@@ -284,18 +316,32 @@ generate_ma_plot_protein <- function(data, exp_name, ctrl_name, highlighted_ids 
       ))
   } else NULL
 
-  p <- ggplot(ma_df, aes(x = AveExpr, y = logFC, color = sig)) +
-    geom_point(alpha = 0.4, size = 1) +
-    scale_color_manual(values = c("Up" = color1, "Down" = color2, "NS" = "gray60"),
-                       name = NULL) +
+  ns_df  <- ma_df %>% filter(sig == "NS")
+  sig_df <- ma_df %>% filter(sig != "NS")
+  max_lfc <- max(abs(ma_df$logFC), na.rm = TRUE)
+
+  p <- ggplot() +
+    geom_point(data = ns_df,  aes(x = AveExpr, y = logFC),
+               color = "gray60", alpha = 0.3, size = 1) +
+    geom_point(data = sig_df, aes(x = AveExpr, y = logFC, color = logFC),
+               alpha = 0.6, size = 1) +
+    scale_color_gradientn(
+      colours = c(color2, "white", color1),
+      limits  = c(-max_lfc, max_lfc),
+      name    = paste0("higher in\n", exp_name, "\n\u2191\n\n\u2193\nhigher in\n", ctrl_name),
+      guide   = guide_colorbar(direction = "vertical",
+                               title.position = "right",
+                               title.hjust = 0.5,
+                               title.theme = element_text(angle = 90, hjust = 0.5, size = 9))
+    ) +
     geom_hline(yintercept = 0,    linetype = "dashed", color = "black") +
     geom_hline(yintercept =  lfc, linetype = "dotted", color = "gray40") +
     geom_hline(yintercept = -lfc, linetype = "dotted", color = "gray40") +
     labs(x = "Average log2 intensity (AveExpr)",
-         y = "log2 fold-change",
+         y = paste0("log2 fold-change (", exp_name, " / ", ctrl_name, ")"),
          title = create_comparison_name(exp_name, ctrl_name, "MA Plot - ")) +
     theme_bw() +
-    theme(legend.position = "top")
+    theme(legend.position = "right")
 
   if (!is.null(ma_labeled) && nrow(ma_labeled) > 0) {
     p <- p + geom_label_repel(data = ma_labeled, aes(label = label_display),
@@ -332,18 +378,32 @@ generate_ma_plot_phospho <- function(data, exp_name, ctrl_name, highlighted_ids 
       })
   } else NULL
 
-  p <- ggplot(ma_df, aes(x = AveExpr, y = logFC, color = sig)) +
-    geom_point(alpha = 0.4, size = 1) +
-    scale_color_manual(values = c("Up" = color1, "Down" = color2, "NS" = "gray60"),
-                       name = NULL) +
+  ns_df  <- ma_df %>% filter(sig == "NS")
+  sig_df <- ma_df %>% filter(sig != "NS")
+  max_lfc <- max(abs(ma_df$logFC), na.rm = TRUE)
+
+  p <- ggplot() +
+    geom_point(data = ns_df,  aes(x = AveExpr, y = logFC),
+               color = "gray60", alpha = 0.3, size = 1) +
+    geom_point(data = sig_df, aes(x = AveExpr, y = logFC, color = logFC),
+               alpha = 0.6, size = 1) +
+    scale_color_gradientn(
+      colours = c(color2, "white", color1),
+      limits  = c(-max_lfc, max_lfc),
+      name    = paste0("higher in\n", exp_name, "\n\u2191\n\n\u2193\nhigher in\n", ctrl_name),
+      guide   = guide_colorbar(direction = "vertical",
+                               title.position = "right",
+                               title.hjust = 0.5,
+                               title.theme = element_text(angle = 90, hjust = 0.5, size = 9))
+    ) +
     geom_hline(yintercept = 0,    linetype = "dashed", color = "black") +
     geom_hline(yintercept =  lfc, linetype = "dotted", color = "gray40") +
     geom_hline(yintercept = -lfc, linetype = "dotted", color = "gray40") +
     labs(x = "Average log2 intensity (AveExpr)",
-         y = "log2 fold-change",
+         y = paste0("log2 fold-change (", exp_name, " / ", ctrl_name, ")"),
          title = create_comparison_name(exp_name, ctrl_name, "MA Plot - ")) +
     theme_bw() +
-    theme(legend.position = "top")
+    theme(legend.position = "right")
 
   if (!is.null(ma_labeled) && nrow(ma_labeled) > 0) {
     p <- p + geom_label_repel(data = ma_labeled, aes(label = label_display),
@@ -389,7 +449,8 @@ generate_global_heatmap <- function(intensity_matrix, out_dirs, top_n = 1000, mo
     column_title_gp = gpar(fontsize = 12),
     row_title_gp = gpar(fontsize = 12)
   )
-  draw(ht)
+  draw(ht, column_title = paste0("Global ", molecule_label, " Heatmap"),
+       column_title_gp = gpar(fontsize = 14, fontface = "bold"))
   dev.off()
 
   return(out_path)
@@ -418,9 +479,10 @@ generate_imputation_figures <- function(intensity_raw, intensity_imputed, out_di
     geom_histogram(alpha = 0.6, bins = 80, position = "identity") +
     scale_fill_manual(values = c("Observed" = color2, "Imputed" = color1)) +
     labs(x = "log2 Intensity", y = "Count", fill = NULL,
-         title = "Observed vs. imputed intensity values") +
+         title = "Observed vs. Imputed Intensity Values") +
     theme_bw() +
-    theme(legend.position = "top") +
+    theme(legend.position = "top",
+          plot.title = element_text(hjust = 0.5, size = 11)) +
     guides(fill = guide_legend(override.aes = list(alpha = 1)))
   save_plot(p1, file.path(fig_dir, "global_imputation_histogram.png"), width = 9, height = 5)
 
@@ -437,7 +499,7 @@ generate_imputation_figures <- function(intensity_raw, intensity_imputed, out_di
          title = "Number of Missing Values per Sample") +
     theme_bw() +
     theme(axis.text.x = element_text(angle = 45, hjust = 1),
-          plot.title = element_text(hjust = 0.5))
+          plot.title = element_text(hjust = 0.5, size = 11))
   fig_width_samples <- max(6, ncol(obs_mask) * 0.6)
   save_plot(p2, file.path(fig_dir, "global_imputation_missing_per_sample.png"),
             width = fig_width_samples, height = 5)
@@ -467,7 +529,8 @@ generate_imputation_figures <- function(intensity_raw, intensity_imputed, out_di
          fill = NULL) +
     theme_bw() +
     theme(legend.position = "top",
-          axis.text.x = element_text(angle = 60, hjust = 1))
+          plot.title = element_text(hjust = 0.5, size = 11),
+          axis.text.x = element_text(angle = 45, hjust = 1))
   save_plot(p3, file.path(fig_dir, "global_imputation_total_counts.png"), width = 7, height = 5)
 
   # --- 4. Distribution of imputed values per molecule ---
@@ -481,7 +544,8 @@ generate_imputation_figures <- function(intensity_raw, intensity_imputed, out_di
          y = paste0("Number of ", molecule_label, "s"),
          title = paste0("Distribution of imputed values per ", molecule_label)) +
     theme_bw() +
-    theme(axis.text.x = element_text(angle = 60, hjust = 1))
+    theme(plot.title = element_text(hjust = 0.5, size = 11),
+          axis.text.x = element_text(angle = 45, hjust = 1))
   save_plot(p4, file.path(fig_dir, "global_imputation_distribution.png"), width = 7, height = 5)
 
   invisible(fig_dir)
@@ -643,15 +707,25 @@ process_gsea <- function(result, p = 0.05, lfc = 0.58, ont_option = "BP") {
   })
 }
 
-create_dotplot <- function(gse, title) {
-  dotplot(gse,
-          showCategory = 15,
-          title = title,
-          split = ".sign",
-          orderBy = "p.adjust",
-          label_format = 31,
-          font.size = 9) +
-    facet_grid(.~.sign)
+create_barplot <- function(gse, title, color1 = "#D55E00", color2 = "#0072B2") {
+  res <- as.data.frame(gse)
+
+  top_pos <- res %>% filter(NES > 0) %>% arrange(desc(NES)) %>% slice_head(n = 15)
+  top_neg <- res %>% filter(NES < 0) %>% arrange(NES)        %>% slice_head(n = 15)
+  plot_df <- bind_rows(top_pos, top_neg) %>%
+    mutate(Description = stringr::str_wrap(Description, width = 40))
+
+  ggplot(plot_df, aes(x = NES, y = reorder(Description, NES), fill = p.adjust)) +
+    geom_bar(stat = "identity") +
+    geom_vline(xintercept = 0, color = "gray30", linetype = "dashed") +
+    scale_fill_gradient(low = color1, high = color2, name = "adj. p-value") +
+    theme_classic() +
+    theme(
+      axis.title.y       = element_blank(),
+      panel.grid.major.y = element_line(color = "lightgray", linewidth = 0.4, linetype = 3),
+      plot.title         = element_text(hjust = 0.5, size = 11)
+    ) +
+    labs(x = "Normalized Enrichment Score (NES)", title = title)
 }
 
 # ==========================
@@ -724,9 +798,10 @@ run_analysis <- function(comparison, limma_params, normalized_counts, out_dirs, 
                      exp_name = comparison$exp, ctrl_name = comparison$ctrl,
                      fig_dir = out_dirs$heatmap, design = limma_params$design,
                      color1 = color1, color2 = color2)
-    draw(ht)
+    draw(ht, column_title = paste0(comparison$exp, " vs ", comparison$ctrl, " — Differentially Abundant Proteins"),
+         column_title_gp = gpar(fontsize = 14, fontface = "bold"))
     dev.off()
-    
+
     if (skip_gsea) {
       message("Skipping GSEA (--skip-gsea)")
       gse <- NULL
@@ -740,7 +815,7 @@ run_analysis <- function(comparison, limma_params, normalized_counts, out_dirs, 
         write.csv(as.data.frame(gse), create_file_path(out_dirs$gsea_data, "go_analysis_", comparison$name))
 
         print('create dotplot')
-        gsea_plot <- create_dotplot(gse, create_comparison_name(comparison$exp, comparison$ctrl, "GSEA "))
+        gsea_plot <- create_barplot(gse, create_comparison_name(comparison$exp, comparison$ctrl, "GSEA "), color1 = color1, color2 = color2)
 
         print('save plot')
         save_plot(gsea_plot, create_file_path(out_dirs$gsea, "", comparison$name, "_gsea.png"),
@@ -836,9 +911,10 @@ run_analysis_phospho <- function(comparison, limma_params, normalized_counts, ou
                            fig_dir = out_dirs$heatmap, design = limma_params$design,
                            row_id_col = "peptide_id",
                            color1 = color1, color2 = color2)
-    draw(ht)
+    draw(ht, column_title = paste0(comparison$exp, " vs ", comparison$ctrl, " — Differentially Abundant Phosphopeptides"),
+         column_title_gp = gpar(fontsize = 14, fontface = "bold"))
     dev.off()
-    
+
     if (skip_gsea) {
       message("Skipping GSEA (--skip-gsea)")
       gse <- NULL
@@ -862,7 +938,7 @@ run_analysis_phospho <- function(comparison, limma_params, normalized_counts, ou
           write.csv(as.data.frame(gse), create_file_path(out_dirs$gsea_data, comparison$name, "_go_analysis.csv"))
 
           print('create dotplot')
-          gsea_plot <- create_dotplot(gse, create_comparison_name(comparison$ctrl, comparison$exp, "GSEA "))
+          gsea_plot <- create_barplot(gse, create_comparison_name(comparison$ctrl, comparison$exp, "GSEA "), color1 = color1, color2 = color2)
 
           print('save plot')
           save_plot(gsea_plot, create_file_path(out_dirs$gsea, "", comparison$name, "_gsea.png"),

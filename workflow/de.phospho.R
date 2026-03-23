@@ -323,8 +323,11 @@ pca_plot <- ggplot(data=two_comps_pca_df, aes(x=X, y=Y, label=Sample, color=Grou
   geom_text_repel(aes(label = as.character(Sample)), show.legend = FALSE, size = 2.5) +
   #geom_text(aes(label = as.character(Sample)), show.legend = FALSE, size = 2.5) +
   xlab(paste("PC1 - ", pca_var_pct[1], "%", sep="")) +
-  ylab(paste("PC2 - ", pca_var_pct[2], "%", sep=""))
-ggsave(pca_plot, filename = str_c(out_dirs$pca, "/global_pca_plot.png"))
+  ylab(paste("PC2 - ", pca_var_pct[2], "%", sep="")) +
+  labs(title = "Principal Component Analysis") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5, size = 11))
+ggsave(pca_plot, filename = str_c(out_dirs$pca, "/global_pca_plot.png"), width = 7, height = 5, dpi = 300)
 
 # # Interactive PCA 2D/3D # removing for proteomic core analyses
 # print("# Interactive PCA 2D/3D")
