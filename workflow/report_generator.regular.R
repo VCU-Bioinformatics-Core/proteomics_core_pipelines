@@ -355,6 +355,8 @@ if (file.exists(global_heatmap_path)) {{
 
 ```{{r results-summary}}
 # Create a summary table for all comparisons
+n_ensembl_mapped <- if (!is.null(protein_counts$ensembl_mapped)) protein_counts$ensembl_mapped else NA_integer_
+
 summary_table <- data.frame(
   Comparison = character(),
   Experimental = character(),
@@ -362,22 +364,24 @@ summary_table <- data.frame(
   Total_DAPs = integer(),
   Upregulated = integer(),
   Downregulated = integer(),
+  `# Ensembl Mapped` = integer(),
   GSEA_Performed = character(),
-  stringsAsFactors = FALSE
+  stringsAsFactors = FALSE,
+  check.names = FALSE
 )
 
 for (i in seq_along(comparisons)) {{
   if (i <= length(results) && !is.null(results[[i]])) {{
     res_df <- results[[i]]$limma
-    
+
     # Count DAPs (padj < 0.05 & |log2FC| >= 0.58)
     if (!is.null(res_df)) {{
       total_daps <- sum(!is.na(res_df$adj.P.Val) & res_df$adj.P.Val < 0.05 & abs(res_df$logFC) >= 0.58)
       up_daps <- sum(!is.na(res_df$adj.P.Val) & res_df$adj.P.Val < 0.05 & res_df$logFC >= 0.58)
       down_daps <- sum(!is.na(res_df$adj.P.Val) & res_df$adj.P.Val < 0.05 & res_df$logFC <= -0.58)
-      
+
       gsea_status <- ifelse(!is.null(results[[i]]$gsea), "Yes", "No")
-      
+
       summary_table <- rbind(summary_table, data.frame(
         Comparison = comparisons[[i]]$name,
         Experimental = comparisons[[i]]$exp,
@@ -385,8 +389,10 @@ for (i in seq_along(comparisons)) {{
         Total_DAPs = total_daps,
         Upregulated = up_daps,
         Downregulated = down_daps,
+        `# Ensembl Mapped` = n_ensembl_mapped,
         GSEA_Performed = gsea_status,
-        stringsAsFactors = FALSE
+        stringsAsFactors = FALSE,
+        check.names = FALSE
       ))
     }}
   }}
@@ -635,7 +641,7 @@ if (!isTRUE(analysis_params$skip_gsea)) {{
 ```{{r gsea-{i}, out.width="100%"}}
 # Display GSEA results from file
 if (!isTRUE(analysis_params$skip_gsea)) {{
-  gsea_path <- file.path(out_dirs$gsea, paste0("{name}_GSEA.png"))
+  gsea_path <- file.path(out_dirs$gsea, paste0("{name}_gsea.png"))
   if (file.exists(gsea_path)) {{
     knitr::include_graphics(gsea_path)
   }}

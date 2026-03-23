@@ -174,6 +174,29 @@ protein_metadata <- full_prot_levels %>%
   dplyr::select(uniprotswissprot = PG.ProteinAccessions, gene_name = PG.Genes) %>%
   distinct(uniprotswissprot, .keep_all = TRUE)
 
+# Fetch Ensembl IDs for GSEA (map UniProt accessions -> ensembl_gene_id)
+# PG.ProteinAccessions can be semicolon-separated; use only the first accession for BioMart lookup
+print("Fetching Ensembl IDs from BioMart for GSEA annotation")
+primary_accessions <- sub(";.*", "", protein_metadata$uniprotswissprot)
+ensembl_map <- tryCatch({
+  getBM(
+    attributes = c("uniprotswissprot", "ensembl_gene_id"),
+    filters    = "uniprotswissprot",
+    values     = unique(primary_accessions),
+    mart       = ensembl
+  ) %>%
+    distinct(uniprotswissprot, .keep_all = TRUE)
+}, error = function(e) {
+  message("BioMart Ensembl ID lookup failed: ", e$message)
+  data.frame(uniprotswissprot = character(), ensembl_gene_id = character())
+})
+protein_metadata <- protein_metadata %>%
+  mutate(primary_accession = sub(";.*", "", uniprotswissprot)) %>%
+  left_join(ensembl_map, by = c("primary_accession" = "uniprotswissprot")) %>%
+  dplyr::select(-primary_accession)
+print(paste("Ensembl IDs mapped for", sum(!is.na(protein_metadata$ensembl_gene_id)),
+            "of", nrow(protein_metadata), "proteins"))
+
 # Extract a dataframe with just protein levels
 # counts <- full_prot_levels %>% dplyr::select(where(is.numeric)) 
 non_prot_cols <- c("PG.Pvalue", "PG.Qvalue", "PG.ProteinAccessions",
@@ -431,7 +454,8 @@ write.csv(query_df, file.path(out_dirs$de_data, "master_query_table.csv"), row.n
 print('Save RDS')
 #rds <- list(results, comparisons, out_dirs, pca_plot, fig, fig3D)
 imputation_params <- list(method = imputation_method, q = imputation_q)
-protein_counts <- list(total = n_proteins_total, no_crap = n_proteins_no_crap, not_imputable = n_peptides_not_imputable)
+n_ensembl_mapped <- sum(!is.na(protein_metadata$ensembl_gene_id))
+protein_counts <- list(total = n_proteins_total, no_crap = n_proteins_no_crap, not_imputable = n_peptides_not_imputable, ensembl_mapped = n_ensembl_mapped)
 analysis_params <- list(genome = genome, gsea_ont = gsea_ont, skip_gsea = skip_gsea, heatmap_top_n = heatmap_top_n, heatmap_norm = heatmap_norm, color1 = group_color1, color2 = group_color2)
 rds <- list(results, comparisons, out_dirs, pca_plot, intensity_matrix_raw, intensity_matrix, imputation_params, sample_info, protein_counts, analysis_params, anova_summary)
 timestamp <- format(Sys.time(), "%Y%m%d_%H%M%S")

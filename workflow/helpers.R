@@ -699,13 +699,12 @@ process_gsea <- function(result, p = 0.05, lfc = 0.58, ont_option = "BP") {
     names(gene_list) <- sig_genes$ensembl_gene_id
     gene_list <- gene_list[!is.na(names(gene_list))]
     gene_list <- gene_list[!duplicated(names(gene_list))]
-    
-    valid_genes <- bitr(names(gene_list),
-                        fromType = "ENSEMBL",
-                        toType = "ENTREZID",
-                        OrgDb = annotation_db)
-    gene_list <- gene_list[names(gene_list) %in% valid_genes$ENSEMBL]
-    
+
+    if (length(gene_list) < 2) {
+      message("Not enough genes with Ensembl IDs for GSEA analysis")
+      return(NULL)
+    }
+
     gse_result <- gseGO(geneList = gene_list,
                         ont = ont_option,
                         minGSSize = 1,
@@ -714,8 +713,8 @@ process_gsea <- function(result, p = 0.05, lfc = 0.58, ont_option = "BP") {
                         pvalueCutoff = 0.05,
                         pAdjustMethod = "fdr",
                         OrgDb = annotation_db)
-    
-    if(nrow(gse_result@result) == 0) {
+
+    if (is.null(gse_result) || nrow(gse_result@result) == 0) {
       message("No enriched terms found in GSEA analysis")
       return(NULL)
     }
@@ -827,8 +826,7 @@ run_analysis <- function(comparison, limma_params, normalized_counts, out_dirs, 
       gse <- NULL
     } else {
       print('Running GSEA')
-      gse <- NULL # process_gsea(annotated_results, ont_option = ont_option)
-      #gse <- process_gsea(annotated_results, ont_option = ont_option)
+      gse <- process_gsea(annotated_results, ont_option = ont_option)
 
       if(!is.null(gse)) {
         print('GSE has data')
