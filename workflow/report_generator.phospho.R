@@ -91,12 +91,16 @@ color2 <- if (!is.null(analysis_params$color2)) analysis_params$color2 else "#00
 
 **Analyst: {analyst}**
 
-This report contains the results of differential abundance analysis for `r length(comparisons)` comparisons.
-It starts with the **Global Sample Exploration** section that highlights sample similarity and
-helps to explore and understand the relationships between samples. Next, we present the
-**Differential Abundance Results** section with subsections for each comparison (more details
-below). For further exploration of the results, please refer to the output directories
-containing the raw data files.
+**Report Guide:** This report details the analysis pipeline, intermediate processing steps, and
+final outputs. We begin with **Global Sample Exploration**, which covers protein-level
+normalization, imputation, and sample relationships visualized through PCA and global heatmaps.
+The **Differential Abundance Results** follow, starting with a master "Query" table for a quick
+cross-comparison of significant hits. Detailed subsections for each comparison provide volcano
+plots, MA plots, heatmaps, and comprehensive protein tables. For deeper dives into the raw data
+or downstream Ingenuity Pathway Analysis (IPA), please see the output directories or the
+**Utilizing IPA** section. Suggested draft language can be found in **Manuscript-Ready Text**.
+
+**Brief synopsis:** This analysis report contains the results for `r length(comparisons)` comparisons using differential abundance analysis.
 
 
 ## Pipeline
@@ -423,7 +427,7 @@ for each case.
 kable(summary_table, caption = "")
 ```
 
-### Query Protein/Peptide
+### Query Differential Expression Hits Across All Analyses
 
 Use the search box below to look up any phosphopeptide. **peptide_id** is the phosphopeptide identifier; **hgnc_symbol** is the gene symbol; **uniprot_id** is the UniProt accession. **Significant_Comparisons** lists every comparison where the peptide was significant (adj. p-value < 0.05 and |FC| ≥ 1.5), or "Not Significant" if it did not meet that threshold in any comparison.
 
@@ -712,7 +716,7 @@ ipa_content <- '\n
 ## Utilizing IPA
 
 The CSV Differential Abundance output from limma (available in the results directory
-provided alongside this report *./output/de_data/DESeq2_[comparison_name].csv*), can be
+provided alongside this report *de_data/[comparison_name]_limma.csv*), can be
 uploaded directly into **QIAGEN Ingenuity Pathway Analysis (IPA)** for self-exploration of
 pathways predicted to be enriched by this experimental condition. Massey’s BISR provides
 access to VCU’s license of IPA. If you do not already have an account associated with this
