@@ -429,17 +429,27 @@ all_rows <- dplyr::bind_rows(lapply(seq_along(comparisons), function(i) {{
   res$is_sig <- !is.na(res$adj.P.Val) & res$adj.P.Val < 0.05 & abs(res$logFC) >= 0.58
   res[, intersect(c("gene_name", "uniprotswissprot", "comparison_name", "is_sig"), colnames(res))]
 }}))
-query_df <- all_rows %>%
-  dplyr::group_by(gene_name, uniprotswissprot) %>%
-  dplyr::summarise(
-    Significant_Comparisons = {{
-      sig_comps <- comparison_name[is_sig]
-      if (length(sig_comps) == 0) "Not Significant" else paste(sig_comps, collapse = "<br>")
-    }},
-    .groups = "drop"
-  ) %>%
-  dplyr::arrange(Significant_Comparisons == "Not Significant", gene_name) %>%
-  dplyr::rename(dplyr::any_of(c("Protein Name" = "gene_name", "UniProt ID" = "uniprotswissprot")))
+id_cols <- intersect(c("gene_name", "uniprotswissprot"), colnames(all_rows))
+if (nrow(all_rows) == 0 || length(id_cols) == 0) {{
+  query_df <- data.frame()
+}} else {{
+  query_df <- all_rows %>%
+    dplyr::group_by(dplyr::across(dplyr::all_of(id_cols))) %>%
+    dplyr::summarise(
+      Significant_Comparisons = {{
+        sig_comps <- comparison_name[is_sig]
+        if (length(sig_comps) == 0) "Not Significant" else paste(sig_comps, collapse = "<br>")
+      }},
+      .groups = "drop"
+    )
+  if ("gene_name" %in% colnames(query_df)) {{
+    query_df <- query_df %>% dplyr::arrange(Significant_Comparisons == "Not Significant", gene_name)
+  }} else {{
+    query_df <- query_df %>% dplyr::arrange(Significant_Comparisons == "Not Significant")
+  }}
+  query_df <- query_df %>%
+    dplyr::rename(dplyr::any_of(c("Protein Name" = "gene_name", "UniProt ID" = "uniprotswissprot")))
+}}
 DT::datatable(query_df,
               caption = "Protein significance across all comparisons",
               rownames = FALSE,
@@ -507,7 +517,6 @@ if (file.exists(ma_path)) {{
 }}
 ```
 
-
 **Heatmap**
 
 - Description: a heatmap of **z-score normalized** intensity data with application of 
@@ -517,7 +526,7 @@ if (file.exists(ma_path)) {{
 - Color-scale: z-score normalized intensity levels 
 
 
-```{{r heatmap-{i} }}
+```{{r heatmap-{i}}}
 # Display heatmap from file
 heatmap_path <- file.path(out_dirs$heatmap, paste0("{name}_heatmap.png"))
 if (file.exists(heatmap_path)) {{

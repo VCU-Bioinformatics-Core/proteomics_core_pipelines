@@ -67,6 +67,8 @@ option_list = list(
               help = "Random seed for reproducibility of stochastic imputation methods [default= %default]"),
   make_option(c("--heatmap-top-n"), type = "integer", default = 1000,
               help = "Number of top molecules by CV to show in the global heatmap [default= %default]"),
+  make_option(c("--heatmap-norm"), type = "character", default = "zscore",
+              help = "Heatmap normalization: 'zscore' (z-score normalize rows) or 'none' (raw intensity) [default= %default]"),
   make_option(c("--gsea-ont"), type = "character", default = "BP",
               help = "Gene ontology category for GSEA: 'BP', 'MF', 'CC', or 'ALL' [default= %default]"),
   make_option(c("--skip-gsea"), action = "store_true", default = FALSE,
@@ -91,6 +93,7 @@ imputation_method <- opt$imputation
 imputation_q <- opt$`imputation-q`
 imputation_seed <- opt$seed
 heatmap_top_n <- opt$`heatmap-top-n`
+heatmap_norm  <- opt$`heatmap-norm`
 gsea_ont <- opt$`gsea-ont`
 skip_gsea <- opt$`skip-gsea`
 skip_anova <- opt$`skip-anova`
@@ -275,7 +278,7 @@ results <- vector("list", length(comparisons))
 for (i in seq_along(comparisons)) {
 
   # run the analysis on the current samples
-  curr_result <- run_analysis(comparisons[[i]], limma_params, intensity_matrix, out_dirs, intensity_matrix_raw, ont_option = gsea_ont, skip_gsea = skip_gsea, protein_metadata = protein_metadata, color1 = group_color1, color2 = group_color2)
+  curr_result <- run_analysis(comparisons[[i]], limma_params, intensity_matrix, out_dirs, intensity_matrix_raw, ont_option = gsea_ont, skip_gsea = skip_gsea, protein_metadata = protein_metadata, heatmap_norm = heatmap_norm, color1 = group_color1, color2 = group_color2)
   
   # save the current results if successful
   if (!is.null(curr_result)){
@@ -380,7 +383,7 @@ anova_summary <- list(n_groups = n_anova_groups, n_sig = n_anova_sig, n_total = 
 # ==========================
 print('Generating global heatmap')
 generate_global_heatmap(intensity_matrix, out_dirs, top_n = heatmap_top_n,
-                        color1 = group_color1, color2 = group_color2)
+                        heatmap_norm = heatmap_norm, color1 = group_color1, color2 = group_color2)
 
 # ==========================
 # Generate imputation figures
@@ -401,16 +404,25 @@ all_rows <- dplyr::bind_rows(lapply(seq_along(comparisons), function(i) {
   res$is_sig <- !is.na(res$adj.P.Val) & res$adj.P.Val < 0.05 & abs(res$logFC) >= 0.58
   res[, intersect(c("gene_name", "uniprotswissprot", "comparison_name", "is_sig"), colnames(res))]
 }))
-query_df <- all_rows %>%
-  dplyr::group_by(gene_name, uniprotswissprot) %>%
-  dplyr::summarise(
-    Significant_Comparisons = {
-      sig_comps <- comparison_name[is_sig]
-      if (length(sig_comps) == 0) "Not Significant" else paste(sig_comps, collapse = "; ")
-    },
-    .groups = "drop"
-  ) %>%
-  dplyr::arrange(Significant_Comparisons == "Not Significant", gene_name)
+id_cols <- intersect(c("gene_name", "uniprotswissprot"), colnames(all_rows))
+if (nrow(all_rows) == 0 || length(id_cols) == 0) {
+  query_df <- data.frame()
+} else {
+  query_df <- all_rows %>%
+    dplyr::group_by(dplyr::across(dplyr::all_of(id_cols))) %>%
+    dplyr::summarise(
+      Significant_Comparisons = {
+        sig_comps <- comparison_name[is_sig]
+        if (length(sig_comps) == 0) "Not Significant" else paste(sig_comps, collapse = "; ")
+      },
+      .groups = "drop"
+    )
+  if ("gene_name" %in% colnames(query_df)) {
+    query_df <- query_df %>% dplyr::arrange(Significant_Comparisons == "Not Significant", gene_name)
+  } else {
+    query_df <- query_df %>% dplyr::arrange(Significant_Comparisons == "Not Significant")
+  }
+}
 write.csv(query_df, file.path(out_dirs$de_data, "master_query_table.csv"), row.names = FALSE)
 
 # ==========================
@@ -420,7 +432,7 @@ print('Save RDS')
 #rds <- list(results, comparisons, out_dirs, pca_plot, fig, fig3D)
 imputation_params <- list(method = imputation_method, q = imputation_q)
 protein_counts <- list(total = n_proteins_total, no_crap = n_proteins_no_crap, not_imputable = n_peptides_not_imputable)
-analysis_params <- list(genome = genome, gsea_ont = gsea_ont, skip_gsea = skip_gsea, heatmap_top_n = heatmap_top_n, color1 = group_color1, color2 = group_color2)
+analysis_params <- list(genome = genome, gsea_ont = gsea_ont, skip_gsea = skip_gsea, heatmap_top_n = heatmap_top_n, heatmap_norm = heatmap_norm, color1 = group_color1, color2 = group_color2)
 rds <- list(results, comparisons, out_dirs, pca_plot, intensity_matrix_raw, intensity_matrix, imputation_params, sample_info, protein_counts, analysis_params, anova_summary)
 timestamp <- format(Sys.time(), "%Y%m%d_%H%M%S")
 #rds_path <- glue("analysis_results_{timestamp}.rds")

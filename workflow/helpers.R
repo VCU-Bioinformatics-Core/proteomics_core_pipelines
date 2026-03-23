@@ -177,32 +177,33 @@ generate_volcano_protein <- function(data, exp_name, ctrl_name, p_thresh = 0.05,
     ) %>%
     filter(!is.na(logFC), !is.na(P.Value), is.finite(logFC), is.finite(P.Value))
 
-  ns_dat  <- labeled_dat %>% filter(is.na(color_tag))
-  sig_dat <- labeled_dat %>% filter(!is.na(color_tag))
-  max_lfc <- max(abs(labeled_dat$logFC), na.rm = TRUE)
+  labeled_dat <- labeled_dat %>%
+    mutate(sig_label = case_when(
+      eval(as.symbol(sig)) < p_thresh & logFC >  lfc ~ "Up-Regulated",
+      eval(as.symbol(sig)) < p_thresh & logFC < -lfc ~ "Down-Regulated",
+      TRUE ~ "Not Significant"
+    ))
 
-  volcano_plot <- ggplot() +
-    geom_point(data = ns_dat,  aes(x = logFC, y = -log10(P.Value)),
-               color = "gray70", alpha = 0.4) +
-    geom_point(data = sig_dat, aes(x = logFC, y = -log10(P.Value), color = logFC),
-               alpha = 0.7) +
-    scale_color_gradientn(
-      colours = c(color2, "white", color1),
-      limits  = c(-max_lfc, max_lfc),
-      name    = paste0("higher in\n", exp_name, "\n\u2191\n\n\u2193\nhigher in\n", ctrl_name),
-      guide   = guide_colorbar(direction = "vertical",
-                               title.position = "right",
-                               title.hjust = 0.5,
-                               title.theme = element_text(angle = 90, hjust = 0.5, size = 9))
+  volcano_plot <- ggplot(labeled_dat, aes(x = logFC, y = -log10(P.Value), color = sig_label)) +
+    geom_point(data = labeled_dat %>% filter(sig_label == "Not Significant"), alpha = 0.4) +
+    geom_point(data = labeled_dat %>% filter(sig_label != "Not Significant"), alpha = 0.7) +
+    scale_color_manual(
+      values = c("Up-Regulated" = color1, "Down-Regulated" = color2, "Not Significant" = "gray70"),
+      name = NULL
     ) +
     geom_label_repel(data = labeled_dat %>% filter(!is.na(label_display)),
                      aes(x = logFC, y = -log10(P.Value), label = label_display),
                      max.overlaps = Inf, show.legend = FALSE) +
     geom_hline(yintercept = -log10(p_thresh), col = "gray40", linetype = 2) +
     geom_vline(xintercept = c(-lfc, lfc)) +
-    theme_minimal() +
-    theme(legend.position = "right") +
-    labs(x = paste0("log2 fold-change (", exp_name, " / ", ctrl_name, ")"),
+    theme_minimal(base_size = 14) +
+    theme(legend.position = "right",
+          legend.text = element_text(size = 13),
+          legend.key.size = unit(1.2, "cm"),
+          axis.text = element_text(size = 12),
+          axis.title = element_text(size = 13)) +
+    labs(x = paste0("log2 fold-change (", exp_name, " / ", ctrl_name, ")\n",
+                    "\u2190 higher in ", ctrl_name, "          higher in ", exp_name, " \u2192"),
          y = "-log10(P-value)",
          title = create_comparison_name(exp_name, ctrl_name, "Differentially expressed genes - ")
     )
@@ -260,32 +261,33 @@ generate_volcano_phospho <- function(data, exp_name, ctrl_name, p_thresh = 0.05,
     ) %>%
     filter(!is.na(logFC), !is.na(P.Value), is.finite(logFC), is.finite(P.Value))
 
-  ns_dat  <- labeled_dat %>% filter(is.na(color_tag))
-  sig_dat <- labeled_dat %>% filter(!is.na(color_tag))
-  max_lfc <- max(abs(labeled_dat$logFC), na.rm = TRUE)
+  labeled_dat <- labeled_dat %>%
+    mutate(sig_label = case_when(
+      eval(as.symbol(sig)) < p_thresh & logFC >  lfc ~ "Up-Regulated",
+      eval(as.symbol(sig)) < p_thresh & logFC < -lfc ~ "Down-Regulated",
+      TRUE ~ "Not Significant"
+    ))
 
-  volcano_plot <- ggplot() +
-    geom_point(data = ns_dat,  aes(x = logFC, y = -log10(P.Value)),
-               color = "gray70", alpha = 0.4) +
-    geom_point(data = sig_dat, aes(x = logFC, y = -log10(P.Value), color = logFC),
-               alpha = 0.7) +
-    scale_color_gradientn(
-      colours = c(color2, "white", color1),
-      limits  = c(-max_lfc, max_lfc),
-      name    = paste0("higher in\n", exp_name, "\n\u2191\n\n\u2193\nhigher in\n", ctrl_name),
-      guide   = guide_colorbar(direction = "vertical",
-                               title.position = "right",
-                               title.hjust = 0.5,
-                               title.theme = element_text(angle = 90, hjust = 0.5, size = 9))
+  volcano_plot <- ggplot(labeled_dat, aes(x = logFC, y = -log10(P.Value), color = sig_label)) +
+    geom_point(data = labeled_dat %>% filter(sig_label == "Not Significant"), alpha = 0.4) +
+    geom_point(data = labeled_dat %>% filter(sig_label != "Not Significant"), alpha = 0.7) +
+    scale_color_manual(
+      values = c("Up-Regulated" = color1, "Down-Regulated" = color2, "Not Significant" = "gray70"),
+      name = NULL
     ) +
     geom_label_repel(data = labeled_dat %>% filter(!is.na(label_display)),
                      aes(x = logFC, y = -log10(P.Value), label = label_display),
                      max.overlaps = Inf, show.legend = FALSE) +
     geom_hline(yintercept = -log10(p_thresh), col = "gray40", linetype = 2) +
     geom_vline(xintercept = c(-lfc, lfc)) +
-    theme_minimal() +
-    theme(legend.position = "right") +
-    labs(x = paste0("log2 fold-change (", exp_name, " / ", ctrl_name, ")"),
+    theme_minimal(base_size = 14) +
+    theme(legend.position = "right",
+          legend.text = element_text(size = 13),
+          legend.key.size = unit(1.2, "cm"),
+          axis.text = element_text(size = 12),
+          axis.title = element_text(size = 13)) +
+    labs(x = paste0("log2 fold-change (", exp_name, " / ", ctrl_name, ")\n",
+                    "\u2190 higher in ", ctrl_name, "          higher in ", exp_name, " \u2192"),
          y = "-log10(P-value)",
          title = create_comparison_name(exp_name, ctrl_name, "Differentially expressed genes - ")
     )
@@ -305,6 +307,13 @@ generate_ma_plot_protein <- function(data, exp_name, ctrl_name, highlighted_ids 
       TRUE ~ "NS"
     ))
 
+  ma_df <- ma_df %>%
+    mutate(sig = case_when(
+      sig == "Up"   ~ "Up-Regulated",
+      sig == "Down" ~ "Down-Regulated",
+      TRUE          ~ "Not Significant"
+    ))
+
   ma_labeled <- if (!is.null(highlighted_ids)) {
     ma_df %>%
       filter(.data[[label_col]] %in% highlighted_ids) %>%
@@ -316,35 +325,29 @@ generate_ma_plot_protein <- function(data, exp_name, ctrl_name, highlighted_ids 
       ))
   } else NULL
 
-  ns_df  <- ma_df %>% filter(sig == "NS")
-  sig_df <- ma_df %>% filter(sig != "NS")
-  max_lfc <- max(abs(ma_df$logFC), na.rm = TRUE)
-
-  p <- ggplot() +
-    geom_point(data = ns_df,  aes(x = AveExpr, y = logFC),
-               color = "gray60", alpha = 0.3, size = 1) +
-    geom_point(data = sig_df, aes(x = AveExpr, y = logFC, color = logFC),
-               alpha = 0.6, size = 1) +
-    scale_color_gradientn(
-      colours = c(color2, "white", color1),
-      limits  = c(-max_lfc, max_lfc),
-      name    = paste0("higher in\n", exp_name, "\n\u2191\n\n\u2193\nhigher in\n", ctrl_name),
-      guide   = guide_colorbar(direction = "vertical",
-                               title.position = "right",
-                               title.hjust = 0.5,
-                               title.theme = element_text(angle = 90, hjust = 0.5, size = 9))
+  p <- ggplot(ma_df, aes(x = AveExpr, y = logFC, color = sig)) +
+    geom_point(data = ma_df %>% filter(sig == "Not Significant"), alpha = 0.3, size = 1) +
+    geom_point(data = ma_df %>% filter(sig != "Not Significant"), alpha = 0.6, size = 1) +
+    scale_color_manual(
+      values = c("Up-Regulated" = color1, "Down-Regulated" = color2, "Not Significant" = "gray60"),
+      name = NULL
     ) +
     geom_hline(yintercept = 0,    linetype = "dashed", color = "black") +
     geom_hline(yintercept =  lfc, linetype = "dotted", color = "gray40") +
     geom_hline(yintercept = -lfc, linetype = "dotted", color = "gray40") +
     labs(x = "Average log2 intensity (AveExpr)",
-         y = paste0("log2 fold-change (", exp_name, " / ", ctrl_name, ")"),
+         y = paste0("log2 fold-change (", exp_name, " / ", ctrl_name, ")\n",
+                    "\n\u2190 higher in ", ctrl_name, "          higher in ", exp_name, " \u2192"),
          title = create_comparison_name(exp_name, ctrl_name, "MA Plot - ")) +
-    theme_bw() +
-    theme(legend.position = "right")
+    theme_bw(base_size = 14) +
+    theme(legend.position = "right",
+          legend.text = element_text(size = 13),
+          legend.key.size = unit(1.2, "cm"),
+          axis.text = element_text(size = 12),
+          axis.title = element_text(size = 13))
 
   if (!is.null(ma_labeled) && nrow(ma_labeled) > 0) {
-    p <- p + geom_label_repel(data = ma_labeled, aes(label = label_display),
+    p <- p + geom_label_repel(data = ma_labeled, aes(x = AveExpr, y = logFC, label = label_display, color = sig),
                                max.overlaps = Inf, show.legend = FALSE, size = 3)
   }
   p
@@ -360,6 +363,13 @@ generate_ma_plot_phospho <- function(data, exp_name, ctrl_name, highlighted_ids 
       adj.P.Val < p_thresh & logFC >  lfc ~ "Up",
       adj.P.Val < p_thresh & logFC < -lfc ~ "Down",
       TRUE ~ "NS"
+    ))
+
+  ma_df <- ma_df %>%
+    mutate(sig = case_when(
+      sig == "Up"   ~ "Up-Regulated",
+      sig == "Down" ~ "Down-Regulated",
+      TRUE          ~ "Not Significant"
     ))
 
   ma_labeled <- if (!is.null(highlighted_ids)) {
@@ -378,35 +388,29 @@ generate_ma_plot_phospho <- function(data, exp_name, ctrl_name, highlighted_ids 
       })
   } else NULL
 
-  ns_df  <- ma_df %>% filter(sig == "NS")
-  sig_df <- ma_df %>% filter(sig != "NS")
-  max_lfc <- max(abs(ma_df$logFC), na.rm = TRUE)
-
-  p <- ggplot() +
-    geom_point(data = ns_df,  aes(x = AveExpr, y = logFC),
-               color = "gray60", alpha = 0.3, size = 1) +
-    geom_point(data = sig_df, aes(x = AveExpr, y = logFC, color = logFC),
-               alpha = 0.6, size = 1) +
-    scale_color_gradientn(
-      colours = c(color2, "white", color1),
-      limits  = c(-max_lfc, max_lfc),
-      name    = paste0("higher in\n", exp_name, "\n\u2191\n\n\u2193\nhigher in\n", ctrl_name),
-      guide   = guide_colorbar(direction = "vertical",
-                               title.position = "right",
-                               title.hjust = 0.5,
-                               title.theme = element_text(angle = 90, hjust = 0.5, size = 9))
+  p <- ggplot(ma_df, aes(x = AveExpr, y = logFC, color = sig)) +
+    geom_point(data = ma_df %>% filter(sig == "Not Significant"), alpha = 0.3, size = 1) +
+    geom_point(data = ma_df %>% filter(sig != "Not Significant"), alpha = 0.6, size = 1) +
+    scale_color_manual(
+      values = c("Up-Regulated" = color1, "Down-Regulated" = color2, "Not Significant" = "gray60"),
+      name = NULL
     ) +
     geom_hline(yintercept = 0,    linetype = "dashed", color = "black") +
     geom_hline(yintercept =  lfc, linetype = "dotted", color = "gray40") +
     geom_hline(yintercept = -lfc, linetype = "dotted", color = "gray40") +
     labs(x = "Average log2 intensity (AveExpr)",
-         y = paste0("log2 fold-change (", exp_name, " / ", ctrl_name, ")"),
+         y = paste0("log2 fold-change (", exp_name, " / ", ctrl_name, ")\n",
+                    "\u2191 higher in ", exp_name, "\n\u2193 higher in ", ctrl_name),
          title = create_comparison_name(exp_name, ctrl_name, "MA Plot - ")) +
-    theme_bw() +
-    theme(legend.position = "right")
+    theme_bw(base_size = 14) +
+    theme(legend.position = "right",
+          legend.text = element_text(size = 13),
+          legend.key.size = unit(1.2, "cm"),
+          axis.text = element_text(size = 12),
+          axis.title = element_text(size = 13))
 
   if (!is.null(ma_labeled) && nrow(ma_labeled) > 0) {
-    p <- p + geom_label_repel(data = ma_labeled, aes(label = label_display),
+    p <- p + geom_label_repel(data = ma_labeled, aes(x = AveExpr, y = logFC, label = label_display, color = sig),
                                max.overlaps = Inf, show.legend = FALSE, size = 3)
   }
   p
@@ -414,6 +418,7 @@ generate_ma_plot_phospho <- function(data, exp_name, ctrl_name, highlighted_ids 
 
 
 generate_global_heatmap <- function(intensity_matrix, out_dirs, top_n = 1000, molecule_label = "Proteins",
+                                    heatmap_norm = "zscore",
                                     color1 = "#D55E00", color2 = "#0072B2") {
   mat <- as.matrix(intensity_matrix)
 
@@ -429,15 +434,25 @@ generate_global_heatmap <- function(intensity_matrix, out_dirs, top_n = 1000, mo
   n_select <- min(top_n, nrow(mat))
   mat <- mat[order(cv, decreasing = TRUE)[1:n_select], , drop = FALSE]
 
-  zscores <- t(scale(t(mat)))
-  zscores[is.nan(zscores) | is.infinite(zscores)] <- 0
+  if (heatmap_norm == "zscore") {
+    plot_mat <- t(scale(t(mat)))
+    plot_mat[is.nan(plot_mat) | is.infinite(plot_mat)] <- 0
+    legend_name <- "Z-score"
+    col_scale <- colorRamp2(c(-2, 0, 2), c("#2166AC", "white", "#B2182B"))
+  } else {
+    plot_mat <- mat
+    legend_name <- "Intensity"
+    mid <- median(plot_mat, na.rm = TRUE)
+    col_scale <- colorRamp2(c(min(plot_mat, na.rm = TRUE), mid, max(plot_mat, na.rm = TRUE)),
+                            c("#2166AC", "white", "#B2182B"))
+  }
 
   out_path <- file.path(out_dirs$heatmap, "global_heatmap.png")
   png(out_path, width = 2400, height = 3200, res = 300)
   ht <- Heatmap(
-    zscores,
-    name = "Z-score",
-    col = colorRamp2(c(-2, 0, 2), c(color2, "white", color1)),
+    plot_mat,
+    name = legend_name,
+    col = col_scale,
     cluster_rows = TRUE,
     cluster_columns = TRUE,
     show_row_names = FALSE,
@@ -514,7 +529,8 @@ generate_imputation_figures <- function(intensity_raw, intensity_imputed, out_di
                        n_molecules = as.integer(imp_counts))
   imp_df$total_val <- imp_df$n_imputed * imp_df$n_molecules
   imp_df$total_val[imp_df$n_imputed == 0] <- n_obs
-  imp_df$bar_type  <- ifelse(imp_df$n_imputed == 0, "Observed", "Imputed")
+  imp_df$bar_type  <- factor(ifelse(imp_df$n_imputed == 0, "Observed", "Imputed"),
+                             levels = c("Observed", "Imputed"))
   imp_df$pct_total <- round(100 * imp_df$total_val / n_tot, 1)
   x_labels <- setNames(c("no-imputation", as.character(seq_len(max_imp))), 0:max_imp)
 
@@ -554,6 +570,7 @@ generate_imputation_figures <- function(intensity_raw, intensity_imputed, out_di
 generate_heatmap <- function(results_df, normalized_counts, p = 0.05, lfc = 0.58,
                              exp_name, ctrl_name, fig_dir, design,
                              row_id_col = "uniprotswissprot",
+                             heatmap_norm = "zscore",
                              color1 = "#D55E00", color2 = "#0072B2") {
 
   # filter the data for certain pvalues and lfc
@@ -570,22 +587,25 @@ generate_heatmap <- function(results_df, normalized_counts, p = 0.05, lfc = 0.58
   values <- normalized_counts[filtered_data[[row_id_col]], comparison_samples] %>%
     as.matrix() %>%
     jitter(factor = 1, amount = 0.00001)
-  
-  # normalize the values
-  zscores <- t(scale(t(values)))
-  
-  # Replace NaN with row means
-  #print("WARNING JR: REMOVE THIS REPLACING OF NAN WITH SOMETHING MORE ACCURATE WHEN READY")
-  #zscores[is.na(zscores) | is.nan(zscores) | is.infinite(zscores)] <- 0
-  
+
+  if (heatmap_norm == "zscore") {
+    plot_mat <- t(scale(t(values)))
+    legend_name <- "Z-score"
+    col_scale <- colorRamp2(c(min(plot_mat, na.rm = TRUE), 0, max(plot_mat, na.rm = TRUE)),
+                            c("#2166AC", "white", "#B2182B"))
+  } else {
+    plot_mat <- values
+    legend_name <- "Intensity"
+    mid <- median(plot_mat, na.rm = TRUE)
+    col_scale <- colorRamp2(c(min(plot_mat, na.rm = TRUE), mid, max(plot_mat, na.rm = TRUE)),
+                            c("#2166AC", "white", "#B2182B"))
+  }
+
   # plot the heatmap
   ht <- Heatmap(
-    zscores,
-    name = "Z-score",  # nombre de la leyenda
-    col = colorRamp2(
-      c(min(zscores), 0, max(zscores)), 
-      c(color2, "white", color1)
-    ),
+    plot_mat,
+    name = legend_name,
+    col = col_scale,
     cluster_rows = TRUE,     # dendrograma de filas
     cluster_columns = TRUE,  # dendrograma de columnas
     show_row_names = FALSE,  # equivalente a labRow = NA
@@ -732,7 +752,7 @@ create_barplot <- function(gse, title, color1 = "#D55E00", color2 = "#0072B2") {
 # centralizing function
 # ==========================
 
-run_analysis <- function(comparison, limma_params, normalized_counts, out_dirs, intensity_matrix_raw = NULL, ont_option = "BP", skip_gsea = FALSE, protein_metadata = NULL, color1 = "#D55E00", color2 = "#0072B2") {
+run_analysis <- function(comparison, limma_params, normalized_counts, out_dirs, intensity_matrix_raw = NULL, ont_option = "BP", skip_gsea = FALSE, protein_metadata = NULL, heatmap_norm = "zscore", color1 = "#D55E00", color2 = "#0072B2") {
   tryCatch({
     print(paste("\nStarting analysis for comparison:", comparison$name))
 
@@ -797,7 +817,7 @@ run_analysis <- function(comparison, limma_params, normalized_counts, out_dirs, 
     ht <- generate_heatmap(limma_results, intensity_matrix,
                      exp_name = comparison$exp, ctrl_name = comparison$ctrl,
                      fig_dir = out_dirs$heatmap, design = limma_params$design,
-                     color1 = color1, color2 = color2)
+                     heatmap_norm = heatmap_norm, color1 = color1, color2 = color2)
     draw(ht, column_title = paste0(comparison$exp, " vs ", comparison$ctrl, " — Differentially Abundant Proteins"),
          column_title_gp = gpar(fontsize = 14, fontface = "bold"))
     dev.off()
@@ -832,7 +852,7 @@ run_analysis <- function(comparison, limma_params, normalized_counts, out_dirs, 
   })
 }
 
-run_analysis_phospho <- function(comparison, limma_params, normalized_counts, out_dirs, intensity_matrix_raw = NULL, peptide_metadata = NULL, ont_option = "BP", skip_gsea = FALSE, color1 = "#D55E00", color2 = "#0072B2") {
+run_analysis_phospho <- function(comparison, limma_params, normalized_counts, out_dirs, intensity_matrix_raw = NULL, peptide_metadata = NULL, ont_option = "BP", skip_gsea = FALSE, heatmap_norm = "zscore", color1 = "#D55E00", color2 = "#0072B2") {
   tryCatch({
     print(paste("Starting analysis for comparison:", comparison$name))
 
@@ -910,7 +930,7 @@ run_analysis_phospho <- function(comparison, limma_params, normalized_counts, ou
                            exp_name = comparison$exp, ctrl_name = comparison$ctrl,
                            fig_dir = out_dirs$heatmap, design = limma_params$design,
                            row_id_col = "peptide_id",
-                           color1 = color1, color2 = color2)
+                           heatmap_norm = heatmap_norm, color1 = color1, color2 = color2)
     draw(ht, column_title = paste0(comparison$exp, " vs ", comparison$ctrl, " — Differentially Abundant Phosphopeptides"),
          column_title_gp = gpar(fontsize = 14, fontface = "bold"))
     dev.off()
