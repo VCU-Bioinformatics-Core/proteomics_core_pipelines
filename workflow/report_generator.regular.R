@@ -489,7 +489,8 @@ if (nrow(all_rows) == 0 || length(id_cols) == 0) {{
     query_df <- query_df %>% dplyr::arrange(Significant_Comparisons == "Not Significant")
   }}
   query_df <- query_df %>%
-    dplyr::rename(dplyr::any_of(c("Protein Name" = "gene_name", "UniProt ID" = "uniprotswissprot")))
+    dplyr::rename(dplyr::any_of(c("Protein Name" = "gene_name", "UniProt ID" = "uniprotswissprot",
+                                  "Significant Comparisons" = "Significant_Comparisons")))
 }}
 DT::datatable(query_df,
               caption = "Protein significance across all comparisons",
@@ -636,9 +637,9 @@ if (dap_flag > 0){{
   cat("- **Protein Name**: human-readable protein name\n")
   cat("- **UniProt ID**: UniProt accession identifier\n")
   cat("- **logFC**: log\u2082 fold-change (experimental / control) — positive = higher in experimental, negative = higher in control\n")
-  cat("- **pvalue**: raw p-value from the limma moderated t-test\n")
-  cat("- **padj**: Benjamini-Hochberg FDR-adjusted p-value\n")
-  cat("- **imputation_category**: extent of missing value imputation — *complete-data* (none), *imputation-low* (1 missing), *imputation-medium* (2 missing), *imputation-high* (3+ missing)\n\n")
+  cat("- **P-value**: raw p-value from the limma moderated t-test\n")
+  cat("- **Adjusted P-value**: Benjamini-Hochberg FDR-adjusted p-value\n")
+  cat("- **Imputation Category**: extent of missing value imputation — *complete-data* (none), *imputation-low* (1 missing), *imputation-medium* (2 missing), *imputation-high* (3+ missing)\n\n")
 }}
 
 ```
@@ -650,8 +651,11 @@ if (dap_flag > 0){{
     combined_sigs %>%
       dplyr::select(dplyr::any_of(c("gene_name", "uniprotswissprot")),
                     logFC, pvalue, padj, imputation_category) %>%
-      dplyr::rename(dplyr::any_of(c("Protein Name" = "gene_name",
-                                    "UniProt ID"   = "uniprotswissprot"))),
+      dplyr::rename(dplyr::any_of(c("Protein Name"       = "gene_name",
+                                    "UniProt ID"         = "uniprotswissprot",
+                                    "P-value"            = "pvalue",
+                                    "Adjusted P-value"   = "padj",
+                                    "Imputation Category" = "imputation_category"))),
     caption = "All Significant Differentially Abundant Proteins",
     filter = "top")
 

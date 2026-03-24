@@ -638,8 +638,8 @@ if (i <= length(results) && !is.null(results[[{i}]]) && !is.null(results[[{i}]]$
     comparison_section <- paste0(comparison_section, "\n\n", glue('
 #### Table of Differentially Abundant Phosphopeptides
 
-All significant phosphopeptides (adj. p-value < 0.05 and |FC| ≥ 1.5) with both nominal (**pvalue**)
-and adjusted p-values (**padj**), sorted by adjusted p-value.
+All significant phosphopeptides (adj. p-value < 0.05 and |FC| ≥ 1.5) with both nominal (**P-value**)
+and adjusted p-values (**Adjusted P-value**), sorted by adjusted p-value.
 
 ```{{r daps-desc-{i}, results="asis"}}
 
