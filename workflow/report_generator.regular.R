@@ -552,24 +552,14 @@ dap_flag = 0
 if (!is.null(results[[{i}]]) && !is.null(results[[{i}]]$limma)) {{
   imp_levels <- c("complete-data", "on-off", "imputation-low", "imputation-medium", "imputation-high", "not-significant", "other")
 
-  top_up <- results[[{i}]]$limma %>%
-    filter(!is.na(adj.P.Val) & adj.P.Val < 0.05 & logFC >= 0.58) %>%
+  combined_sigs <- results[[{i}]]$limma %>%
+    filter(!is.na(adj.P.Val) & adj.P.Val < 0.05 & abs(logFC) >= 0.58) %>%
     mutate(logFC = round(logFC, 2),
            pvalue = signif(P.Value, 3),
            padj = signif(adj.P.Val, 3),
            imputation_category = factor(imputation_category, levels = imp_levels)) %>%
     arrange(padj)
 
-  top_down <- results[[{i}]]$limma %>%
-    filter(!is.na(adj.P.Val) & adj.P.Val < 0.05 & logFC <= -0.58) %>%
-    mutate(logFC = round(logFC, 2),
-           pvalue = signif(P.Value, 3),
-           padj = signif(adj.P.Val, 3),
-           imputation_category = factor(imputation_category, levels = imp_levels)) %>%
-    arrange(padj)
-  
-  combined_sigs <- bind_rows(top_up, top_down)
-  
   # update the flags
   if (nrow(combined_sigs) > 0) {{
     dap_flag <- 1
@@ -587,29 +577,28 @@ if (i <= length(results) && !is.null(results[[{i}]]) && !is.null(results[[{i}]]$
   if ("imputation_category" %in% colnames(sig_df) && nrow(sig_df) > 0) {{
     cat_counts <- as.data.frame(table(sig_df$imputation_category))
     colnames(cat_counts) <- c("Category", "Count")
-    kable(cat_counts, caption = "Significant DAPs by imputation category (all, not just top 20)")
+    kable(cat_counts, caption = "Significant DAPs by imputation category")
   }}
 }}
 ```
 
 #### Table of Differentially Abundant Proteins
 
+All significant proteins (adj. p-value < 0.05 and |FC| ≥ 1.5), sorted by adjusted p-value.
+
 ```{{r daps-desc-{i}, results="asis"}}
 
 if (dap_flag > 0){{
-  cat("- Description: differentially abundant proteins table from the limma moderated t-test\n")
+  cat("- Description: all significant differentially abundant proteins from the limma moderated t-test\n")
   cat("- **Protein Name**: human-readable protein name\n")
   cat("- **UniProt ID**: UniProt accession identifier\n")
-  cat("- **logFC**: log\u2082 fold-change (experimental / control) — positive values indicate higher abundance in the experimental group\n")
+  cat("- **logFC**: log\u2082 fold-change (experimental / control) — positive = higher in experimental, negative = higher in control\n")
   cat("- **pvalue**: raw p-value from the limma moderated t-test\n")
   cat("- **padj**: Benjamini-Hochberg FDR-adjusted p-value\n")
   cat("- **imputation_category**: extent of missing value imputation — *complete-data* (none), *imputation-low* (1 missing), *imputation-medium* (2 missing), *imputation-high* (3+ missing)\n\n")
 }}
 
 ```
-
-Table of the top differentially abundant proteins with both nominal (**pvalue**)
-and adjusted p-values (**padj**).
 
 ```{{r daps-{i}}}
 
@@ -620,7 +609,7 @@ if (dap_flag > 0){{
                     logFC, pvalue, padj, imputation_category) %>%
       dplyr::rename(dplyr::any_of(c("Protein Name" = "gene_name",
                                     "UniProt ID"   = "uniprotswissprot"))),
-    caption = "Differentially Abundance Proteins",
+    caption = "All Significant Differentially Abundant Proteins",
     filter = "top")
 
 }} else {{

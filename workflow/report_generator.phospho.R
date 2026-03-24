@@ -572,37 +572,24 @@ dap_flags = c(0,0)
 if (!is.null(results[[{i}]]) && !is.null(results[[{i}]]$limma)) {{
   imp_levels <- c("complete-data", "on-off", "imputation-low", "imputation-medium", "imputation-high", "not-significant", "other")
 
-  top_up <- results[[{i}]]$limma %>%
-    filter(!is.na(adj.P.Val) & adj.P.Val < 0.05 & logFC >= 0.58) %>%
+  sig_hits <- results[[{i}]]$limma %>%
+    filter(!is.na(adj.P.Val) & adj.P.Val < 0.05 & abs(logFC) >= 0.58) %>%
     mutate(logFC = round(logFC, 2),
            pvalue = signif(P.Value, 3),
            padj = signif(adj.P.Val, 3),
            imputation_category = factor(imputation_category, levels = imp_levels)) %>%
-    arrange(padj) %>%
-    head(20)
+    arrange(padj)
 
-  top_down <- results[[{i}]]$limma %>%
-    filter(!is.na(adj.P.Val) & adj.P.Val < 0.05 & logFC <= -0.58) %>%
-    mutate(logFC = round(logFC, 2),
-           pvalue = signif(P.Value, 3),
-           padj = signif(adj.P.Val, 3),
-           imputation_category = factor(imputation_category, levels = imp_levels)) %>%
-    arrange(padj) %>%
-    head(20)
-  
   # update the flags
-  if (nrow(top_up) > 0) {{
+  if (nrow(sig_hits) > 0) {{
     dap_flags[1] <- 1
-  }}
-  if (nrow(top_down) > 0) {{
-    dap_flags[2] <- 1
   }}
 
 }}
 ```
 
 ```{{r top-check-daps-{i} }}
-if (sum(dap_flags) == 0) {{
+if (dap_flags[1] == 0) {{
   cat("No differential abundance results available for this comparison")
 }}
 
@@ -617,59 +604,42 @@ if (i <= length(results) && !is.null(results[[{i}]]) && !is.null(results[[{i}]]$
   if ("imputation_category" %in% colnames(sig_df) && nrow(sig_df) > 0) {{
     cat_counts <- as.data.frame(table(sig_df$imputation_category))
     colnames(cat_counts) <- c("Category", "Count")
-    kable(cat_counts, caption = "Significant DAPs by imputation category (all, not just top 20)")
+    kable(cat_counts, caption = "Significant DAPs by imputation category")
   }}
 }}
 ```
 ')
     comparison_section <- paste0(comparison_section, "\n\n", glue('
-#### Table of Differentially Abundant Proteins
+#### Table of Differentially Abundant Phosphopeptides
 
-Table of the top differentially abundant proteins with both nominal (**pvalue**)
-and adjusted p-values (**padj**).
+All significant phosphopeptides (adj. p-value < 0.05 and |FC| ≥ 1.5) with both nominal (**pvalue**)
+and adjusted p-values (**padj**), sorted by adjusted p-value.
 
-```{{r top-up-daps-{i}, results="asis"}}
+```{{r daps-desc-{i}, results="asis"}}
 
 if (dap_flags[1] > 0){{
-    #DT::datatable(top_up %>% select(SYMBOL, log2FoldChange, pvalue, padj, GENENAME),
-    #           caption = "Top Up Regulated Proteins")
-
-    cat("- Description: differentially abundant phosphopeptides table from the limma moderated t-test\n")
+    cat("- Description: all significant differentially abundant phosphopeptides from the limma moderated t-test\n")
     cat("- **hgnc_symbol**: gene symbol\n")
     cat("- **uniprot_id**: UniProt accession identifier\n")
     cat("- **peptide_id**: specific phosphopeptide identifier\n")
-    cat("- **logFC**: log\u2082 fold-change (experimental / control) — positive values indicate higher abundance in the experimental group\n")
+    cat("- **logFC**: log\u2082 fold-change (experimental / control) — positive = higher in experimental, negative = higher in control\n")
     cat("- **pvalue**: raw p-value from the limma moderated t-test\n")
     cat("- **padj**: Benjamini-Hochberg FDR-adjusted p-value\n")
     cat("- **imputation_category**: extent of missing value imputation — *complete-data* (none), *imputation-low* (1), *imputation-medium* (2), *imputation-high* (3+)\n\n")
-
-    DT::formatSignif(
-      DT::datatable(top_up %>% dplyr::select(dplyr::any_of(c("hgnc_symbol", "uniprot_id", "peptide_id")), logFC, pvalue, padj, imputation_category),
-               caption = "Top Up Regulated Proteins",
-               filter = "top"),
-      columns = c("pvalue", "padj"), digits = 3)
-}} else {{
-  cat("No up regulated proteins found\\n\\n")
 }}
-  
+
 ```
 
-```{{r top-down-daps-{i}, results="asis"}}
+```{{r daps-{i}}}
 
-if (dap_flags[2] > 0){{
-  # DT::datatable(top_down %>% select(SYMBOL, log2FoldChange, pvalue, padj, GENENAME),
-  #             caption = "Top Down Regulated Proteins")
-
-  cat("**hgnc_symbol** is the gene symbol; **uniprot_id** is the UniProt accession; **peptide_id** identifies the specific phosphopeptide. **logFC** is the log\u2082 fold-change — positive values indicate higher abundance in the experimental group. **pvalue** is the raw limma p-value; **padj** is the BH-adjusted p-value. **imputation_category** describes how many values were imputed: *complete-data* (none), *imputation-low* (1), *imputation-medium* (2), or *imputation-high* (3+).\n\n")
-
+if (dap_flags[1] > 0){{
   DT::formatSignif(
-    DT::datatable(top_down %>% dplyr::select(dplyr::any_of(c("hgnc_symbol", "uniprot_id", "peptide_id")), logFC, pvalue, padj, imputation_category),
-                caption = "Top Down Regulated Proteins",
-                filter = "top"),
+    DT::datatable(sig_hits %>% dplyr::select(dplyr::any_of(c("hgnc_symbol", "uniprot_id", "peptide_id")), logFC, pvalue, padj, imputation_category),
+               caption = "All Significant Differentially Abundant Phosphopeptides",
+               filter = "top"),
     columns = c("pvalue", "padj"), digits = 3)
-  
 }} else {{
-  cat("No down regulated proteins found\\n\\n")
+  cat("No significant differentially abundant phosphopeptides found\\n\\n")
 }}
   
 ```
