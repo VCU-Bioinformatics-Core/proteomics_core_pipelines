@@ -187,7 +187,7 @@ if (!is.null(analysis_params)) {{
     ),
     stringsAsFactors = FALSE
   )
-  knitr::kable(params_df, caption = "Key analysis parameters")
+  knitr::kable(params_df)
 }}
 ```
 
@@ -208,7 +208,7 @@ if (!is.null(protein_counts)) {{
     counts <- c(counts, protein_counts$no_crap - protein_counts$not_imputable)
   }}
   summary_df <- data.frame(Step = steps, Count = counts, stringsAsFactors = FALSE)
-  knitr::kable(summary_df, caption = "Protein filtering summary")
+  knitr::kable(summary_df)
 }}
 ```
 \n')
@@ -256,12 +256,12 @@ param_table <- data.frame(
   Value     = c(if (startsWith(imp_method, "DEP-")) "DEP" else "VCU Core", imp_method, as.character(imp_q)),
   stringsAsFactors = FALSE
 )
-kable(param_table, caption = "Imputation parameters used in this analysis")
+kable(param_table)
 ```
 
 ### Observed vs. Imputed Intensity Values
 
-The histograms below show the distribution of all log2 intensity values across
+The histogram below shows the distribution of all log2 intensity values across
 all proteins. **Observed** (blue) values are those measured directly, while
 **Imputed** (orange) values are those that were missing and filled in. Imputed
 values typically appear as a secondary peak shifted towards the lower end of
@@ -270,6 +270,34 @@ the distribution, reflecting the left-censored nature of missing-not-at-random
 
 ```{r imputation-histogram, out.width="100%"}
 knitr::include_graphics(file.path(out_dirs$imputation, "global_imputation_histogram.png"))
+```
+
+### Observed vs. Imputed Value Counts
+
+The table below summarizes the total number of observed and imputed intensity values across all curated proteins and samples. Observed values were measured directly by the instrument; imputed values replaced missing entries using the selected imputation method. A high imputation percentage warrants caution — it suggests a substantial portion of the data is modeled rather than measured.
+
+```{r imputation-counts}
+intensity_raw     <- rds_data[[5]]
+intensity_imputed <- rds_data[[6]]
+raw_mat     <- as.matrix(intensity_raw)
+imputed_mat <- as.matrix(intensity_imputed)
+raw_mat  <- raw_mat[rownames(imputed_mat), , drop = FALSE]
+obs_mask <- !is.na(raw_mat)
+n_obs    <- sum(obs_mask)
+n_imp    <- sum(!obs_mask)
+n_tot    <- length(obs_mask)
+pct_imp  <- round(100 * n_imp / n_tot, 1)
+n_curated <- nrow(intensity_imputed)
+counts_table <- data.frame(
+  Parameter = c("Curated proteins", "Total measurements", "Observed values", "Imputed values", "Imputed (%)"),
+  Value     = c(format(n_curated, big.mark = ","),
+                format(n_tot,     big.mark = ","),
+                format(n_obs,     big.mark = ","),
+                format(n_imp,     big.mark = ","),
+                paste0(pct_imp, "%")),
+  stringsAsFactors = FALSE
+)
+kable(counts_table)
 ```
 
 ### Number of Missing Values per Sample
@@ -577,7 +605,7 @@ if (i <= length(results) && !is.null(results[[{i}]]) && !is.null(results[[{i}]]$
   if ("imputation_category" %in% colnames(sig_df) && nrow(sig_df) > 0) {{
     cat_counts <- as.data.frame(table(sig_df$imputation_category))
     colnames(cat_counts) <- c("Category", "Count")
-    kable(cat_counts, caption = "Significant DAPs by imputation category")
+    kable(cat_counts)
   }}
 }}
 ```

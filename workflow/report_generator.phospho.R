@@ -187,7 +187,7 @@ if (!is.null(analysis_params)) {{
     ),
     stringsAsFactors = FALSE
   )
-  knitr::kable(params_df, caption = "Key analysis parameters")
+  knitr::kable(params_df)
 }}
 ```
 
@@ -208,7 +208,7 @@ if (!is.null(peptide_counts)) {{
     counts <- c(counts, peptide_counts$phospho - peptide_counts$not_imputable)
   }}
   summary_df <- data.frame(Step = steps, Count = counts, stringsAsFactors = FALSE)
-  knitr::kable(summary_df, caption = "Peptide filtering summary")
+  knitr::kable(summary_df)
 }} else {{
   cat("Peptide count summary not available.")
 }}
@@ -258,11 +258,13 @@ param_table <- data.frame(
   Value     = c(if (startsWith(imp_method, "DEP-")) "DEP" else "VCU Core", imp_method, as.character(imp_q)),
   stringsAsFactors = FALSE
 )
-kable(param_table, caption = "Imputation parameters used in this analysis")
+kable(param_table)
 ```
 
-The histograms below show the distribution of all log2 intensity values across
-all proteins. **Observed** (blue) values are those measured directly, while
+### Observed vs. Imputed Intensity Values
+
+The histogram below shows the distribution of all log2 intensity values across
+all phosphopeptides. **Observed** (blue) values are those measured directly, while
 **Imputed** (orange) values are those that were missing and filled in. Imputed
 values typically appear as a secondary peak shifted towards the lower end of the
 distribution, reflecting the left-censored nature of missing-not-at-random
@@ -271,6 +273,10 @@ distribution, reflecting the left-censored nature of missing-not-at-random
 ```{r imputation-histogram, out.width="100%"}
 knitr::include_graphics(file.path(out_dirs$imputation, "global_imputation_histogram.png"))
 ```
+
+### Observed vs. Imputed Value Counts
+
+The table below summarizes the total number of observed and imputed intensity values across all curated phosphopeptides and samples. Observed values were measured directly by the instrument; imputed values replaced missing entries using the selected imputation method. A high imputation percentage warrants caution — it suggests a substantial portion of the data is modeled rather than measured.
 
 ```{r imputation-counts}
 intensity_raw      <- rds_data[[5]]
@@ -293,7 +299,7 @@ counts_table <- data.frame(
                 paste0(pct_imp, "%")),
   stringsAsFactors = FALSE
 )
-kable(counts_table, caption = "Observed vs. imputed value counts")
+kable(counts_table)
 ```
 
 ### Number of Missing Values per Sample
@@ -450,7 +456,7 @@ kable(summary_table, caption = "")
 
 ### Query Differential Expression Hits Across All Analyses
 
-Use the search box below to look up any phosphopeptide. **peptide_id** is the phosphopeptide identifier; **hgnc_symbol** is the gene symbol; **uniprot_id** is the UniProt accession. **Significant_Comparisons** lists every comparison where the peptide was significant (adj. p-value < 0.05 and |FC| ≥ 1.5), or "Not Significant" if it did not meet that threshold in any comparison.
+Use the search box below to look up any phosphopeptide. **Peptide ID** is the phosphopeptide identifier; **HGNC** is the gene symbol; **UniProt ID** is the UniProt accession. **Significant Comparisons** lists every comparison where the peptide was significant (adj. p-value < 0.05 and |FC| ≥ 1.5), or "Not Significant" if it did not meet that threshold in any comparison.
 
 ```{{r query-protein}}
 all_rows <- dplyr::bind_rows(lapply(seq_along(comparisons), function(i) {{
@@ -467,19 +473,23 @@ if (nrow(all_rows) == 0 || length(id_cols) == 0) {{
   query_df <- all_rows %>%
     dplyr::group_by(dplyr::across(dplyr::any_of(c("peptide_id", "hgnc_symbol", "uniprot_id")))) %>%
     dplyr::summarise(
-      Significant_Comparisons = {{
+      `Significant Comparisons` = {{
         sig_comps <- comparison_name[is_sig]
         if (length(sig_comps) == 0) "Not Significant" else paste(sig_comps, collapse = "<br>")
       }},
       .groups = "drop"
     ) %>%
-    dplyr::arrange(Significant_Comparisons == "Not Significant", peptide_id)
+    dplyr::arrange(`Significant Comparisons` == "Not Significant", peptide_id) %>%
+    dplyr::rename(dplyr::any_of(c(
+      "HGNC"       = "hgnc_symbol",
+      "UniProt ID" = "uniprot_id",
+      "Peptide ID" = "peptide_id"
+    )))
 }}
 DT::datatable(query_df,
-              caption = "Phosphopeptide significance across all comparisons",
               rownames = FALSE,
               escape = FALSE,
-              filter = "none",
+              filter = "top",
               options = list(pageLength = 15, dom = "ftip"))
 ```
 \n'))
@@ -604,7 +614,7 @@ if (i <= length(results) && !is.null(results[[{i}]]) && !is.null(results[[{i}]]$
   if ("imputation_category" %in% colnames(sig_df) && nrow(sig_df) > 0) {{
     cat_counts <- as.data.frame(table(sig_df$imputation_category))
     colnames(cat_counts) <- c("Category", "Count")
-    kable(cat_counts, caption = "Significant DAPs by imputation category")
+    kable(cat_counts)
   }}
 }}
 ```
@@ -619,13 +629,13 @@ and adjusted p-values (**padj**), sorted by adjusted p-value.
 
 if (dap_flags[1] > 0){{
     cat("- Description: all significant differentially abundant phosphopeptides from the limma moderated t-test\n")
-    cat("- **hgnc_symbol**: gene symbol\n")
-    cat("- **uniprot_id**: UniProt accession identifier\n")
-    cat("- **peptide_id**: specific phosphopeptide identifier\n")
+    cat("- **HGNC**: gene symbol\n")
+    cat("- **UniProt ID**: UniProt accession identifier\n")
+    cat("- **Peptide ID**: specific phosphopeptide identifier\n")
     cat("- **logFC**: log\u2082 fold-change (experimental / control) — positive = higher in experimental, negative = higher in control\n")
-    cat("- **pvalue**: raw p-value from the limma moderated t-test\n")
-    cat("- **padj**: Benjamini-Hochberg FDR-adjusted p-value\n")
-    cat("- **imputation_category**: extent of missing value imputation — *complete-data* (none), *imputation-low* (1), *imputation-medium* (2), *imputation-high* (3+)\n\n")
+    cat("- **P-value**: raw p-value from the limma moderated t-test\n")
+    cat("- **Adjusted P-value**: Benjamini-Hochberg FDR-adjusted p-value\n")
+    cat("- **Imputation Category**: extent of missing value imputation — *complete-data* (none), *imputation-low* (1), *imputation-medium* (2), *imputation-high* (3+)\n\n")
 }}
 
 ```
@@ -634,10 +644,20 @@ if (dap_flags[1] > 0){{
 
 if (dap_flags[1] > 0){{
   DT::formatSignif(
-    DT::datatable(sig_hits %>% dplyr::select(dplyr::any_of(c("hgnc_symbol", "uniprot_id", "peptide_id")), logFC, pvalue, padj, imputation_category),
-               caption = "All Significant Differentially Abundant Phosphopeptides",
-               filter = "top"),
-    columns = c("pvalue", "padj"), digits = 3)
+    DT::datatable(
+      sig_hits %>%
+        dplyr::select(dplyr::any_of(c("hgnc_symbol", "uniprot_id", "peptide_id")), logFC, pvalue, padj, imputation_category) %>%
+        dplyr::rename(dplyr::any_of(c(
+          "HGNC"               = "hgnc_symbol",
+          "UniProt ID"         = "uniprot_id",
+          "Peptide ID"         = "peptide_id",
+          "P-value"            = "pvalue",
+          "Adjusted P-value"   = "padj",
+          "Imputation Category" = "imputation_category"
+        ))),
+      filter = "top",
+      options = list(pageLength = 25)),
+    columns = c("P-value", "Adjusted P-value"), digits = 3)
 }} else {{
   cat("No significant differentially abundant phosphopeptides found\\n\\n")
 }}
