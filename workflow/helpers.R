@@ -699,6 +699,7 @@ process_gsea <- function(result, p = 0.05, lfc = 0.58, ont_option = "BP") {
     names(gene_list) <- sig_genes$ensembl_gene_id
     gene_list <- gene_list[!is.na(names(gene_list))]
     gene_list <- gene_list[!duplicated(names(gene_list))]
+    gene_list <- gene_list[abs(gene_list) >= 0.1]  # drop near-zero logFC genes
 
     if (length(gene_list) < 2) {
       message("Not enough genes with Ensembl IDs for GSEA analysis")
@@ -707,9 +708,10 @@ process_gsea <- function(result, p = 0.05, lfc = 0.58, ont_option = "BP") {
 
     gse_result <- gseGO(geneList = gene_list,
                         ont = ont_option,
-                        minGSSize = 1,
-                        maxGSSize = 900,
+                        minGSSize = 5,
+                        maxGSSize = 500,
                         keyType = "ENSEMBL",
+                        scoreType = "std",
                         pvalueCutoff = 0.05,
                         pAdjustMethod = "fdr",
                         OrgDb = annotation_db)

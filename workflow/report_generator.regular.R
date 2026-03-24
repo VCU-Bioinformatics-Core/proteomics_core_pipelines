@@ -632,8 +632,8 @@ if (dap_flag > 0){{
 ```{{r gsea-header-{i}, results="asis"}}
 if (!isTRUE(analysis_params$skip_gsea)) {{
   cat("**Gene Set Enrichment Analysis**\n\n")
-  cat("- Description: Gene Set Enrichment Analysis using (GO) terms with both a bubble plot and table\n")
-  cat("- X-axis: the protein ratio (# genes related to Gene Set / total number of significant genes) to which the term is enriched\n")
+  cat("- Description: Gene Set Enrichment Analysis using Gene Ontology (GO) terms, displayed as a bar plot and table\n")
+  cat("- X-axis: Normalized Enrichment Score (NES) — a positive NES indicates that the gene set is activated (upregulated) in the experimental condition, while a negative NES indicates that the gene set is suppressed (downregulated)\n")
   cat("- Y-axis: a given Gene Set\n\n")
 }}
 ```
@@ -648,7 +648,25 @@ if (!isTRUE(analysis_params$skip_gsea)) {{
 }}
 ```
 
-```{{r gsea-table-{i} }}
+```{{r gsea-desc-{i}, results="asis"}}
+if (!isTRUE(analysis_params$skip_gsea)) {{
+  if (!is.null(results[[{i}]]) && !is.null(results[[{i}]]$gsea)) {{
+    gsea_df <- as.data.frame(results[[{i}]]$gsea)
+    if (nrow(gsea_df) > 0) {{
+      cat("- **ID**: Gene Ontology term identifier\n")
+      cat("- **Description**: Gene Ontology term name\n")
+      cat("- **setSize**: number of genes in the set present in the analysis\n")
+      cat("- **enrichmentScore**: raw enrichment score\n")
+      cat("- **NES**: Normalized Enrichment Score — comparable across gene sets of different sizes\n")
+      cat("- **pvalue**: nominal p-value\n")
+      cat("- **p.adjust**: Benjamini-Hochberg adjusted p-value\n")
+      cat("- **qvalue**: FDR q-value\n\n")
+    }}
+  }}
+}}
+```
+
+```{{r gsea-table-{i}}}
 # Display top GSEA results
 if (!isTRUE(analysis_params$skip_gsea)) {{
   if (!is.null(results[[{i}]]) && !is.null(results[[{i}]]$gsea)) {{
@@ -658,15 +676,6 @@ if (!isTRUE(analysis_params$skip_gsea)) {{
                p.adjust=formatC(p.adjust, format="e", digits=2),
                qvalue=formatC(qvalue, format="e", digits=2))
     if (nrow(gsea_results) > 0) {{
-      cat("- Description: Gene Set Enrichment Analysis results table\n")
-      cat("- **ID**: Gene Ontology term identifier\n")
-      cat("- **Description**: Gene Ontology term name\n")
-      cat("- **setSize**: number of genes in the set present in the analysis\n")
-      cat("- **enrichmentScore**: raw enrichment score\n")
-      cat("- **NES**: Normalized Enrichment Score — comparable across gene sets of different sizes\n")
-      cat("- **pvalue**: nominal p-value\n")
-      cat("- **p.adjust**: Benjamini-Hochberg adjusted p-value\n")
-      cat("- **qvalue**: FDR q-value\n\n")
       DT::datatable(gsea_results %>%
                    dplyr::select(ID, Description, setSize, enrichmentScore, NES, pvalue, p.adjust, qvalue) %>%
                    head(20),

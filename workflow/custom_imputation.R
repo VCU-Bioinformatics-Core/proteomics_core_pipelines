@@ -89,9 +89,12 @@ impute_3by3 <- function(mat, groups, q = 0.01, ...) {
     global_sigma <- sd(all_obs)
   }
 
+  grp_indices <- lapply(setNames(unique_groups, unique_groups),
+                        function(grp) which(groups == grp))
+
   for (i in seq_len(nrow(mat))) {
     for (grp in unique_groups) {
-      grp_idx  <- which(groups == grp)
+      grp_idx  <- grp_indices[[grp]]
       vals     <- mat[i, grp_idx]
       miss_pos <- grp_idx[is.na(vals)]
 
