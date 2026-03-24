@@ -141,11 +141,17 @@ if (debug){
 if (genome == "human") {
   if (!require("org.Hs.eg.db")) BiocManager::install("org.Hs.eg.db")
   annotation_db <- org.Hs.eg.db
-  ensembl <- useMart("ensembl", dataset = "hsapiens_gene_ensembl")
+  ensembl <- tryCatch(
+    useEnsembl("ensembl", dataset = "hsapiens_gene_ensembl"),
+    error = function(e) { message("BioMart connection failed: ", e$message, "\nGSEA will be skipped."); NULL }
+  )
 } else if (genome == "mouse") {
   if (!require("org.Mm.eg.db")) BiocManager::install("org.Mm.eg.db")
   annotation_db <- org.Mm.eg.db
-  ensembl <- useMart("ensembl", dataset = "mmusculus_gene_ensembl")
+  ensembl <- tryCatch(
+    useEnsembl("ensembl", dataset = "mmusculus_gene_ensembl"),
+    error = function(e) { message("BioMart connection failed: ", e$message, "\nGSEA will be skipped."); NULL }
+  )
 } else {
   stop("Invalid genome specified. Use 'mouse' or 'human'")
 }

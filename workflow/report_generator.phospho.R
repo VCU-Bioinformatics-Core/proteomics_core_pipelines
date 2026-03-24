@@ -621,7 +621,8 @@ if (i <= length(results) && !is.null(results[[{i}]]) && !is.null(results[[{i}]]$
   }}
 }}
 ```
-
+')
+    comparison_section <- paste0(comparison_section, "\n\n", glue('
 #### Table of Differentially Abundant Proteins
 
 Table of the top differentially abundant proteins with both nominal (**pvalue**)
@@ -746,8 +747,8 @@ if (!isTRUE(analysis_params$skip_gsea)) {{
     cat("No GSEA results available for this comparison")
   }}
 }}
-```')
-    
+```'))
+
     rmd_content <- paste0(rmd_content, comparison_section)
   }
   

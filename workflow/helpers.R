@@ -184,6 +184,13 @@ generate_volcano_protein <- function(data, exp_name, ctrl_name, p_thresh = 0.05,
       TRUE ~ "Not Significant"
     ))
 
+  # Place the hline at the raw P.Value boundary that corresponds to adj.P.Val < p_thresh,
+  # so the line aligns with the coloring. Fall back to -log10(p_thresh) if nothing is significant.
+  sig_boundary <- labeled_dat %>%
+    filter(sig_label != "Not Significant") %>%
+    summarise(y = if (n() > 0) min(-log10(P.Value)) else -log10(p_thresh)) %>%
+    pull(y)
+
   volcano_plot <- ggplot(labeled_dat, aes(x = logFC, y = -log10(P.Value), color = sig_label)) +
     geom_point(data = labeled_dat %>% filter(sig_label == "Not Significant"), alpha = 0.4) +
     geom_point(data = labeled_dat %>% filter(sig_label != "Not Significant"), alpha = 0.7) +
@@ -194,7 +201,7 @@ generate_volcano_protein <- function(data, exp_name, ctrl_name, p_thresh = 0.05,
     geom_label_repel(data = labeled_dat %>% filter(!is.na(label_display)),
                      aes(x = logFC, y = -log10(P.Value), label = label_display),
                      max.overlaps = Inf, show.legend = FALSE) +
-    geom_hline(yintercept = -log10(p_thresh), col = "gray40", linetype = 2) +
+    geom_hline(yintercept = sig_boundary, col = "gray40", linetype = 2) +
     geom_vline(xintercept = c(-lfc, lfc)) +
     theme_minimal(base_size = 14) +
     theme(legend.position = "right",
@@ -268,6 +275,11 @@ generate_volcano_phospho <- function(data, exp_name, ctrl_name, p_thresh = 0.05,
       TRUE ~ "Not Significant"
     ))
 
+  sig_boundary <- labeled_dat %>%
+    filter(sig_label != "Not Significant") %>%
+    summarise(y = if (n() > 0) min(-log10(P.Value)) else -log10(p_thresh)) %>%
+    pull(y)
+
   volcano_plot <- ggplot(labeled_dat, aes(x = logFC, y = -log10(P.Value), color = sig_label)) +
     geom_point(data = labeled_dat %>% filter(sig_label == "Not Significant"), alpha = 0.4) +
     geom_point(data = labeled_dat %>% filter(sig_label != "Not Significant"), alpha = 0.7) +
@@ -278,7 +290,7 @@ generate_volcano_phospho <- function(data, exp_name, ctrl_name, p_thresh = 0.05,
     geom_label_repel(data = labeled_dat %>% filter(!is.na(label_display)),
                      aes(x = logFC, y = -log10(P.Value), label = label_display),
                      max.overlaps = Inf, show.legend = FALSE) +
-    geom_hline(yintercept = -log10(p_thresh), col = "gray40", linetype = 2) +
+    geom_hline(yintercept = sig_boundary, col = "gray40", linetype = 2) +
     geom_vline(xintercept = c(-lfc, lfc)) +
     theme_minimal(base_size = 14) +
     theme(legend.position = "right",
