@@ -367,9 +367,17 @@ if (!isTRUE(anova_summary$skipped)) {{
 
 ### Global Phosphopeptide Heatmap
 
-The heatmap below shows z-score normalized expression of the top 1000
+```{r global-heatmap-desc, results="asis"}
+if (isTRUE(analysis_params$heatmap_norm == "zscore")) {
+  cat("The heatmap below shows z-score normalized expression of the top 1000
 phosphopeptides by coefficient of variation (CV) across all samples, clustered
-by similarity.
+by similarity.")
+} else {
+  cat("The heatmap below shows intensity expression of the top 1000
+phosphopeptides by coefficient of variation (CV) across all samples, clustered
+by similarity.")
+}
+```
 
 ```{{r global-heatmap, out.width="100%"}}
 global_heatmap_path <- file.path(out_dirs$heatmap, "global_heatmap.png")
@@ -555,11 +563,19 @@ if (file.exists(ma_path)) {{
 
 **Heatmap**
 
-- Description: a heatmap of **z-score normalized** intensity data with application of 
-  **hierarchical clustering** by both samples and protein levels
-- X-axis: samples
-- Y-axis: proteins
-- Color-scale: z-score normalized intensity levels 
+```{{r heatmap-desc-{i}, results="asis"}}
+if (isTRUE(analysis_params$heatmap_norm == "zscore")) {{
+  cat("- Description: a heatmap of **z-score normalized** intensity data with application of **hierarchical clustering** by both samples and protein levels\n")
+  cat("- X-axis: samples\n")
+  cat("- Y-axis: proteins\n")
+  cat("- Color-scale: z-score normalized intensity levels\n")
+}} else {{
+  cat("- Description: a heatmap of **intensity** data with application of **hierarchical clustering** by both samples and protein levels\n")
+  cat("- X-axis: samples\n")
+  cat("- Y-axis: proteins\n")
+  cat("- Color-scale: intensity levels\n")
+}}
+```
 
 
 ```{{r heatmap-{i} }}

@@ -639,14 +639,14 @@ generate_heatmap <- function(results_df, normalized_counts, p = 0.05, lfc = 0.58
 # ==========================
 
 aggregate_phospho_for_gsea <- function(limma_results, peptide_metadata, p = 0.05, lfc = 0.58) {
-  # Join DE results with metadata to get PG.UniProtIds per peptide
-  limma_results <- limma_results %>%
-    left_join(peptide_metadata, by = "peptide_id")
-
-  # Identify peptides with at least one significant result, then get their
-  # parent UniProt IDs (PG.UniProtIds may be semicolon-separated; take first)
-  limma_results <- limma_results %>%
-    mutate(uniprot_id = sapply(strsplit(PG.UniProtIds, ";"), `[`, 1))
+  # uniprot_id is already present on limma_results (joined upstream in
+  # run_analysis_phospho); if for any reason it is absent, fall back to
+  # joining peptide_metadata and deriving it from PG.UniProtIds
+  if (!"uniprot_id" %in% colnames(limma_results)) {
+    limma_results <- limma_results %>%
+      left_join(peptide_metadata, by = "peptide_id") %>%
+      mutate(uniprot_id = sapply(strsplit(PG.UniProtIds, ";"), `[`, 1))
+  }
 
   sig_peptides <- limma_results %>%
     filter(adj.P.Val < p & abs(logFC) >= lfc)
@@ -672,13 +672,23 @@ aggregate_phospho_for_gsea <- function(limma_results, peptide_metadata, p = 0.05
     dplyr::select(uniprot_id, logFC)
 
   # Map UniProt IDs to Ensembl IDs via biomart (same approach as regular pipeline)
-  mapping <- getBM(
-    attributes = c("uniprotswissprot", "ensembl_gene_id", "hgnc_symbol"),
-    filters    = "uniprotswissprot",
-    values     = unique(aggregated$uniprot_id),
-    mart       = ensembl
-  ) %>%
-    distinct(uniprotswissprot, .keep_all = TRUE)
+  if (is.null(ensembl)) {
+    message("BioMart mart object is NULL — skipping Ensembl mapping for phospho GSEA")
+    return(NULL)
+  }
+  mapping <- tryCatch(
+    getBM(
+      attributes = c("uniprotswissprot", "ensembl_gene_id", "hgnc_symbol"),
+      filters    = "uniprotswissprot",
+      values     = unique(aggregated$uniprot_id),
+      mart       = ensembl
+    ) %>% distinct(uniprotswissprot, .keep_all = TRUE),
+    error = function(e) {
+      message("BioMart query failed in phospho aggregation: ", e$message)
+      NULL
+    }
+  )
+  if (is.null(mapping)) return(NULL)
 
   aggregated <- aggregated %>%
     left_join(mapping, by = c("uniprot_id" = "uniprotswissprot")) %>%
