@@ -388,22 +388,25 @@ summary_table <- data.frame(
   Total_DAPs = integer(),
   Upregulated = integer(),
   Downregulated = integer(),
+  `# Proteins Mapped` = integer(),
   GSEA_Performed = character(),
-  stringsAsFactors = FALSE
+  stringsAsFactors = FALSE,
+  check.names = FALSE
 )
 
 for (i in seq_along(comparisons)) {{
   if (i <= length(results) && !is.null(results[[i]])) {{
     res_df <- results[[i]]$limma
-    
+
     # Count DAPs (padj < 0.05 & |log2FC| >= 0.58)
     if (!is.null(res_df)) {{
       total_daps <- sum(!is.na(res_df$adj.P.Val) & res_df$adj.P.Val < 0.05 & abs(res_df$logFC) >= 0.58)
       up_daps <- sum(!is.na(res_df$adj.P.Val) & res_df$adj.P.Val < 0.05 & res_df$logFC >= 0.58)
       down_daps <- sum(!is.na(res_df$adj.P.Val) & res_df$adj.P.Val < 0.05 & res_df$logFC <= -0.58)
-      
+
       gsea_status <- ifelse(!is.null(results[[i]]$gsea), "Yes", "No")
-      
+      n_proteins_mapped <- if (!is.null(results[[i]]$protein_counts)) results[[i]]$protein_counts$n_mapped else NA_integer_
+
       summary_table <- rbind(summary_table, data.frame(
         Comparison = comparisons[[i]]$name,
         Experimental = comparisons[[i]]$exp,
@@ -411,8 +414,10 @@ for (i in seq_along(comparisons)) {{
         Total_DAPs = total_daps,
         Upregulated = up_daps,
         Downregulated = down_daps,
+        `# Proteins Mapped` = n_proteins_mapped,
         GSEA_Performed = gsea_status,
-        stringsAsFactors = FALSE
+        stringsAsFactors = FALSE,
+        check.names = FALSE
       ))
     }}
   }}
@@ -455,16 +460,21 @@ all_rows <- dplyr::bind_rows(lapply(seq_along(comparisons), function(i) {{
   res$is_sig <- !is.na(res$adj.P.Val) & res$adj.P.Val < 0.05 & abs(res$logFC) >= 0.58
   res[, intersect(c("peptide_id", "hgnc_symbol", "uniprot_id", "comparison_name", "is_sig"), colnames(res))]
 }}))
-query_df <- all_rows %>%
-  dplyr::group_by(dplyr::across(dplyr::any_of(c("peptide_id", "hgnc_symbol", "uniprot_id")))) %>%
-  dplyr::summarise(
-    Significant_Comparisons = {{
-      sig_comps <- comparison_name[is_sig]
-      if (length(sig_comps) == 0) "Not Significant" else paste(sig_comps, collapse = "<br>")
-    }},
-    .groups = "drop"
-  ) %>%
-  dplyr::arrange(Significant_Comparisons == "Not Significant", peptide_id)
+id_cols <- intersect(c("peptide_id", "hgnc_symbol", "uniprot_id"), colnames(all_rows))
+if (nrow(all_rows) == 0 || length(id_cols) == 0) {{
+  query_df <- data.frame()
+}} else {{
+  query_df <- all_rows %>%
+    dplyr::group_by(dplyr::across(dplyr::any_of(c("peptide_id", "hgnc_symbol", "uniprot_id")))) %>%
+    dplyr::summarise(
+      Significant_Comparisons = {{
+        sig_comps <- comparison_name[is_sig]
+        if (length(sig_comps) == 0) "Not Significant" else paste(sig_comps, collapse = "<br>")
+      }},
+      .groups = "drop"
+    ) %>%
+    dplyr::arrange(Significant_Comparisons == "Not Significant", peptide_id)
+}}
 DT::datatable(query_df,
               caption = "Phosphopeptide significance across all comparisons",
               rownames = FALSE,
@@ -690,7 +700,7 @@ if (!isTRUE(analysis_params$skip_gsea)) {{
 ```{{r gsea-{i}, out.width="100%"}}
 # Display GSEA results from file
 if (!isTRUE(analysis_params$skip_gsea)) {{
-  gsea_path <- file.path(out_dirs$gsea, paste0("{name}_GSEA.png"))
+  gsea_path <- file.path(out_dirs$gsea, paste0("{name}_gsea.png"))
   if (file.exists(gsea_path)) {{
     knitr::include_graphics(gsea_path)
   }}
@@ -763,7 +773,7 @@ manuscript_content <- '\n
 
 ### Methods
 Prior to differential abundance analysis, missing intensity values were imputed
-using the DEP R package [1]. Missing values in proteomics data-dependent
+using the DEP R package [1] or an in-house method developed by the VCU Proteomics Core. Missing values in proteomics data-dependent
 acquisition (DDA) experiments are commonly attributed to a missing-not-at-random
 (MNAR) mechanism, where low-abundance peptides fall below the instrument
 detection threshold. To address this, remaining missing values were imputed from
