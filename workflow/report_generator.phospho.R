@@ -367,16 +367,16 @@ if (!isTRUE(anova_summary$skipped)) {{
 
 ### Global Phosphopeptide Heatmap
 
-```{r global-heatmap-desc, results="asis"}
-if (isTRUE(analysis_params$heatmap_norm == "zscore")) {
+```{{r global-heatmap-desc, results="asis"}}
+if (isTRUE(analysis_params$heatmap_norm == "zscore")) {{
   cat("The heatmap below shows z-score normalized expression of the top 1000
 phosphopeptides by coefficient of variation (CV) across all samples, clustered
 by similarity.")
-} else {
+}} else {{
   cat("The heatmap below shows intensity expression of the top 1000
 phosphopeptides by coefficient of variation (CV) across all samples, clustered
 by similarity.")
-}
+}}
 ```
 
 ```{{r global-heatmap, out.width="100%"}}
