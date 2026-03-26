@@ -264,9 +264,19 @@ Rscript de.regular.R \
 ##### Arguments
 - `-c, --counts`: Path to the merged counts file **(Mandatory)**
 - `-s, --samplesheet`: Path to the sample sheet file **(Mandatory)**
-- `-o, --outdir`: Output directory (default: ./output)
+- `-o, --outdir`: Output directory (default: `./output`)
 - `-r, --runid`: Unique identifier for the analysis run **(Mandatory)**
-- `-a, --annotation`: Genome to use for annotation: 'mouse' or 'human' (default: mouse) 
+- `-a, --annotation`: Genome to use for annotation: `mouse` or `human` (default: `mouse`)
+- `-i, --imputation`: Imputation method (default: `DEP-MinProb`). DEP methods: `DEP-MinProb`, `DEP-knn`, `DEP-bpca`, `DEP-QRILC`, `DEP-man`. Custom methods defined in `workflow/custom_imputation.R` (e.g. `3by3`). Use `none` to skip.
+- `-q, --imputation-q`: Quantile cutoff for the left-censored distribution used by `DEP-MinProb` and `DEP-QRILC` (default: `0.01`)
+- `--seed`: Random seed for reproducibility of stochastic imputation methods (default: `42`)
+- `--heatmap-norm`: Heatmap row normalization — `zscore` (z-score normalize rows) or `none` (raw intensity) (default: `zscore`)
+- `--heatmap-top-n`: Number of top proteins by CV to show in the global heatmap (default: `1000`)
+- `--gsea-ont`: Gene Ontology category for GSEA: `BP`, `MF`, `CC`, or `ALL` (default: `BP`)
+- `--skip-gsea`: Skip GSEA analysis for faster runs (flag, no value needed)
+- `--skip-anova`: Skip one-way ANOVA for faster runs (flag, no value needed)
+- `--group-color1`: Hex color for the up-regulated group in plots (default: `#D55E00`)
+- `--group-color2`: Hex color for the down-regulated group in plots (default: `#0072B2`)
 
 #### Current execution workflow (temporary)
 
