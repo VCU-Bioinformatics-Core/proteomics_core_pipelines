@@ -33,6 +33,9 @@ Percentages describe about how much of the pipeline is complete
   - [Protein Assays](#protein-assays)
     - [Label-Free Quantification (LFQ)](#label-free-quantification-lfq)
     - [Phosphoproteomics](#phosphoproteomics)
+- [Imputation](#imputation)
+  - [Available Methods](#available-methods)
+  - [The 3×3 Method (In-House)](#the-33-method-in-house)
 - [Differential Abundance Analysis](#differential-abundance-analysis)
   - [Pipeline](#pipeline)
   - [Preparing your R Environment](#preparing-your-r-environment)
@@ -46,14 +49,6 @@ Percentages describe about how much of the pipeline is complete
       - [Arguments](#arguments)
     - [Current Execution Workflow](#current-execution-workflow-temporary)
   - [Pipeline Output](#pipeline-output)
-    - [Data](#data)
-      - [de_data](#de_data)
-      - [gsea_data](#gsea_data)
-    - [Figures](#figures)
-      - [Volcano](#volcano)
-      - [Heatmap](#heatmap)
-      - [GSEA](#gsea)
-      - [PCA](#pca)
   - [Limitations](#limitations)
   - [Utilizing IPA](#utilizing-ipa)
   - [Manuscript-Ready Text](#manuscript-ready-text)
@@ -123,16 +118,41 @@ The phosphoproteomics workflow follows a similar MS/MS acquisition and database 
 
 Therefore, phosphoproteomic analyses are conducted primarily at the site- or peptide-level, rather than at the aggregated protein level.
 
+## Imputation
+
+Missing intensity values are common in data-dependent acquisition (DDA) proteomics experiments and are predominantly attributed to a missing-not-at-random (MNAR) mechanism — low-abundance peptides fall below the instrument's detection threshold rather than being truly absent. Imputation is performed **before** differential abundance analysis to preserve statistical power.
+
+### Available Methods
+
+The imputation method is selected via the `--imputation` flag:
+
+| Method | Description |
+|--------|-------------|
+| `DEP-MinProb` *(default)* | Draws imputed values from a down-shifted Gaussian distribution centered at the low end of the observed intensity distribution. The `--imputation-q` parameter (default 0.01) controls the quantile cutoff for the left-censored distribution. |
+| `DEP-QRILC` | Quantile Regression Imputation of Left-Censored data — fits a QRILC model per sample. Also accepts `--imputation-q`. |
+| `DEP-knn` | k-Nearest Neighbour imputation across proteins. |
+| `DEP-bpca` | Bayesian PCA-based imputation. |
+| `DEP-man` | Manual/global minimum imputation via the DEP package. |
+| `none` | Skips imputation entirely. |
+| `3by3` | In-house method developed for VCU Proteomics Core experiments (see below). |
+
+### The 3×3 Method (In-House)
+
+The `3by3` method was developed specifically for the study designs most common at the VCU Proteomics Core, where each group has exactly 3 biological replicates. Standard per-column distribution estimates become unreliable at this sample size, so `3by3` uses a **group-aware, globally-calibrated** strategy:
+
+- **≥ 2 observed values in a group** → missing values are imputed as the **median of the observed values** within that group. This preserves the within-group signal rather than pulling values artificially low.
+- **< 2 observed values in a group** → missing values are drawn from a **global left-tail Gaussian** (µ = 1st-percentile of all observed intensities pooled; σ = MAD of the pooled distribution). This handles cases where a protein is nearly absent in one condition.
+- **All groups have ≤ 1 valid observation** → the protein is flagged as not-imputable and **removed** from the analysis.
+
+This hybrid approach minimizes artificial noise while retaining the MNAR-aware behavior needed for low-abundance proteins. The `3by3` function is defined in `workflow/custom_imputation.R` and is automatically sourced by the pipeline.
+
+> **Note:** Additional custom imputation methods can be added to `workflow/custom_imputation.R` by defining a function named `impute_<method_name>()` and then passing `--imputation <method_name>` at runtime.
+
+---
+
 ## Differential Abundance Analysis
 
-Differential abundance analysis constitutes the central analytical module of this pipeline. It provides a streamlined and fully reproducible
-workflow for identifying proteins that exhibit statistically significant differences in abundance between defined experimental conditions.
-The design emphasizes methodological rigor and consistency to ensure reliable inference across comparisons.
-
-The workflow incorporates established best practices in quantitative proteomics, including appropriate normalization to correct for systematic
-technical effects, accurate dispersion estimation to model biological and technical variability, and robust statistical hypothesis testing to
-control false discoveries. For each specified comparison, the pipeline automatically generates a comprehensive report that integrates key
-visualizations and summary statistics, thereby facilitating transparent interpretation, quality assessment, and reproducibility of the results.
+Differential abundance analysis is performed using the **limma** R package (v3.64+). Protein intensity values are log₂-transformed and a linear model is fit per protein using the design matrix derived from the sample group assignments. Empirical Bayes moderation is applied to stabilize variance estimates across proteins, making limma well-suited for smaller sample sizes typical of proteomics experiments. Pairwise comparisons are defined in the samplesheet and evaluated using moderated t-tests. Proteins are considered significantly differentially abundant (DAPs) when they exhibit an absolute log₂ fold-change ≥ 0.58 (1.5×) **and** an FDR-adjusted P-value < 0.05 (Benjamini–Hochberg correction). Results feed directly into volcano plots, MA plots, heatmaps, and GSEA.
 
 ### Pipeline
 <img height="450" alt="Proteomics Pipeline" src="https://github.com/user-attachments/assets/ca5e73a9-7a5c-4578-bf7b-3ea563cc0237" />
@@ -192,7 +212,7 @@ This file contains the protein ids and raw merged protein levels. The columns mu
 **Required format:** Comma-Separated Values (`.csv`)
 This file contains metadata for each sample, including group identifiers and binary indicators for specific comparisons. The columns must be organized as follows:
 - **SampleID:** Sample identifiers that exactly match the sample column headers in the count matrix.
-- **GroupID:** Group identifiers for each sample (e.g., `experiment1`, `control1`). These group identifiers are crucial for defining the experimental design in DESeq2.
+- **GroupID:** Group identifiers for each sample (e.g., `experiment1`, `control1`). These group identifiers are crucial for defining the experimental design in limma.
 - [comparison]: Subsequent columns define pairwise comparisons. The column name should follow the format `experiment_vs_control`. For each comparison column, use `1` to indicate samples belonging to the experimental group, `0` for the control group, and leave the cell `blank` for samples to be excluded from that specific comparison. This design matrix setup allows the user to specify which samples are used for each comparison, providing flexibility in complex experimental designs.
 
 | SampleID | GroupID      | experiment1_vs_control1	| experiment2_vs_control2	|
@@ -282,134 +302,70 @@ Rscript <wrapper-script-path> \
 This approach allows the analysis to be parameterized from the command line while still relying on RStudio to manage the execution environment. The wrapper script is responsible only for argument passing; all analysis logic remains within the R pipeline itself. 
 
 ### Pipeline Output
-The pipeline generates an output directory (specified by `--outdir`) containing two main subdirectories: `data` and `figures`.
-- **data**: Analysis results
-  - **de_data**: contains TMM normalized counts data stored within `normalizedCounts_TMM[date].csv` and DESeq2 results for each comparision in `DESeq2_[comparison].csv`
-  - **gsea_data**: contains GSE-GO analysis results for each comparison in `GO_Analysis_[comparison].csv`
-- **figures**: contains subdirectories for different visualizations generated for each comparison
-  - **volcano**: for each comparison, contains a volcano plot named `[comparison]volcano.png`
-  - **heatmap**: for each comparison, contains a heatmap named `[comparison]heatmap.png`
-  - **gsea**: for each comparison, contains the gsea results named `[comparison]GSEA.png`
-  - **pca**: pca representations of the data, including an interactive PCA and a 3D PCA plot.
+
+The pipeline generates an output directory (specified by `--outdir`) with the following structure:
 
 ```
 [outDir]/
+├── proteomics_analysis.html        ← final HTML report (name controlled by --report-prefix)
 ├── data/
 │   ├── de_data/
-│   │   └── DESeq2_[comparison].csv
-│   ├── normalizedCounts_TMM[date].csv
-│   └── gsea_data/
-│       └── GO_Analysis_[comparison].csv
-|   
+│   │   └── [comparison]_limma.csv
+│   ├── gsea_data/
+│   │   └── [comparison]_go_analysis_.csv
+│   └── anova/
+│       └── global_anova.csv
 └── figures/
-    ├── volcano/
-    │   └── [comparison]volcano.png
+    ├── imputation/
+    │   ├── global_imputation_histogram.png
+    │   ├── global_imputation_distribution.png
+    │   ├── global_imputation_missing_per_sample.png
+    │   └── global_imputation_total_counts.png
+    ├── pca/
+    │   └── global_pca_plot.png
     ├── heatmap/
-    │   └── [comparison]heatmap.png
-    ├── gsea/
-    │   └── [comparison]GSEA.png
-    └── pca/
-        ├── PCA_plot.png
-        ├── allsamples_PCA_plot.html
-        └── allsamples_PCA_plot3D.html
+    │   ├── global_heatmap.png
+    │   └── [comparison]_heatmap.png
+    ├── volcano/
+    │   └── [comparison]_volcano.png
+    ├── ma/
+    │   └── [comparison]_ma.png
+    └── gsea/
+        └── [comparison]_gsea.png
 ```
 
-#### Data
-This directory contains analysis output organized into subdirectories for DE and GSE-GO Analysis results.
-
-##### de_data
-DESeq_[comparison].csv: Contains the differential abundance results from DESeq2 for each specified comparison. The columns include:
-
-| protein ID      | baseMean  | log2FoldChange | lfcSE   | stat      | pvalue   | padj     |
-|--------------|-----------|----------------|---------|-----------|----------|----------|
-| A0A087WV53  | 95.28865  | 0.00399148     | 0.225010| 0.0177391 | 0.9858470| 0.996699 |
-| A0A0B4J2D5  | 4359.09632| -0.23842494    | 0.127094| -1.8759764| 0.0606585| 0.289604 |
-| A0A0B4J2F0  | 419.06811 | -0.10185506    | 0.146568| -0.6949338| 0.4870968| 0.822681 |
-| ...      | ...       | ...            | ...     | ...       | ...      | ...      | 
-| A0A0U1RRE5  | 4863.807  | 0.0179729      | 0.194137| 0.0925784 | 0.9262385| 0.986726 |
-
-Where:
-- `protein_id`:  The unique protein identifier.
-- `baseMean`: The average normalized intensity for the protein across all samples.
-- `log2FoldChange`: The log2 of the fold change in intensity between the two groups being compared.  A positive value indicates higher intensity in the experimental group, while a negative value indicates higher intensity in the control group.
-- `lfcSE`: The standard error of the log2 fold change estimate.
-- `stat`: The Wald statistic used for testing the null hypothesis of no differential abundance.
-- `pvalue`: The raw p-value associated with the Wald statistic.
-- `padj`: The Benjamini-Hochberg adjusted p-value, which corrects for multiple testing.
-
-##### gsea_data
-**GO_Analysis_[comparison].csv:** Contains the results of the Gene Set Enrichment Analysis (GSEA) using Gene Ontology (GO) terms for each comparison. GSEA is performed using a suitable R package (e.g., clusterProfiler) to identify enriched GO terms among the differentially expressed proteins. This analysis is skipped for a comparison if the Gene Set identified doesnot have enough proteins. 
-
-|       | ONTOLOGY | ID | Description | setSize | enrichmentScore | NES | pvalue | p.adjust | qvalue | rank | leading_edge | core_enrichment |
-| ----- | ---- | ----- | ---- | ----- | ---- | ----- | ---- | ----- | ---- | ----- | ---- | ----- |
-| GO:0044391 | CC | GO:0044391 | ribosomal subunit | 195 | 0.541189822117829 | 2.28184891440785 | 1e-10 | 8.3476e-08 | 7.66105263157895e-08 | 5236 | tags=68%, list=32%, signal=47% | Rpl36a-ps1/Mrpl4/Mrpl35/Rps27a | 
-| ... | ... | ... | ... | ... | ... | ... | ... | ... | ... | ... | ... | ... |
-| GO:0003735 | BP | GO:0003735 | positive regulation of cytokine production | 357 | ... | ... | ... | ... | ... | ... | ... | ... |
-
-#### Figures
-This directory contains various visualizations generated for each comparison.
-
-##### Volcano
-**[comparison]volcano.png:** A volcano plot displaying the log2 fold change against the negative logarithm (base 10) of the adjusted p-value for each protein in the differential abundance results. This plot allows for a quick visual assessment of both the magnitude of differential abundance and its statistical significance. Proteins with large log2 fold changes and low adjusted p-values (i.e., in the upper corners of the plot) are considered as the most interesting candidates.
-<img src="https://github.com/user-attachments/assets/d836815e-2ce3-498a-886e-cf8aaa2321e0" alt="volcano.png" width="71%">
-
-##### Heatmap
-**[comparison]heatmap.png:** A heatmap visualizing the intensity patterns of the top differentially expressed proteins (based on adjusted p-value) across samples. The intensity values are typically represented as Z-scores, which normalize the intensity of each protein across samples to have a mean of 0 and a standard deviation of 1. This helps to visualize relative intensity differences for each protein. The heatmap provides a visual overview of how protein intensity varies across different experimental conditions. Heatmaps use the Normalized TMM count data.
-<img src="https://github.com/user-attachments/assets/ca974706-7d28-4647-95dd-3ecfb59a93db" alt="heatmap.png" width="71%">
-
-##### GSEA
-**[comparison]GSEA.png:** A dot plot summarizing the Gene Set Enrichment Analysis (GSEA) results, showing enriched GO terms and their significance. The size and color of the dots represent the normalized enrichment score and adjusted p-value, respectively.
-<img src="https://github.com/user-attachments/assets/e8128497-2ef7-4d48-9ca3-249a50b25eef" alt="exp_vs_cntrl_GSEA" width="71%">
-
-##### PCA
-**PCA Plots:** Principal Component Analysis (PCA) plots showing the relationships between samples based on their protein intensity profiles. PCA is used to reduce the dimensionality of the data and visualize the primary sources of variation in protein intensity. The pipeline generates:
-
-<img src="https://github.com/user-attachments/assets/617de511-83a2-4b75-8085-65d084119e43" alt="pca.jpg" width="71%">
-
-This plots helps to assess the overall quality of the data, identify potential outliers, and visualize the separation of samples according to experimental conditions.
+**Key output files:**
+- `[comparison]_limma.csv` — full limma results (logFC, pvalue, padj, imputation_category per protein)
+- `[comparison]_go_analysis_.csv` — GSEA Gene Ontology results (NES, pvalue, p.adjust, leading edge)
+- `global_anova.csv` — one-way ANOVA results across all groups (generated when >2 groups)
+- `global_pca_plot.png` — PCA of all samples colored by group
+- `global_heatmap.png` — top proteins by coefficient of variation across all samples
+- `global_imputation_*.png` — four diagnostic plots for the imputation step
 
 ### Limitations
 - This pipeline currently supports only pairwise comparisons. Support for more complex designs with multiple comparisons with covariates and contrast matrices will be added in future versions. This is a limitation for experiments with more than two conditions.
 
 ### Utilizing IPA
 
-The CSV Differential Abundance output from limma (available in the results directory
-provided alongside this report *./output/de_data/limma_[comparison_name].csv*), can be
-uploaded directly into **QIAGEN Ingenuity Pathway Analysis (IPA)** for self-exploration of
-pathways predicted to be enriched by this experimental condition. Massey’s BISR provides
-access to VCU’s license of IPA. If you do not already have an account associated with this
-license, you may reach out to **morecockcm@vcu.edu** with your name, VCU health or VCU
-email, and request for IPA. To perform a core expression analysis, login with your
-credentials here: **https://analysis.ingenuity.com/pa** and follow the instructions [here](https://qiagen.my.salesforce-sites.com/KnowledgeBase/KnowledgeNavigatorPage?id=kA41i000000L6rMCAS).
-
-We host an annual hands-on training for IPA at the beginning of the fall semester. Please
-email BISR if you would like to be a part of this training. In the meantime, QIAGEN has a
-playlist of user-friendly tutorials available on Youtube titled “QIAGEN IPA Training
-Videos” the **Qiagen Digital Insights Youtube** page.
+The CSV Differential Abundance output from limma (available in the results directory provided alongside this report: `de_data/[comparison_name]_limma.csv`) can be uploaded directly into **QIAGEN Ingenuity Pathway Analysis (IPA)** for self-exploration of pathways predicted to be enriched by this experimental condition. Massey’s BISR provides access to VCU’s license of IPA. If you do not already have an account associated with this license, you may reach out to **morecockcm@vcu.edu** with your name, VCU Health or VCU email, and a request for IPA access. To perform a core abundance analysis, log in with your credentials at: https://analysis.ingenuity.com/pa
 
 ### Manuscript-Ready Text
 
 #### Methods
 
-Differential abundance analysis was performed using limma [7]. <!--Lowly expressed proteins were filtered out per limma methods [7] prior to normalization and differential abundance testing.--> Significance was calculated using the Wald-test and adjusted using Benjamini Hochberg False Discovery Rate (FDR). Volcano plots and heatmaps were generated using the normalized count data and visualized using R packages. Significant differentially expressed proteins (DEGs) are defined as those with an FDR<0.05 and absolute fold-change of 1.5 (log2 fold-change = 0.58) or greater. Gene Set Enrichment Analysis (GSEA) [8] for Gene Ontology terms (GO) was performed using the clusterProfiler package [9] across all proteins, regardless of significance. All computational analyses were performed on VCU’s High Performance Research Computing cluster.
+Prior to differential abundance analysis, missing intensity values were imputed using the DEP R package [1] or an in-house method developed by the VCU Proteomics Core. Missing values in proteomics data-dependent acquisition (DDA) experiments are commonly attributed to a missing-not-at-random (MNAR) mechanism, where low-abundance peptides fall below the instrument detection threshold. To address this, remaining missing values were imputed from a down-shifted Gaussian distribution centered at the low end of the observed intensity distribution.
+
+Differential abundance analysis was carried out using limma v1.44.0 [2]. Proteins were considered significantly differentially abundant (DAP) when they exhibited an absolute log₂ fold-change ≥ 0.58 (1.5-fold) and an adjusted P-value (FDR) < 0.05 (Benjamini–Hochberg correction). Volcano plots and heatmaps were generated using the raw or log-transformed intensity values and visualized using R packages (ggplot2 and ggrepel), where the top up-regulated and down-regulated proteins (based on adjusted P-value) were highlighted. Heatmaps were produced using ComplexHeatmap after z-score transformation of the filtered expression matrix. Gene Set Enrichment Analysis (GSEA) [3] for Gene Ontology terms (GO) was performed using the clusterProfiler package [4] across all proteins, regardless of significance. All computational analyses were performed on VCU’s High Performance Research Computing cluster.
 
 #### References
-1) Ewels P, Peltzer A, Fillinger S, Patel H, Alneberg J, Wilm A, Garcia MU, Di Tommaso P, Nahnsen S. The nf-core framework for community-curated bioinformatics pipelines. Nat Biotechnol. 2020 Feb 13. doi:10.1038/s41587-020-0439-x
-Andrews S. FastQC: A Quality Control Tool for High Throughput Sequence Data. Babraham Bioinformatics; 2010. Accessed June 18, 2025. https://www.bioinformatics.babraham.ac.uk/projects/fastqc/.
 
-2) Krueger F. Trim Galore! v0.6.10. 2023. Available at: https://github.com/FelixKrueger/TrimGalore. Accessed June 18, 2025.
+1. Tyanova S, Temu T, Cox J. The MaxQuant computational platform for mass spectrometry-based shotgun proteomics. *Nat Protoc.* 2016;11(12):2301–2319. doi:10.1038/nprot.2016.136
 
-3) Dobin A, Davis CA, Schlesinger F, Drenkow J, Zaleski C, Jha S, Batut P, Chaisson M, Gingeras TR. STAR: ultrafast universal RNA-seq aligner. Bioinformatics. 2013 Jan 1;29(1):15-21. doi: 10.1093/bioinformatics/bts635
+2. Ritchie ME, Phipson B, Wu D, Hu Y, Law CW, Shi W, Smyth GK. limma powers differential expression analyses for RNA-sequencing and microarray studies. *Nucleic Acids Res.* 2015;43(7):e47. doi:10.1093/nar/gkv007
 
-4) Patro, R., Duggal, G., Love, M.I., Irizarry, R.A., Kingsford, C., 2017. Salmon provides fast and bias-aware quantification of transcript expression. Nat. Methods 14, 417–419. https://doi.org/10.1038/nmeth.4197
+3. Subramanian A, Tamayo P, Mootha VK, et al. Gene set enrichment analysis: A knowledge-based approach for interpreting genome-wide expression profiles. *Proc Natl Acad Sci USA.* 2005;102(43):15545–15550. doi:10.1073/pnas.0506580102
 
-5) Ewels, P., Magnusson, M., Lundin, S., Käller, M., 2016. MultiQC: summarize analysis results for multiple tools and samples in a single report. Bioinformatics 32, 3047–3048. https://doi.org/10.1093/bioinformatics/btw354
-
-6) Love, M.I., Huber, W., Anders, S., 2014. Moderated estimation of fold change and dispersion for RNA-seq data with DESeq2. Genome Biology 15, 550. https://doi.org/10.1186/s13059-014-0550-8
-
-7) A. Subramanian, P. Tamayo, V.K. Mootha, S. Mukherjee, B.L. Ebert, M.A. Gillette, A. Paulovich, S.L. Pomeroy, T.R. Golub, E.S. Lander, & J.P. Mesirov, Gene set enrichment analysis: A knowledge-based approach for interpreting genome-wide expression profiles, Proc. Natl. Acad. Sci. U.S.A. 102 (43) 15545-15550, https://doi.org/10.1073/pnas.0506580102 (2005).
-
-8) Yu G, Wang LG, Han Y, He QY. clusterProfiler: an R package for comparing biological themes among gene clusters. OMICS. 2012 May;16(5):284-7. doi: 10.1089/omi.2011.0118. Epub 2012 Mar 28. PMID: 22455463; PMCID: PMC3339379.
+4. Wu T, Hu E, Xu S, et al. clusterProfiler 4.0: A universal enrichment tool for interpreting omics data. *Innovation.* 2021;2(3):100141. doi:10.1016/j.xinn.2021.100141
 
 #### Required Acknowledgements
 
