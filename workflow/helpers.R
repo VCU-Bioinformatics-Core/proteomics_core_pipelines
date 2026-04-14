@@ -1,4 +1,22 @@
 # ==========================
+# Logging setup
+# ==========================
+library(futile.logger)
+
+setup_logging <- function(outdir, run_id = NULL) {
+  dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
+  log_name <- if (!is.null(run_id) && nzchar(run_id)) {
+    paste0(run_id, "_pipeline.log")
+  } else {
+    "pipeline.log"
+  }
+  log_path <- file.path(outdir, log_name)
+  flog.appender(appender.tee(log_path))
+  flog.threshold(INFO)
+  invisible(log_path)
+}
+
+# ==========================
 # Helper Functions
 # ==========================
 create_file_path <- function(base_dir, prefix, name, extension = ".csv") {
@@ -18,7 +36,7 @@ export_plotly_to_html <- function(plotly_obj, file_path) {
     if (!inherits(plotly_obj, "plotly")) stop("Invalid plotly object")
     htmlwidgets::saveWidget(plotly_obj, file_path, selfcontained = TRUE)
   }, error = function(e) {
-    cat(paste0("Error: ", e$message, "\n"))
+    flog.warn("Failed to export plotly to HTML '%s': %s", file_path, e$message)
   })
 }
 
@@ -114,7 +132,7 @@ build_output_tree <- function(out_dirs) {
 # ==========================
 perform_limma_analysis <- function(limma_params, exp, ctrl, min_valid_samples=2) {
   tryCatch({
-    print(paste("Performing limma-voom analysis for", exp, "vs", ctrl))
+    flog.info("Performing limma analysis: %s vs %s", exp, ctrl)
     
     # Build contrast
     contrast_matrix <- makeContrasts(contrasts = paste0(exp, "-", ctrl),
@@ -127,10 +145,10 @@ perform_limma_analysis <- function(limma_params, exp, ctrl, min_valid_samples=2)
     
     # Extract results
     res <- topTable(fit2, coef = 1, number = Inf, sort.by = "P")
-    print(paste("Analysis complete. Number of results:", nrow(res)))
+    flog.info("Limma analysis complete: %d results", nrow(res))
     return(as.data.frame(res))
   }, error = function(e) {
-    print(paste("Error in limma analysis:", e$message))
+    flog.error("Limma analysis failed: %s", e$message)
     stop(e)
   })
 }
@@ -140,7 +158,6 @@ generate_volcano_protein <- function(data, exp_name, ctrl_name, p_thresh = 0.05,
                                      out_dir = ".",
                                      color1 = "#D55E00", color2 = "#0072B2") {
 
-  print('Labeling the data')
   labeled_dat <- data %>%
     mutate(
       color_tag = case_when(
@@ -150,21 +167,18 @@ generate_volcano_protein <- function(data, exp_name, ctrl_name, p_thresh = 0.05,
       )
     )
 
-  print('Extracting the top 10 genes')
   top_10_genes_up <- labeled_dat %>%
     filter(P.Value <= p_thresh & logFC >= lfc) %>%
     arrange(eval(as.symbol(sig))) %>%
     slice_head(n = 10) %>%
     pull(.data[[label_col]])
 
-  print('Extracting the bottom 10 genes')
   top_10_genes_dn <- labeled_dat %>%
     filter(P.Value <= p_thresh & logFC <= -lfc) %>%
     arrange(eval(as.symbol(sig))) %>%
     slice_head(n = 10) %>%
     pull(.data[[label_col]])
 
-  print('Plotting')
   labeled_dat <- labeled_dat %>%
     mutate(
       highlight = ifelse(.data[[label_col]] %in% c(top_10_genes_up, top_10_genes_dn),
@@ -222,7 +236,6 @@ generate_volcano_phospho <- function(data, exp_name, ctrl_name, p_thresh = 0.05,
                                      sig = "adj.P.Val", out_dir = ".",
                                      color1 = "#D55E00", color2 = "#0072B2") {
 
-  print('Labeling the data')
   labeled_dat <- data %>%
     mutate(
       color_tag = case_when(
@@ -232,21 +245,18 @@ generate_volcano_phospho <- function(data, exp_name, ctrl_name, p_thresh = 0.05,
       )
     )
 
-  print('Extracting the top 10 genes')
   top_10_genes_up <- labeled_dat %>%
     filter(P.Value <= p_thresh & logFC >= lfc) %>%
     arrange(eval(as.symbol(sig))) %>%
     slice_head(n = 10) %>%
     pull(peptide_id)
 
-  print('Extracting the bottom 10 genes')
   top_10_genes_dn <- labeled_dat %>%
     filter(P.Value <= p_thresh & logFC <= -lfc) %>%
     arrange(eval(as.symbol(sig))) %>%
     slice_head(n = 10) %>%
     pull(peptide_id)
 
-  print('Plotting')
   labeled_dat <- labeled_dat %>%
     mutate(
       highlight = ifelse(peptide_id %in% c(top_10_genes_up, top_10_genes_dn), peptide_id, NA),
@@ -658,7 +668,7 @@ aggregate_phospho_for_gsea <- function(limma_results, peptide_metadata, p = 0.05
   n_sig_uniprots <- length(sig_uniprots)
 
   if (n_sig_uniprots == 0) {
-    message("No significant phosphopeptides found for GSEA aggregation")
+    flog.warn("No significant phosphopeptides found for GSEA aggregation")
     return(NULL)
   }
 
@@ -673,7 +683,7 @@ aggregate_phospho_for_gsea <- function(limma_results, peptide_metadata, p = 0.05
 
   # Map UniProt IDs to Ensembl IDs via biomart (same approach as regular pipeline)
   if (is.null(ensembl)) {
-    message("BioMart mart object is NULL — skipping Ensembl mapping for phospho GSEA")
+    flog.warn("BioMart mart object is NULL — skipping Ensembl mapping for phospho GSEA")
     return(NULL)
   }
   mapping <- tryCatch(
@@ -684,7 +694,8 @@ aggregate_phospho_for_gsea <- function(limma_results, peptide_metadata, p = 0.05
       mart       = ensembl
     ) %>% distinct(uniprotswissprot, .keep_all = TRUE),
     error = function(e) {
-      message("BioMart query failed in phospho aggregation: ", e$message)
+      flog.error("BioMart query failed in phospho GSEA aggregation: %s",
+                 e$message)
       NULL
     }
   )
@@ -696,7 +707,8 @@ aggregate_phospho_for_gsea <- function(limma_results, peptide_metadata, p = 0.05
   n_mapped <- nrow(aggregated)
 
   if (n_mapped == 0) {
-    message("No Ensembl IDs found for aggregated phospho UniProt IDs")
+    flog.warn("No Ensembl IDs found for aggregated phospho UniProt IDs — GSEA skipped"
+    )
     return(NULL)
   }
 
@@ -711,7 +723,7 @@ process_gsea <- function(result, p = 0.05, lfc = 0.58, ont_option = "BP") {
     sig_genes <- sig_genes %>% filter(!is.na(logFC))
     
     if(nrow(sig_genes) < 2) {
-      message("Not enough significant genes for GSEA analysis")
+      flog.warn("Not enough significant genes for GSEA (n < 2)")
       return(NULL)
     }
     
@@ -724,7 +736,7 @@ process_gsea <- function(result, p = 0.05, lfc = 0.58, ont_option = "BP") {
     gene_list <- gene_list[abs(gene_list) >= 0.1]  # drop near-zero logFC genes
 
     if (length(gene_list) < 2) {
-      message("Not enough genes with Ensembl IDs for GSEA analysis")
+      flog.warn("Not enough genes with Ensembl IDs for GSEA (n < 2)")
       return(NULL)
     }
 
@@ -739,13 +751,13 @@ process_gsea <- function(result, p = 0.05, lfc = 0.58, ont_option = "BP") {
                         OrgDb = annotation_db)
 
     if (is.null(gse_result) || nrow(gse_result@result) == 0) {
-      message("No enriched terms found in GSEA analysis")
+      flog.warn("No enriched GO terms found in GSEA result")
       return(NULL)
     }
-    
+
     setReadable(gse_result, OrgDb = annotation_db, keyType = "ENSEMBL")
   }, error = function(e) {
-    message("Error in GSEA processing: ", e$message)
+    flog.error("GSEA processing failed: %s", e$message)
     return(NULL)
   })
 }
@@ -777,9 +789,8 @@ create_barplot <- function(gse, title, color1 = "#D55E00", color2 = "#0072B2") {
 
 run_analysis <- function(comparison, limma_params, normalized_counts, out_dirs, intensity_matrix_raw = NULL, ont_option = "BP", skip_gsea = FALSE, protein_metadata = NULL, heatmap_norm = "zscore", color1 = "#D55E00", color2 = "#0072B2") {
   tryCatch({
-    print(paste("\nStarting analysis for comparison:", comparison$name))
+    flog.info("=== Starting analysis for comparison: %s ===", comparison$name)
 
-    print('Running limma')
     limma_results <- perform_limma_analysis(limma_params, comparison$exp, comparison$ctrl)
     limma_results <- limma_results %>% rownames_to_column(var = "uniprotswissprot")
 
@@ -815,26 +826,29 @@ run_analysis <- function(comparison, limma_params, normalized_counts, out_dirs, 
             TRUE                                                                    ~ "other"
           )
         )
-      print("Imputation category distribution:")
-      print(table(annotated_results$imputation_category))
+      flog.info("Imputation category distribution for %s:\n%s",
+                comparison$name,
+                paste(capture.output(
+                  print(table(annotated_results$imputation_category))
+                ), collapse = "\n"))
     }
 
     output_file <- create_file_path(out_dirs$de_data, comparison$name, "_limma")
     write.csv(annotated_results, output_file)
 
-    print('Generating the volcano plot')
+    flog.info("Generating volcano plot: %s", comparison$name)
     volcano_result <- generate_volcano_protein(annotated_results, comparison$exp, comparison$ctrl, color1 = color1, color2 = color2)
     save_plot(volcano_result$plot, create_file_path(out_dirs$volcano, "", comparison$name, "_volcano.png"),
               width = 10, height = 8)
 
-    print('Generating the MA plot')
+    flog.info("Generating MA plot: %s", comparison$name)
     ma_plot <- generate_ma_plot_protein(annotated_results, comparison$exp, comparison$ctrl,
                                         highlighted_ids = volcano_result$highlighted_ids,
                                         color1 = color1, color2 = color2)
     save_plot(ma_plot, create_file_path(out_dirs$ma, "", comparison$name, "_ma.png"),
               width = 10, height = 8)
 
-    print('Generating the heatmap')
+    flog.info("Generating heatmap: %s", comparison$name)
     png(create_file_path(out_dirs$heatmap, "", comparison$name, "_heatmap.png"),
         width = 2400, height = 3200, res = 300)
     ht <- generate_heatmap(limma_results, intensity_matrix,
@@ -846,39 +860,36 @@ run_analysis <- function(comparison, limma_params, normalized_counts, out_dirs, 
     dev.off()
 
     if (skip_gsea) {
-      message("Skipping GSEA (--skip-gsea)")
+      flog.info("Skipping GSEA for %s (--skip-gsea flag set)", comparison$name)
       gse <- NULL
     } else {
-      print('Running GSEA')
+      flog.info("Running GSEA for %s", comparison$name)
       gse <- process_gsea(annotated_results, ont_option = ont_option)
 
       if(!is.null(gse)) {
-        print('GSE has data')
+        flog.info("GSEA returned results for %s", comparison$name)
         write.csv(as.data.frame(gse), create_file_path(out_dirs$gsea_data, "go_analysis_", comparison$name))
 
-        print('create dotplot')
         gsea_plot <- create_barplot(gse, create_comparison_name(comparison$exp, comparison$ctrl, "GSEA "), color1 = color1, color2 = color2)
 
-        print('save plot')
         save_plot(gsea_plot, create_file_path(out_dirs$gsea, "", comparison$name, "_gsea.png"),
                   width = 10, height = 12)
       }
     }
 
     return(list(limma = annotated_results, gsea = gse, highlighted_ids = volcano_result$highlighted_ids))
-    
-    
+
+
   }, error = function(e) {
-    message("Error in run_analysis: ", e$message)
+    flog.error("run_analysis failed for comparison '%s': %s", comparison$name, e$message)
     return(NULL)
   })
 }
 
 run_analysis_phospho <- function(comparison, limma_params, normalized_counts, out_dirs, intensity_matrix_raw = NULL, peptide_metadata = NULL, ont_option = "BP", skip_gsea = FALSE, heatmap_norm = "zscore", color1 = "#D55E00", color2 = "#0072B2") {
   tryCatch({
-    print(paste("Starting analysis for comparison:", comparison$name))
+    flog.info("=== Starting phospho analysis for comparison: %s ===", comparison$name)
 
-    print('Running limma')
     limma_results <- perform_limma_analysis(limma_params, comparison$exp, comparison$ctrl)
     limma_results <- limma_results %>% rownames_to_column(var = "peptide_id")
 
@@ -895,7 +906,8 @@ run_analysis_phospho <- function(comparison, limma_params, normalized_counts, ou
         )
         distinct(m, uniprotswissprot, .keep_all = TRUE)
       }, error = function(e) {
-        message("BioMart annotation failed for phospho: ", e$message)
+        flog.error("BioMart annotation failed for phospho comparison '%s': %s",
+                   comparison$name, e$message)
         data.frame(uniprotswissprot = character(), hgnc_symbol = character())
       })
       limma_results <- limma_results %>%
@@ -926,26 +938,29 @@ run_analysis_phospho <- function(comparison, limma_params, normalized_counts, ou
             TRUE                                                                    ~ "other"
           )
         )
-      print("Imputation category distribution:")
-      print(table(limma_results$imputation_category))
+      flog.info("Imputation category distribution for %s:\n%s",
+                comparison$name,
+                paste(capture.output(
+                  print(table(limma_results$imputation_category))
+                ), collapse = "\n"))
     }
 
     output_file <- create_file_path(out_dirs$de_data, comparison$name, "_limma")
     write.csv(limma_results, output_file)
 
-    print('Generating the volcano plot')
+    flog.info("Generating phospho volcano plot: %s", comparison$name)
     volcano_result <- generate_volcano_phospho(limma_results, comparison$exp, comparison$ctrl, color1 = color1, color2 = color2)
     save_plot(volcano_result$plot, create_file_path(out_dirs$volcano, "", comparison$name, "_volcano.png"),
               width = 10, height = 8)
 
-    print('Generating the MA plot')
+    flog.info("Generating phospho MA plot: %s", comparison$name)
     ma_plot <- generate_ma_plot_phospho(limma_results, comparison$exp, comparison$ctrl,
                                         highlighted_ids = volcano_result$highlighted_ids,
                                         color1 = color1, color2 = color2)
     save_plot(ma_plot, create_file_path(out_dirs$ma, "", comparison$name, "_ma.png"),
               width = 10, height = 8)
 
-    print('Generating the heatmap')
+    flog.info("Generating phospho heatmap: %s", comparison$name)
     png(create_file_path(out_dirs$heatmap, "", comparison$name, "_heatmap.png"),
         width = 2400, height = 3200, res = 300)
     ht <- generate_heatmap(limma_results, normalized_counts,
@@ -958,44 +973,45 @@ run_analysis_phospho <- function(comparison, limma_params, normalized_counts, ou
     dev.off()
 
     if (skip_gsea) {
-      message("Skipping GSEA (--skip-gsea)")
+      flog.info("Skipping GSEA for %s (--skip-gsea flag set)", comparison$name)
       gse <- NULL
       protein_counts <- NULL
     } else {
-      print('Running GSEA')
+      flog.info("Running phospho GSEA for %s", comparison$name)
       agg_result <- tryCatch(
         aggregate_phospho_for_gsea(limma_results, peptide_metadata),
-        error = function(e) { message("Error in phospho aggregation: ", e$message); NULL }
+        error = function(e) {
+          flog.error("Phospho GSEA aggregation failed for '%s': %s",
+                     comparison$name, e$message)
+          NULL
+        }
       )
       protein_counts <- if (!is.null(agg_result)) agg_result$counts else NULL
       gse <- tryCatch({
         if (!is.null(agg_result)) process_gsea(agg_result$data, ont_option = ont_option) else NULL
       }, error = function(e) {
-        message("Error in phospho GSEA: ", e$message)
+        flog.error("Phospho GSEA failed for '%s': %s", comparison$name, e$message)
         NULL
       })
-      if(!is.null(gse)) {
-        print('GSE has data')
+      if (!is.null(gse)) {
+        flog.info("Phospho GSEA returned results for %s", comparison$name)
         tryCatch({
           write.csv(as.data.frame(gse), create_file_path(out_dirs$gsea_data, comparison$name, "_go_analysis.csv"))
-
-          print('create dotplot')
           gsea_plot <- create_barplot(gse, create_comparison_name(comparison$ctrl, comparison$exp, "GSEA "), color1 = color1, color2 = color2)
-
-          print('save plot')
           save_plot(gsea_plot, create_file_path(out_dirs$gsea, "", comparison$name, "_gsea.png"),
                     width = 10, height = 12)
         }, error = function(e) {
-          message("Error saving phospho GSEA outputs: ", e$message)
+          flog.error("Failed to save phospho GSEA outputs for '%s': %s",
+                     comparison$name, e$message)
         })
       }
     }
 
     return(list(limma = limma_results, gsea = gse, protein_counts = protein_counts, highlighted_ids = volcano_result$highlighted_ids))
-    
-    
+
   }, error = function(e) {
-    message("Error in run_analysis: ", e$message)
+    flog.error("run_analysis_phospho failed for comparison '%s': %s",
+               comparison$name, e$message)
     return(NULL)
   })
 }

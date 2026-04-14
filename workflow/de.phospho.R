@@ -108,6 +108,9 @@ if (is.null(runID) || is.null(countData) || is.null(samplesheet)) {
   stop("--runid, --counts, and --samplesheet are required.")
 }
 
+setup_logging(outDir, run_id = runID)
+flog.info("Phospho pipeline started: runID=%s, genome=%s, outdir=%s", runID, genome, outDir)
+
 # ==========================
 # Debug mode
 # ==========================
@@ -138,16 +141,23 @@ if (genome == "human") {
   annotation_db <- org.Hs.eg.db
   ensembl <- tryCatch(
     useEnsembl("ensembl", dataset = "hsapiens_gene_ensembl"),
-    error = function(e) { message("BioMart connection failed: ", e$message, "\nGSEA will be skipped."); NULL }
+    error = function(e) {
+      flog.warn("BioMart connection failed for human: %s — GSEA will be skipped", e$message)
+      NULL
+    }
   )
 } else if (genome == "mouse") {
   if (!require("org.Mm.eg.db")) BiocManager::install("org.Mm.eg.db")
   annotation_db <- org.Mm.eg.db
   ensembl <- tryCatch(
     useEnsembl("ensembl", dataset = "mmusculus_gene_ensembl"),
-    error = function(e) { message("BioMart connection failed: ", e$message, "\nGSEA will be skipped."); NULL }
+    error = function(e) {
+      flog.warn("BioMart connection failed for mouse: %s — GSEA will be skipped", e$message)
+      NULL
+    }
   )
 } else {
+  flog.fatal("Invalid genome '%s'. Use 'mouse' or 'human'", genome)
   stop("Invalid genome specified. Use 'mouse' or 'human'")
 }
 
@@ -158,9 +168,7 @@ out_dirs <- setup_directories(outDir)
 full_peptide_levels <- data.frame(read_csv(countData, col_names = TRUE, na = c("", "NA", "Filtered")))
 
 print_peptide_report <- function(df, prefix){
-  num_genes <- nrow(df)
-  msg <- glue("{prefix}: {num_genes}")
-  print(msg)
+  flog.info("%s: %d", prefix, nrow(df))
 }
 n_peptides_total <- nrow(full_peptide_levels)
 print_peptide_report(full_peptide_levels, 'Peptides - Total Amount')
@@ -222,7 +230,7 @@ DEP_METHODS <- c("MinProb", "knn", "bpca", "QRILC", "man")
 n_peptides_not_imputable <- 0L  # overridden by custom imputation when applicable
 
 if (imputation_method == "none") {
-  print("Imputation skipped (--imputation none)")
+  flog.info("Imputation skipped (--imputation none)")
 
 } else if (startsWith(imputation_method, "DEP-")) {
   dep_fun <- sub("^DEP-", "", imputation_method)
@@ -247,11 +255,15 @@ if (imputation_method == "none") {
     se_imputed <- DEP::impute(se, fun = dep_fun)
   }
   intensity_matrix <- as.data.frame(SummarizedExperiment::assay(se_imputed))
-  print(glue("Imputation applied: {imputation_method} (q={imputation_q})"))
+  flog.info("Imputation applied: %s (q=%s)", imputation_method, imputation_q)
 
 } else {
   fn_name <- paste0("impute_", imputation_method)
   if (!exists(fn_name, mode = "function")) {
+    flog.fatal(
+      "Unknown imputation method '%s'. For DEP methods prefix with 'DEP-'. For custom methods define %s() in workflow/custom_imputation.R.",
+      imputation_method, fn_name
+    )
     stop(glue(
       "Unknown imputation method '{imputation_method}'. ",
       "For DEP methods prefix with 'DEP-' (e.g. 'DEP-MinProb'). ",
@@ -264,9 +276,10 @@ if (imputation_method == "none") {
   imputed_mat <- fn(as.matrix(intensity_matrix), groups = groups_vec)
   n_peptides_not_imputable <- attr(imputed_mat, "n_not_imputable") %||% 0L
   intensity_matrix <- as.data.frame(imputed_mat)
-  print(glue("Custom imputation applied: {imputation_method}"))
+  flog.info("Custom imputation applied: %s", imputation_method)
   if (n_peptides_not_imputable > 0)
-    print(glue("  Discarded {n_peptides_not_imputable} not-imputable peptide(s) (all groups had <=1 valid value)"))
+    flog.warn("Discarded %d not-imputable peptide(s): all groups had <=1 valid value",
+              n_peptides_not_imputable)
 }
 
 # ==========================
@@ -287,7 +300,7 @@ for (i in seq_along(comparisons)) {
   # may need to consider what to do about imputations, especially dealing
   # with the limma_param
   
-  print(glue('Analysis {i}'))
+  flog.info("=== Analysis loop iteration %d of %d ===", i, length(comparisons))
   
   # run the analysis on the current samples
   curr_result <- run_analysis_phospho(comparisons[[i]], limma_params, intensity_matrix, out_dirs, intensity_matrix_raw, peptide_metadata, ont_option = gsea_ont, skip_gsea = skip_gsea, heatmap_norm = heatmap_norm, color1 = group_color1, color2 = group_color2)
@@ -301,7 +314,7 @@ for (i in seq_along(comparisons)) {
 # ==========================
 # Principal Component Analysis
 # ==========================
-print("# Principal Component Analysis")
+flog.info("Running Principal Component Analysis")
 input_pca_matrix <- as.matrix(intensity_matrix)
 
 # Drop any peptide rows that still contain NA or non-finite values after imputation
@@ -359,10 +372,10 @@ ggsave(pca_plot, filename = str_c(out_dirs$pca, "/global_pca_plot.png"), width =
 # ==========================
 # One-Way ANOVA
 # ==========================
-print('Running one-way ANOVA')
+flog.info("Running one-way ANOVA")
 n_anova_groups <- length(unique(sample_info$condition))
 if (skip_anova) {
-  message("Skipping ANOVA (--skip-anova)")
+  flog.info("Skipping ANOVA (--skip-anova flag set)")
   n_anova_sig   <- NULL
   n_anova_total <- NULL
 } else if (n_anova_groups > 2) {
@@ -393,7 +406,7 @@ anova_summary <- list(n_groups = n_anova_groups, n_sig = n_anova_sig, n_total = 
 # ==========================
 # Generate global heatmap
 # ==========================
-print('Generating global heatmap')
+flog.info("Generating global heatmap")
 generate_global_heatmap(intensity_matrix, out_dirs, top_n = heatmap_top_n,
                         molecule_label = "Phosphopeptides",
                         heatmap_norm = heatmap_norm, color1 = group_color1, color2 = group_color2)
@@ -401,7 +414,7 @@ generate_global_heatmap(intensity_matrix, out_dirs, top_n = heatmap_top_n,
 # ==========================
 # Generate imputation figures
 # ==========================
-print('Generating imputation figures')
+flog.info("Generating imputation figures")
 generate_imputation_figures(intensity_matrix_raw, intensity_matrix, out_dirs,
                             molecule_label = "peptide",
                             color1 = group_color1, color2 = group_color2)
@@ -409,7 +422,7 @@ generate_imputation_figures(intensity_matrix_raw, intensity_matrix, out_dirs,
 # ==========================
 # Master query table
 # ==========================
-print('Building master query table')
+flog.info("Building master query table")
 all_rows <- dplyr::bind_rows(lapply(seq_along(comparisons), function(i) {
   res <- results[[i]]$limma
   if (is.null(res)) return(NULL)
@@ -432,7 +445,6 @@ write.csv(query_df, file.path(out_dirs$de_data, "master_query_table.csv"), row.n
 # ==========================
 # Save RDS
 # ==========================
-print('Save RDS')
 #rds <- list(results, comparisons, out_dirs, pca_plot, fig, fig3D)
 imputation_params <- list(method = imputation_method, q = imputation_q)
 peptide_counts <- list(total = n_peptides_total, no_crap = n_peptides_no_crap, phospho = n_peptides_phospho, not_imputable = n_peptides_not_imputable)
@@ -441,9 +453,11 @@ rds <- list(results, comparisons, out_dirs, pca_plot, intensity_matrix_raw, inte
 timestamp <- format(Sys.time(), "%Y%m%d_%H%M%S")
 #rds_path <- glue("analysis_results_{timestamp}.rds")
 rds_path <- file.path(outDir, "analysis_results.rds")
+flog.info("Saving analysis RDS to %s", rds_path)
 saveRDS(rds, rds_path)
 
 # ==========================
 # Generate the HTML report
 # ==========================
 generate_report(rds_path, output_dir = outDir)
+flog.info("Pipeline complete: runID=%s", runID)

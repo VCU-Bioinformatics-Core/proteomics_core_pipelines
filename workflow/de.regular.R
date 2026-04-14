@@ -104,6 +104,9 @@ if (is.null(runID) || is.null(countData) || is.null(samplesheet)) {
   stop("--runid, --counts, and --samplesheet are required.")
 }
 
+setup_logging(outDir, run_id = runID)
+flog.info("Pipeline started: runID=%s, genome=%s, outdir=%s", runID, genome, outDir)
+
 # ==========================
 # Debug mode
 # ==========================
@@ -142,16 +145,23 @@ if (genome == "human") {
   annotation_db <- org.Hs.eg.db
   ensembl <- tryCatch(
     useEnsembl("ensembl", dataset = "hsapiens_gene_ensembl"),
-    error = function(e) { message("BioMart connection failed: ", e$message, "\nGSEA will be skipped."); NULL }
+    error = function(e) {
+      flog.warn("BioMart connection failed for human: %s — GSEA will be skipped", e$message)
+      NULL
+    }
   )
 } else if (genome == "mouse") {
   if (!require("org.Mm.eg.db")) BiocManager::install("org.Mm.eg.db")
   annotation_db <- org.Mm.eg.db
   ensembl <- tryCatch(
     useEnsembl("ensembl", dataset = "mmusculus_gene_ensembl"),
-    error = function(e) { message("BioMart connection failed: ", e$message, "\nGSEA will be skipped."); NULL }
+    error = function(e) {
+      flog.warn("BioMart connection failed for mouse: %s — GSEA will be skipped", e$message)
+      NULL
+    }
   )
 } else {
+  flog.fatal("Invalid genome '%s'. Use 'mouse' or 'human'", genome)
   stop("Invalid genome specified. Use 'mouse' or 'human'")
 }
 
@@ -167,7 +177,7 @@ n_proteins_total <- nrow(full_prot_levels)
 full_prot_levels <- full_prot_levels %>% filter(!grepl("cRAP[0-9]+", PG.ProteinAccessions))
 n_proteins_no_crap <- nrow(full_prot_levels)
 
-print("WARNING JR: NEED TO ADDRESS THE DROPPING OF DUPLICATES")
+# TODO: address duplicate dropping strategy
 full_prot_levels <- full_prot_levels %>% distinct(PG.ProteinAccessions, .keep_all = TRUE) # drop duplicate (temporarily)
 colnames(full_prot_levels) <- sub("^X\\.\\d+\\.\\.", "", colnames(full_prot_levels)) # Remove the "X.#.." prefix only from columns that start with "X."
 colnames(full_prot_levels) <- sub("\\.raw\\.PG\\.Quantity", "", colnames(full_prot_levels)) # Remove the "X.#.." prefix only from columns that start with "X."
@@ -181,7 +191,7 @@ protein_metadata <- full_prot_levels %>%
 
 # Fetch Ensembl IDs for GSEA (map UniProt accessions -> ensembl_gene_id)
 # PG.ProteinAccessions can be semicolon-separated; use only the first accession for BioMart lookup
-print("Fetching Ensembl IDs from BioMart for GSEA annotation")
+flog.info("Fetching Ensembl IDs from BioMart for GSEA annotation")
 primary_accessions <- sub(";.*", "", protein_metadata$uniprotswissprot)
 ensembl_map <- tryCatch({
   getBM(
@@ -192,15 +202,15 @@ ensembl_map <- tryCatch({
   ) %>%
     distinct(uniprotswissprot, .keep_all = TRUE)
 }, error = function(e) {
-  message("BioMart Ensembl ID lookup failed: ", e$message)
+  flog.warn("BioMart Ensembl ID lookup failed: %s — continuing without Ensembl IDs", e$message)
   data.frame(uniprotswissprot = character(), ensembl_gene_id = character())
 })
 protein_metadata <- protein_metadata %>%
   mutate(primary_accession = sub(";.*", "", uniprotswissprot)) %>%
   left_join(ensembl_map, by = c("primary_accession" = "uniprotswissprot")) %>%
   dplyr::select(-primary_accession)
-print(paste("Ensembl IDs mapped for", sum(!is.na(protein_metadata$ensembl_gene_id)),
-            "of", nrow(protein_metadata), "proteins"))
+flog.info("Ensembl IDs mapped for %d of %d proteins",
+          sum(!is.na(protein_metadata$ensembl_gene_id)), nrow(protein_metadata))
 
 # Extract a dataframe with just protein levels
 # counts <- full_prot_levels %>% dplyr::select(where(is.numeric)) 
@@ -242,7 +252,7 @@ DEP_METHODS <- c("MinProb", "knn", "bpca", "QRILC", "man")
 n_peptides_not_imputable <- 0L  # overridden by custom imputation when applicable
 
 if (imputation_method == "none") {
-  print("Imputation skipped (--imputation none)")
+  flog.info("Imputation skipped (--imputation none)")
 
 } else if (startsWith(imputation_method, "DEP-")) {
   dep_fun <- sub("^DEP-", "", imputation_method)
@@ -267,11 +277,15 @@ if (imputation_method == "none") {
     se_imputed <- DEP::impute(se, fun = dep_fun)
   }
   intensity_matrix <- as.data.frame(SummarizedExperiment::assay(se_imputed))
-  print(glue("Imputation applied: {imputation_method} (q={imputation_q})"))
+  flog.info("Imputation applied: %s (q=%s)", imputation_method, imputation_q)
 
 } else {
   fn_name <- paste0("impute_", imputation_method)
   if (!exists(fn_name, mode = "function")) {
+    flog.fatal(
+      "Unknown imputation method '%s'. For DEP methods prefix with 'DEP-'. For custom methods define %s() in workflow/custom_imputation.R.",
+      imputation_method, fn_name
+    )
     stop(glue(
       "Unknown imputation method '{imputation_method}'. ",
       "For DEP methods prefix with 'DEP-' (e.g. 'DEP-MinProb'). ",
@@ -284,9 +298,10 @@ if (imputation_method == "none") {
   imputed_mat <- fn(as.matrix(intensity_matrix), groups = groups_vec)
   n_peptides_not_imputable <- attr(imputed_mat, "n_not_imputable") %||% 0L
   intensity_matrix <- as.data.frame(imputed_mat)
-  print(glue("Custom imputation applied: {imputation_method}"))
+  flog.info("Custom imputation applied: %s", imputation_method)
   if (n_peptides_not_imputable > 0)
-    print(glue("  Discarded {n_peptides_not_imputable} not-imputable peptide(s) (all groups had <=1 valid value)"))
+    flog.warn("Discarded %d not-imputable peptide(s): all groups had <=1 valid value",
+              n_peptides_not_imputable)
 }
 
 # ==========================
@@ -317,7 +332,7 @@ for (i in seq_along(comparisons)) {
 # ==========================
 # Principal Component Analysis
 # ==========================
-print("# Principal Component Analysis")
+flog.info("Running Principal Component Analysis")
 input_pca_matrix <- as.matrix(intensity_matrix)
 
 # Drop any rows that still contain NA or non-finite values after imputation
@@ -375,10 +390,10 @@ ggsave(pca_plot, filename = str_c(out_dirs$pca, "/global_pca_plot.png"), width =
 # ==========================
 # One-Way ANOVA
 # ==========================
-print('Running one-way ANOVA')
+flog.info("Running one-way ANOVA")
 n_anova_groups <- length(unique(sample_info$condition))
 if (skip_anova) {
-  message("Skipping ANOVA (--skip-anova)")
+  flog.info("Skipping ANOVA (--skip-anova flag set)")
   n_anova_sig   <- NULL
   n_anova_total <- NULL
 } else if (n_anova_groups > 2) {
@@ -409,14 +424,14 @@ anova_summary <- list(n_groups = n_anova_groups, n_sig = n_anova_sig, n_total = 
 # ==========================
 # Generate global heatmap
 # ==========================
-print('Generating global heatmap')
+flog.info("Generating global heatmap")
 generate_global_heatmap(intensity_matrix, out_dirs, top_n = heatmap_top_n,
                         heatmap_norm = heatmap_norm, color1 = group_color1, color2 = group_color2)
 
 # ==========================
 # Generate imputation figures
 # ==========================
-print('Generating imputation figures')
+flog.info("Generating imputation figures")
 generate_imputation_figures(intensity_matrix_raw, intensity_matrix, out_dirs,
                             molecule_label = "protein",
                             color1 = group_color1, color2 = group_color2)
@@ -424,7 +439,7 @@ generate_imputation_figures(intensity_matrix_raw, intensity_matrix, out_dirs,
 # ==========================
 # Master query table
 # ==========================
-print('Building master query table')
+flog.info("Building master query table")
 all_rows <- dplyr::bind_rows(lapply(seq_along(comparisons), function(i) {
   res <- results[[i]]$limma
   if (is.null(res)) return(NULL)
@@ -456,7 +471,6 @@ write.csv(query_df, file.path(out_dirs$de_data, "master_query_table.csv"), row.n
 # ==========================
 # Save RDS
 # ==========================
-print('Save RDS')
 #rds <- list(results, comparisons, out_dirs, pca_plot, fig, fig3D)
 imputation_params <- list(method = imputation_method, q = imputation_q)
 n_ensembl_mapped <- sum(!is.na(protein_metadata$ensembl_gene_id))
@@ -466,9 +480,11 @@ rds <- list(results, comparisons, out_dirs, pca_plot, intensity_matrix_raw, inte
 timestamp <- format(Sys.time(), "%Y%m%d_%H%M%S")
 #rds_path <- glue("analysis_results_{timestamp}.rds")
 rds_path <- file.path(outDir, "analysis_results.rds")
+flog.info("Saving analysis RDS to %s", rds_path)
 saveRDS(rds, rds_path)
 
 # ==========================
 # Generate the HTML report
 # ==========================
 generate_report(rds_path, output_dir = outDir)
+flog.info("Pipeline complete: runID=%s", runID)
