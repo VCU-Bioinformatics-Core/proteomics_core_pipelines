@@ -104,7 +104,8 @@ conda install -c conda-forge \
   r-haven \
   r-ragg \
   r-rvest \
-  r-textshaping
+  r-textshaping \
+  r-devtools
 ```
 
 **Bioconductor packages requiring both `conda-forge` and `bioconda` channels** (run separately from the command above):
@@ -121,7 +122,8 @@ conda install -c conda-forge -c bioconda \
   bioconductor-mzid \
   bioconductor-go.db \
   bioconductor-qfeatures \
-  bioconductor-summarizedexperiment
+  bioconductor-summarizedexperiment \
+  bioconductor-org.hs.eg.db
 ```
 
 **Bioconductor packages from `bioconda` only** (run separately):

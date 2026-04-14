@@ -479,13 +479,13 @@ generate_global_heatmap <- function(intensity_matrix, out_dirs, top_n = 1000, mo
     show_column_names = TRUE,
     row_title = paste0(molecule_label, " (top ", n_select, " by CV)"),
     column_title = "Samples",
-    column_names_gp = gpar(fontsize = 8),
+    column_names_gp = grid::gpar(fontsize = 8),
     column_names_rot = 45,
-    column_title_gp = gpar(fontsize = 12),
-    row_title_gp = gpar(fontsize = 12)
+    column_title_gp = grid::gpar(fontsize = 12),
+    row_title_gp = grid::gpar(fontsize = 12)
   )
   draw(ht, column_title = paste0("Global ", molecule_label, " Heatmap"),
-       column_title_gp = gpar(fontsize = 14, fontface = "bold"))
+       column_title_gp = grid::gpar(fontsize = 14, fontface = "bold"))
   dev.off()
 
   return(out_path)
@@ -632,10 +632,10 @@ generate_heatmap <- function(results_df, normalized_counts, p = 0.05, lfc = 0.58
     show_column_names = TRUE,
     row_title = "Features",
     column_title = "Samples",
-    column_names_gp = gpar(fontsize = 8),
+    column_names_gp = grid::gpar(fontsize = 8),
     column_names_rot = 45,
-    column_title_gp = gpar(fontsize = 12),
-    row_title_gp = gpar(fontsize = 12)
+    column_title_gp = grid::gpar(fontsize = 12),
+    row_title_gp = grid::gpar(fontsize = 12)
   )
   
   return(ht)
@@ -849,12 +849,12 @@ run_analysis <- function(comparison, limma_params, normalized_counts, out_dirs, 
     flog.info("Generating heatmap: %s", comparison$name)
     png(create_file_path(out_dirs$heatmap, "", comparison$name, "_heatmap.png"),
         width = 2400, height = 3200, res = 300)
-    ht <- generate_heatmap(limma_results, intensity_matrix,
+    ht <- generate_heatmap(limma_results, normalized_counts,
                      exp_name = comparison$exp, ctrl_name = comparison$ctrl,
                      fig_dir = out_dirs$heatmap, design = limma_params$design,
                      heatmap_norm = heatmap_norm, color1 = color1, color2 = color2)
     draw(ht, column_title = paste0(comparison$exp, " vs ", comparison$ctrl, " — Differentially Abundant Proteins"),
-         column_title_gp = gpar(fontsize = 14, fontface = "bold"))
+         column_title_gp = grid::gpar(fontsize = 14, fontface = "bold"))
     dev.off()
 
     if (skip_gsea) {
@@ -967,7 +967,7 @@ run_analysis_phospho <- function(comparison, limma_params, normalized_counts, ou
                            row_id_col = "peptide_id",
                            heatmap_norm = heatmap_norm, color1 = color1, color2 = color2)
     draw(ht, column_title = paste0(comparison$exp, " vs ", comparison$ctrl, " — Differentially Abundant Phosphopeptides"),
-         column_title_gp = gpar(fontsize = 14, fontface = "bold"))
+         column_title_gp = grid::gpar(fontsize = 14, fontface = "bold"))
     dev.off()
 
     if (skip_gsea) {
