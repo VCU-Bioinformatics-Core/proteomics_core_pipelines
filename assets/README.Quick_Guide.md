@@ -27,10 +27,51 @@ conda activate DAPRmd
 
 ---
 
-### 2. Install CRAN packages via conda
+### 2. Install packages from a pre-built environment file (recommended)
 
-CRAN packages can be installed through the `conda-forge` channel using the `r-` prefix
-convention, followed by Bioconductor packages via `BiocManager` (step 3 below).
+If you are on a supported system, you can recreate the full DAPRmd environment in one step
+using one of the provided environment files. This avoids the manual multi-step conda installs
+described in the sections below.
+
+Two environment files are available:
+
+| File | When to use |
+|------|-------------|
+| `environment.cross_platform.yml` | General use — installs from `conda-forge` only, works on most Linux/macOS systems |
+| `environment.vcu_cardinal.yml` | VCU Cardinal HPC — fully pinned build hashes for reproducibility on that cluster |
+
+**Create the environment from a file:**
+
+```bash
+# Cross-platform (general use)
+conda env create -f environment.cross_platform.yml
+
+# VCU Cardinal HPC
+conda env create -f environment.vcu_cardinal.yml
+```
+
+Then activate the environment:
+
+```bash
+conda activate DAPRmd
+```
+
+> **Note:** Both files create an environment named `DAPRmd`. If that name conflicts with an
+> existing environment, rename it with `--name <new-name>` appended to the `conda env create`
+> command.
+
+If you cannot use an environment file (e.g. on a system with restricted network access or
+non-standard architecture), follow the manual installation steps in sections 3–6 below.
+
+---
+
+### 3. Install CRAN packages via conda
+
+Each `conda install` command below must be run separately. Installing all packages in a
+single command can cause solver conflicts; running them one at a time ensures reliable
+dependency resolution.
+
+**CRAN packages** (via `conda-forge`):
 
 ```bash
 conda install -c conda-forge \
@@ -51,34 +92,52 @@ conda install -c conda-forge \
   r-purrr \
   r-rcolorbrewer \
   r-readr \
-  r-renv \
   r-reticulate \
   r-rmarkdown \
   r-scales \
   r-stringr \
   r-tibble \
   r-tidyr \
+  r-tidyverse \
   r-tinytex
 ```
 
-### 3. Install Bioconductor packages via BiocManager
 
-```r
-BiocManager::install(c(
-  "AnnotationDbi",
-  "biomaRt",
-  "clusterProfiler",
-  "ComplexHeatmap",
-  "DEP",
-  "enrichplot",
-  "limma",
-  "org.Hs.eg.db",
-  "org.Mm.eg.db",
-  "S4Vectors",
-  "SummarizedExperiment"
-))
+
+
+**Bioconductor packages requiring both `conda-forge` and `bioconda` channels** (run separately from the command above):
+
+```bash
+conda install -c conda-forge -c bioconda \
+  r-igraph \
+  bioconductor-annotationdbi \
+  bioconductor-gosemsim \
+  bioconductor-mzr \
+  bioconductor-vsn \
+  bioconductor-affy \
+  bioconductor-mzid \
+  bioconductor-go.db \
+  bioconductor-qfeatures \
+  bioconductor-summarizedexperiment
 ```
 
+**Bioconductor packages from `bioconda` only** (run separately):
+
+```bash
+conda install -c bioconda \
+  bioconductor-psmatch \
+  bioconductor-dose \
+  bioconductor-msnbase
+```
+
+**Bioconductor enrichment packages** (run separately — these depend on the packages above):
+
+```bash
+conda install -c bioconda \
+  bioconductor-enrichplot \
+  bioconductor-clusterprofiler \
+  bioconductor-dep
+```
 ---
 
 ### Package dependency overview
