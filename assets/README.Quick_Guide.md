@@ -18,7 +18,7 @@ Create an empty conda environment named `DAPRmd`. No packages are installed at t
 R will be compiled from source in the next step.
 
 ```bash
-conda env create -n DAPRmd
+conda create -n DAPRmd # creates an empty environment
 conda activate DAPRmd
 ```
 
@@ -99,11 +99,13 @@ conda install -c conda-forge \
   r-tibble \
   r-tidyr \
   r-tidyverse \
-  r-tinytex
+  r-tinytex \
+  r-xml2 \
+  r-haven \
+  r-ragg \
+  r-rvest \
+  r-textshaping
 ```
-
-
-
 
 **Bioconductor packages requiring both `conda-forge` and `bioconda` channels** (run separately from the command above):
 
@@ -111,6 +113,7 @@ conda install -c conda-forge \
 conda install -c conda-forge -c bioconda \
   r-igraph \
   bioconductor-annotationdbi \
+  bioconductor-biomart \
   bioconductor-gosemsim \
   bioconductor-mzr \
   bioconductor-vsn \
@@ -138,6 +141,7 @@ conda install -c bioconda \
   bioconductor-clusterprofiler \
   bioconductor-dep
 ```
+
 ---
 
 ### Package dependency overview
