@@ -1,8 +1,6 @@
 # ==========================
 # Logging setup
 # ==========================
-library(futile.logger)
-
 setup_logging <- function(outdir, run_id = NULL) {
   dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
   log_name <- if (!is.null(run_id) && nzchar(run_id)) {

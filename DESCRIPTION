@@ -1,0 +1,49 @@
+Package: DAPRmd
+Title: Proteomics Core Differential Abundance Pipeline
+Version: 0.1.0
+Authors@R: person("J. Reyna", role = c("aut", "cre"))
+Description: Differential abundance analysis for label-free quantification
+    proteomics and phosphoproteomics data using limma. Supports protein-level
+    and phosphopeptide-level workflows with optional GSEA and HTML report
+    generation.
+License: Apache License (>= 2)
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.0.0
+Depends:
+    R (>= 4.1.0)
+Imports:
+    futile.logger,
+    dplyr,
+    data.table,
+    tidyverse,
+    janitor,
+    scales,
+    clusterProfiler,
+    enrichplot,
+    readr,
+    DT,
+    limma,
+    ggplot2,
+    ggrepel,
+    AnnotationDbi,
+    RColorBrewer,
+    purrr,
+    plotly,
+    optparse,
+    htmlwidgets,
+    ComplexHeatmap,
+    circlize,
+    DEP,
+    biomaRt,
+    rmarkdown,
+    knitr,
+    glue,
+    SummarizedExperiment,
+    S4Vectors,
+    stringr,
+    tibble
+Suggests:
+    org.Hs.eg.db,
+    org.Mm.eg.db,
+    devtools
