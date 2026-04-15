@@ -1,4 +1,4 @@
-# Proteomics Pipeline: Quick Guide (R Package Install)
+# Proteomics Pipeline: Quick Guide
 
 <img src="../assets/DAPRmd.png" alt="DAPRmd Logo" width="800"/><br>
 
@@ -274,6 +274,23 @@ Rscript inst/scripts/de.regular.R \
   --annotation mouse
 ```
 
+### Example Run (Ovarian Cancer Dataset)
+
+The package includes a small example dataset derived from the MSstats ovarian cancer SRM dataset (14 proteins, 10 control samples, 6 tumor samples). Use it to verify the pipeline is working correctly.
+
+```bash
+Rscript inst/scripts/de.regular.R \
+  --counts inst/scripts/extdata/ovarian_intensity_matrix.csv \
+  --samplesheet inst/scripts/extdata/ovarian_samplesheet.csv \
+  --outdir ovarian_results \
+  --runid ovarian_example \
+  --annotation human \
+  --imputation none \
+  --skip-gsea
+```
+
+> `--skip-gsea` is used here because the dataset only contains 14 proteins, which is too few for meaningful Gene Ontology enrichment analysis.
+
 ### Arguments
 
 | Flag | Default | Description |
@@ -293,23 +310,6 @@ Rscript inst/scripts/de.regular.R \
 | `--skip-anova` | — | Skip one-way ANOVA (flag) |
 | `--group-color1` | `#D55E00` | Hex color for the up-regulated group |
 | `--group-color2` | `#0072B2` | Hex color for the down-regulated group |
-
-### Example Run (Ovarian Cancer Dataset)
-
-The package includes a small example dataset derived from the MSstats ovarian cancer SRM dataset (14 proteins, 10 control samples, 6 tumor samples). Use it to verify the pipeline is working correctly.
-
-```bash
-Rscript inst/scripts/de.regular.R \
-  --counts inst/scripts/extdata/ovarian_intensity_matrix.csv \
-  --samplesheet inst/scripts/extdata/ovarian_samplesheet.csv \
-  --outdir ovarian_results \
-  --runid ovarian_example \
-  --annotation human \
-  --imputation none \
-  --skip-gsea
-```
-
-> `--skip-gsea` is used here because the dataset only contains 14 proteins, which is too few for meaningful Gene Ontology enrichment analysis.
 
 ---
 
