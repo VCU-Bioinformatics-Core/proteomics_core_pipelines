@@ -1,0 +1,49 @@
+name: DAPRmd
+channels:
+  - bioconda
+  - conda-forge
+  - defaults
+dependencies:
+  - r-base
+  - r-ggplot2
+  - r-here
+  - r-scales
+  - r-plotly
+  - r-dplyr
+  - r-ggrepel
+  - r-knitr
+  - r-rmarkdown
+  - r-tibble
+  - r-renv
+  - r-stringr
+  - r-data.table
+  - r-readr
+  - r-reticulate
+  - r-purrr
+  - r-optparse
+  - r-biocmanager
+  - r-tinytex
+  - r-dt
+  - r-htmlwidgets
+  - r-rcolorbrewer
+  - r-tidyr
+  - r-glue
+  - r-janitor
+  - bioconductor-gosemsim
+  - bioconductor-affy
+  - bioconductor-summarizedexperiment
+  - bioconductor-qfeatures
+  - bioconductor-annotationdbi
+  - r-igraph
+  - bioconductor-mzid
+  - bioconductor-mzr
+  - bioconductor-go.db
+  - bioconductor-vsn
+  - bioconductor-dose
+  - bioconductor-psmatch
+  - bioconductor-msnbase
+  - bioconductor-enrichplot
+  - bioconductor-clusterprofiler
+  - bioconductor-dep
+prefix: /global/home/reynaj/.conda/envs/DAPRmd2
+
