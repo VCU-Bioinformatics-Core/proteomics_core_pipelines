@@ -294,6 +294,23 @@ Rscript inst/scripts/de.regular.R \
 | `--group-color1` | `#D55E00` | Hex color for the up-regulated group |
 | `--group-color2` | `#0072B2` | Hex color for the down-regulated group |
 
+### Example Run (Ovarian Cancer Dataset)
+
+The package includes a small example dataset derived from the MSstats ovarian cancer SRM dataset (14 proteins, 10 control samples, 6 tumor samples). Use it to verify the pipeline is working correctly.
+
+```bash
+Rscript inst/scripts/de.regular.R \
+  --counts inst/scripts/extdata/ovarian_intensity_matrix.csv \
+  --samplesheet inst/scripts/extdata/ovarian_samplesheet.csv \
+  --outdir ovarian_results \
+  --runid ovarian_example \
+  --annotation human \
+  --imputation none \
+  --skip-gsea
+```
+
+> `--skip-gsea` is used here because the dataset only contains 14 proteins, which is too few for meaningful Gene Ontology enrichment analysis.
+
 ---
 
 ## Pipeline Output

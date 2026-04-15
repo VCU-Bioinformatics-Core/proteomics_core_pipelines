@@ -22,11 +22,16 @@ generate_report_regular <- function(analysis_results_path, output_dir = "./", re
     stop("Analysis results file does not exist:", analysis_results_path)
   }
 
+  # Resolve to absolute paths so rmarkdown::render() can find them
+  # regardless of working directory changes during rendering
+  analysis_results_path <- normalizePath(analysis_results_path, mustWork = TRUE)
+  output_dir <- normalizePath(output_dir, mustWork = FALSE)
+
   # Create output directory if it doesn't exist
   if (!dir.exists(output_dir)) {
     dir.create(output_dir, recursive = TRUE)
   }
-  
+
   # Generate unique filename with timestamp
   timestamp <- format(Sys.time(), "%Y%m%d_%H%M%S")
   #output_file <- file.path(output_dir, paste0(report_prefix, "_", timestamp, ".html"))
@@ -828,11 +833,16 @@ generate_report_phospho <- function(analysis_results_path, output_dir = "./", re
     stop("Analysis results file does not exist:", analysis_results_path)
   }
 
+  # Resolve to absolute paths so rmarkdown::render() can find them
+  # regardless of working directory changes during rendering
+  analysis_results_path <- normalizePath(analysis_results_path, mustWork = TRUE)
+  output_dir <- normalizePath(output_dir, mustWork = FALSE)
+
   # Create output directory if it doesn't exist
   if (!dir.exists(output_dir)) {
     dir.create(output_dir, recursive = TRUE)
   }
-  
+
   # Generate unique filename with timestamp
   timestamp <- format(Sys.time(), "%Y%m%d_%H%M%S")
   #output_file <- file.path(output_dir, paste0(report_prefix, "_", timestamp, ".html"))

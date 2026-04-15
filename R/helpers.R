@@ -39,6 +39,7 @@ export_plotly_to_html <- function(plotly_obj, file_path) {
 }
 
 setup_directories <- function(base_dir) {
+  base_dir <- normalizePath(base_dir, mustWork = FALSE)
   dirs <- list(
     data = file.path(base_dir, "data"),
     figures = file.path(base_dir, "figures"),
@@ -506,7 +507,7 @@ generate_imputation_figures <- function(intensity_raw, intensity_imputed, out_di
 
   # --- 1. Observed vs Imputed histogram ---
   raw_vals <- data.frame(value = raw_mat[obs_mask],  type = "Observed")
-  imp_vals <- data.frame(value = imputed_mat[!obs_mask], type = "Imputed")
+  imp_vals <- data.frame(value = imputed_mat[!obs_mask], type = rep("Imputed", sum(!obs_mask)))
   all_vals      <- rbind(raw_vals, imp_vals)
   all_vals$type <- factor(all_vals$type, levels = c("Observed", "Imputed"))
 
