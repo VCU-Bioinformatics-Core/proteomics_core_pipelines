@@ -1,73 +1,99 @@
-# Proteomics Pipeline: Quick Guide
+# Proteomics Pipeline: Quick Guide (R Package Install)
 
 <img src="../assets/DAPRmd.png" alt="DAPRmd Logo" width="800"/><br>
 
 ---
 
-## DAPRmd Environment Setup
+## Overview
 
-This section describes how to set up a reproducible conda + R environment for running the
-DAPRmd pipeline. R is compiled from source and installed directly into the conda environment
-to avoid version conflicts with system R.
+DAPRmd is structured as an R package. Installation involves two main steps:
 
----
+1. **conda** creates an environment with a pinned R version and system libraries
+2. **R package dependencies** are installed either automatically via `devtools` (Approach 1) or pre-installed from conda YAML files (Approach 2/3)
 
-### 1. Create the conda environment
+Three installation approaches are provided, in order of preference:
 
-Create an empty conda environment named `DAPRmd`. No packages are installed at this stage —
-R will be compiled from source in the next step.
+- **Approach 1** — conda creates a bare R environment; `devtools` resolves and installs all R dependencies at install time
+- **Approach 2** — conda YAML file pre-installs R and all dependencies; then `devtools` installs DAPRmd code only
+- **Approach 3** — same as 2 but dependencies are installed via explicit conda commands rather than a YAML file
 
-```bash
-conda create -n DAPRmd # creates an empty environment
-conda activate DAPRmd
-```
-
-> **Note:** If you need system-level build dependencies (e.g. `gcc`, `make`, `readline-devel`),
-> install them via `conda install -n DAPRmd <pkg>` before building R.
+When installing DAPRmd on the VCU Cardinal server (or similar systems), we recommend conda due to system compatibility constraints. Cardinal runs RHEL 8 with glibc 2.28, which is compatible with conda-forge packages (built against glibc 2.17) but not with standard precompiled CRAN/Bioconductor binaries. These require glibc ≥ 2.32 and will fail on Cardinal. Note: JP is looking into upgrading glibc on Cardinal.
 
 ---
 
-### 2. Install packages from a pre-built environment file (recommended)
+## Environment & Package Setup 
 
-If you are on a supported system, you can recreate the full DAPRmd environment in one step
-using one of the provided environment files. This avoids the manual multi-step conda installs
-described in the sections below.
+| Section | Description | Link |
+|---|---|---|
+| Approach 1 | First try — minimal setup, devtools resolves all R dependencies automatically | [Approach 1](#approach-1-r-via-conda-with-devtools-dependency-installation-recommended) |
+| Approach 2 | If Approach 1 fails or you want a fully reproducible environment with pinned package versions | [Approach 2](#approach-2-r-and-dependencies-via-conda-yaml-files-if-previous-fails) |
+| Approach 3 | If Approach 2 fails or no YAML file is available for your system | [Approach 3](#approach-3-r-and-dependencies-via-conda-commands-if-previous-fails) |
+| Verify the installation | Confirm DAPRmd installed correctly | [Verify](#verify-the-installation) |
+| Why conda? | Explanation of why conda is used for package management | [Why conda?](#why-does-conda-handle-package-dependencies-in-approaches-23) |
 
-Two environment files are available:
+### Approach 1: R via Conda with devtools Dependency Installation (Recommended)
 
-| File | When to use |
-|------|-------------|
-| `environment.cross_platform.yml` | General use — installs from `conda-forge` only, works on most Linux/macOS systems |
-| `environment.vcu_cardinal.yml` | VCU Cardinal HPC — fully pinned build hashes for reproducibility on that cluster |
-
-**Create the environment from a file:**
-
+Step 1: Create a bare conda environment with R.
 ```bash
-# Cross-platform (general use)
-conda env create -f environment.cross_platform.yml
-
-# VCU Cardinal HPC
-conda env create -f environment.vcu_cardinal.yml
+conda create -n DAPRmd r-base=4.5.3 
 ```
 
-Then activate the environment:
-
+Step 2: Activate the environment, clone the repo, and install DAPRmd (devtools will resolve and install all R dependencies automatically).
 ```bash
-conda activate DAPRmd
+# activate the env
+conda activate DAPRmd 
+
+# clone the repo
+git clone git@github.com:VCU-Bioinformatics-Core/proteomics_core_pipelines.git
+
+# cd into the repo
+cd proteomics_core_pipelines
+
+# from the root of the proteomics_core_pipelines repo:
+Rscript -e "devtools::install('.', dependencies=TRUE)"
 ```
 
-> **Note:** Both files create an environment named `DAPRmd`. If that name conflicts with an
-> existing environment, rename it with `--name <new-name>` appended to the `conda env create`
-> command.
+### Approach 2: R and Dependencies via Conda YAML files (If previous fails)
 
-If you cannot use an environment file (e.g. on a system with restricted network access or
-non-standard architecture), follow the manual installation steps in sections 3–6 below.
+Step 1: Create the conda environment from a YAML file — choose the one that matches your system.
+```bash
+# use on macOS or Linux with glibc ≥ 2.32 (e.g. RHEL 9+)
+conda env create -f envs/environment.cross_platform.yml  
 
----
+# use on VCU Cardinal or other RHEL 8 / glibc 2.28 systems
+conda env create -f envs/environment.vcu_cardinal.yml    
+```
 
-### 3. Install CRAN packages via conda
+Step 2: Activate the environment, clone the repo, and install DAPRmd (all R dependencies were already installed by conda in Step 1).
+```bash
+# activate the env
+conda activate DAPRmd 
 
-Each `conda install` command below must be run separately. Installing all packages in a
+# clone the repo
+git clone git@github.com:VCU-Bioinformatics-Core/proteomics_core_pipelines.git
+
+# cd into the repo
+cd proteomics_core_pipelines
+
+# from the root of the proteomics_core_pipelines repo:
+Rscript -e "devtools::install('.', dependencies=FALSE)"
+```
+
+### Approach 3: R and Dependencies via Conda Commands (If previous fails)
+
+Step 1: Create a bare conda environment with R.
+```bash
+conda create -n DAPRmd r-base=4.5.3 
+```
+
+Step 2: Activate the environment
+```bash
+conda activate DAPRmd 
+```
+
+Step 3. Install CRAN/Bioconductor packages via conda
+
+Each `conda install` command block below must be run separately. Installing all packages in a
 single command can cause solver conflicts; running them one at a time ensures reliable
 dependency resolution.
 
@@ -76,90 +102,102 @@ dependency resolution.
 ```bash
 conda install -c conda-forge \
   r-base=4.5.3 \
-  r-biocmanager \
+  r-circlize \
   r-data.table \
+  r-devtools \
   r-dplyr \
   r-dt \
+  r-futile.logger \
   r-ggplot2 \
   r-ggrepel \
   r-glue \
+  r-haven \
   r-here \
   r-htmlwidgets \
+  r-igraph \
   r-janitor \
   r-knitr \
   r-optparse \
   r-plotly \
   r-purrr \
+  r-ragg \
   r-rcolorbrewer \
   r-readr \
   r-reticulate \
   r-rmarkdown \
+  r-rvest \
   r-scales \
   r-stringr \
+  r-textshaping \
   r-tibble \
   r-tidyr \
   r-tidyverse \
   r-tinytex \
-  r-xml2 \
-  r-haven \
-  r-ragg \
-  r-rvest \
-  r-textshaping \
-  r-devtools
+  r-xml2
 ```
 
 **Bioconductor packages requiring both `conda-forge` and `bioconda` channels** (run separately from the command above):
 
 ```bash
 conda install -c conda-forge -c bioconda \
-  r-igraph \
   bioconductor-annotationdbi \
   bioconductor-biomart \
-  bioconductor-gosemsim \
-  bioconductor-mzr \
-  bioconductor-vsn \
-  bioconductor-affy \
-  bioconductor-mzid \
+  bioconductor-complexheatmap \
   bioconductor-go.db \
+  bioconductor-gosemsim \
+  bioconductor-limma \
+  bioconductor-mzid \
+  bioconductor-mzr \
+  bioconductor-org.hs.eg.db \
   bioconductor-qfeatures \
+  bioconductor-s4vectors \
   bioconductor-summarizedexperiment \
-  bioconductor-org.hs.eg.db
+  bioconductor-vsn \
+  bioconductor-affy
 ```
 
 **Bioconductor packages from `bioconda` only** (run separately):
 
 ```bash
 conda install -c bioconda \
-  bioconductor-psmatch \
   bioconductor-dose \
-  bioconductor-msnbase
+  bioconductor-msnbase \
+  bioconductor-psmatch
 ```
 
 **Bioconductor enrichment packages** (run separately — these depend on the packages above):
 
 ```bash
 conda install -c bioconda \
-  bioconductor-enrichplot \
   bioconductor-clusterprofiler \
-  bioconductor-dep
+  bioconductor-dep \
+  bioconductor-enrichplot
 ```
 
----
+Step 4: Clone the repo and install DAPRmd (all R dependencies were already installed by conda in Step 3)
 
-### Package dependency overview
+```bash
+# clone the repo
+git clone git@github.com:VCU-Bioinformatics-Core/proteomics_core_pipelines.git
 
-| Layer | Packages |
-|---|---|
-| Report rendering | `rmarkdown`, `knitr` |
-| Interactive output | `plotly`, `DT`, `htmlwidgets` |
-| Visualization | `ggplot2`, `ggrepel`, `RColorBrewer`, `ComplexHeatmap` |
-| Differential analysis | `limma`, `DEP` |
-| Enrichment / annotation | `clusterProfiler`, `enrichplot`, `org.Hs.eg.db`, `org.Mm.eg.db`, `AnnotationDbi`, `biomaRt` |
-| Bioconductor infrastructure | `S4Vectors`, `SummarizedExperiment`, `BiocManager` |
-| Data manipulation | `dplyr`, `tidyr`, `tibble`, `data.table`, `purrr`, `readr`, `janitor`, `scales` |
-| Utilities | `glue`, `here`, `optparse`, `stringr`, `reticulate` |
-| Reproducibility | `renv` |
-| PDF output | `tinytex` |
+# cd into the repo
+cd proteomics_core_pipelines
+
+# from the root of the proteomics_core_pipelines repo:
+Rscript -e "devtools::install('.', dependencies=FALSE)"
+```
+
+### Verify the installation
+
+```bash
+Rscript -e "library(DAPRmd); packageVersion('DAPRmd')"
+```
+
+### Why is conda integrated into this package, especially approaches 2/3?
+
+- Provides a specific version of R (e.g. `r-base=4.5.3`)
+- System libraries are easily installed (e.g. `libcurl`, `libxml2`, `openssl`)
+- **R package dependencies** on CRAN/Bioconductor require glibc ≥ 2.32 but the VCU Cardinal server (and similar systems) only have access to older versions of glibc
 
 ---
 
@@ -214,14 +252,10 @@ This file contains metadata for each sample, including group identifiers and bin
 
 ## Running the Pipeline
 
-The pipeline is executed via `Rscript`. Example commands for running on VCU HPRC are as follows:
-
 ### Human Analysis
 
 ```bash
-module load R/4.4.1
-
-Rscript de.regular.R \
+Rscript inst/scripts/de.regular.R \
   --counts human_counts.tsv \
   --samplesheet samplesheet.csv \
   --outdir human_results \
@@ -232,9 +266,7 @@ Rscript de.regular.R \
 ### Mouse Analysis
 
 ```bash
-module load R/4.4.1
-
-Rscript de.regular.R \
+Rscript inst/scripts/de.regular.R \
   --counts mouse_counts.tsv \
   --samplesheet samplesheet.csv \
   --outdir mouse_results \
@@ -251,7 +283,7 @@ Rscript de.regular.R \
 | `-r, --runid` | — | Unique identifier for the run **(Mandatory)** |
 | `-o, --outdir` | `./output` | Output directory |
 | `-a, --annotation` | `mouse` | Genome annotation: `mouse` or `human` |
-| `-i, --imputation` | `DEP-MinProb` | Imputation method: `DEP-MinProb`, `DEP-knn`, `DEP-bpca`, `DEP-QRILC`, `DEP-man`, custom (see `workflow/custom_imputation.R`), or `none` |
+| `-i, --imputation` | `DEP-MinProb` | Imputation method: `DEP-MinProb`, `DEP-knn`, `DEP-bpca`, `DEP-QRILC`, `DEP-man`, custom (see `R/custom_imputation.R`), or `none` |
 | `-q, --imputation-q` | `0.01` | Quantile cutoff for `DEP-MinProb` and `DEP-QRILC` |
 | `--seed` | `42` | Random seed for stochastic imputation methods |
 | `--heatmap-norm` | `zscore` | Heatmap row normalization: `zscore` or `none` |
@@ -261,28 +293,6 @@ Rscript de.regular.R \
 | `--skip-anova` | — | Skip one-way ANOVA (flag) |
 | `--group-color1` | `#D55E00` | Hex color for the up-regulated group |
 | `--group-color2` | `#0072B2` | Hex color for the down-regulated group |
-
-### Current execution workflow (temporary)
-
-At present, the pipeline is executed manually through an interactive RStudio session to ensure
-a controlled runtime environment via `renv`. This will likely be automated in the future.
-
-1. Launch **RStudio** on `cardinal.som.edu`.
-2. Open the **proteomics_core_pipelines** repository as the active RStudio project to activate the `renv` environment.
-3. From the RStudio terminal, navigate to the desired analysis directory.
-4. Execute the pipeline via a wrapper script (example below).
-5. Open the generated `.Rmd` file in `<outdir>/` for inspection or manual rendering.
-
-#### Wrapper script invocation
-
-```bash
-Rscript <wrapper-script-path> \
-  --counts <counts-path> \
-  --samplesheet <samplesheet-path> \
-  --outdir <output-dir> \
-  --runid <arbitrary-id> \
-  --annotation <human or mouse>
-```
 
 ---
 
