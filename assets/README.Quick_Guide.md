@@ -274,9 +274,9 @@ Rscript inst/scripts/de.regular.R \
   --annotation mouse
 ```
 
-### Example Run (Ovarian Cancer Dataset)
+### Example Run (Ovarian Cancer Dataset from MSstats)
 
-The package includes a small example dataset derived from the MSstats ovarian cancer SRM dataset (14 proteins, 10 control samples, 6 tumor samples). Use it to verify the pipeline is working correctly.
+The package includes a small example dataset derived from the MSstats ovarian cancer SRM dataset (14 proteins, 10 control samples, 6 tumor samples).
 
 ```bash
 Rscript inst/scripts/de.regular.R \
