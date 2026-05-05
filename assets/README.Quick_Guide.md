@@ -197,7 +197,7 @@ cd <your-project-dir>
 wget https://raw.githubusercontent.com/VCU-Bioinformatics-Core/proteomics_core_pipelines/refs/heads/dev/renv.lock
 ```
 
-Setup the environment and install the package (within an R session
+Setup the environment and install the package (within an R session)
 ```
 library(renv)
 renv::restore()
