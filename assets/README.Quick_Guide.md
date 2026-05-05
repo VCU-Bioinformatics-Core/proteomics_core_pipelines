@@ -200,8 +200,9 @@ wget https://raw.githubusercontent.com/VCU-Bioinformatics-Core/proteomics_core_p
 Setup the environment and install the package (within an R session)
 ```
 library(renv)
-renv::restore()
-remotes::install_github("VCU-Bioinformatics-Core/proteomics_core_pipelines")
+renv::init()
+install.packages("remotes")
+remotes::install_github("VCU-Bioinformatics-Core/proteomics_core_pipelines", ref="dev")
 ```
 
 ### Verify the installation
