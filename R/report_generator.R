@@ -2,7 +2,7 @@
 # Report generation functions
 # ==========================
 # generate_report_regular() — protein-level HTML report
-# generate_report_phospho() — phosphopeptide-level HTML report
+# generate_report_ptm()     — PTM peptide-level HTML report
 
 
 # Required libraries
@@ -825,7 +825,7 @@ Please include the following statements in your acknowledgements manuscript sect
 
 # Function to generate automated R Markdown report
 # source("report_generator.R"); generate_report('analysis.rds', output_dir = getwd()) # test below
-generate_report_phospho <- function(analysis_results_path, output_dir = "./", report_prefix = "phosphopeptide_analysis", analyst="Joaquin Reyna") {
+generate_report_ptm <- function(analysis_results_path, output_dir = "./", report_prefix = "ptm_analysis", analyst="Joaquin Reyna") {
   
   
   # Validate inputs
@@ -1016,17 +1016,17 @@ if (!is.null(analysis_params)) {{
 
 ### Peptide Filtering Summary
 
-The following table tracks how many peptides remain at each stage of the filtering pipeline — from the initial search results through contaminant (cRAP) removal, phosphopeptide selection, and imputation eligibility checks. Only peptides that pass all filters are carried forward into normalization and differential abundance testing.
+The following table tracks how many peptides remain at each stage of the filtering pipeline — from the initial search results through contaminant (cRAP) removal, PTM peptide selection, and imputation eligibility checks. Only peptides that pass all filters are carried forward into normalization and differential abundance testing.
 
 ```{{r global-summary}}
 if (!is.null(peptide_counts)) {{
-  steps  <- c("Total peptides", "After cRAP removal", "Phosphopeptides only")
-  counts <- c(peptide_counts$total, peptide_counts$no_crap, peptide_counts$phospho)
+  steps  <- c("Total peptides", "After cRAP removal", "PTM peptides only")
+  counts <- c(peptide_counts$total, peptide_counts$no_crap, peptide_counts$ptm)
   if (!is.null(peptide_counts$not_imputable) && peptide_counts$not_imputable > 0) {{
     steps  <- c(steps,  "Not-imputable (discarded)")
     counts <- c(counts, peptide_counts$not_imputable)
-    steps  <- c(steps,  "Curated phosphopeptides (used downstream)")
-    counts <- c(counts, peptide_counts$phospho - peptide_counts$not_imputable)
+    steps  <- c(steps,  "Curated PTM peptides (used downstream)")
+    counts <- c(counts, peptide_counts$ptm - peptide_counts$not_imputable)
   }}
   summary_df <- data.frame(Step = steps, Count = counts, stringsAsFactors = FALSE)
   knitr::kable(summary_df)
@@ -1065,7 +1065,7 @@ ggplot(bp_long, aes(x = sample, y = intensity)) +
 imputation_content <- '\n
 ### Imputation Reporting
 
-This section documents the imputation strategy applied to handle missing values in the dataset. The parameters used are recorded for reproducibility, followed by a series of diagnostic plots that characterize the extent and distribution of imputed values across samples and phosphopeptides.
+This section documents the imputation strategy applied to handle missing values in the dataset. The parameters used are recorded for reproducibility, followed by a series of diagnostic plots that characterize the extent and distribution of imputed values across samples and PTM peptides.
 
 ### Parameters
 
@@ -1085,7 +1085,7 @@ kable(param_table)
 ### Observed vs. Imputed Intensity Values
 
 The histogram below shows the distribution of all log2 intensity values across
-all phosphopeptides. **Observed** (blue) values are those measured directly, while
+all PTM peptides. **Observed** (blue) values are those measured directly, while
 **Imputed** (orange) values are those that were missing and filled in. Imputed
 values typically appear as a secondary peak shifted towards the lower end of the
 distribution, reflecting the left-censored nature of missing-not-at-random
@@ -1097,7 +1097,7 @@ knitr::include_graphics(file.path(out_dirs$imputation, "global_imputation_histog
 
 ### Observed vs. Imputed Value Counts
 
-The table below summarizes the total number of observed and imputed intensity values across all curated phosphopeptides and samples. Observed values were measured directly by the instrument; imputed values replaced missing entries using the selected imputation method. A high imputation percentage warrants caution — it suggests a substantial portion of the data is modeled rather than measured.
+The table below summarizes the total number of observed and imputed intensity values across all curated PTM peptides and samples. Observed values were measured directly by the instrument; imputed values replaced missing entries using the selected imputation method. A high imputation percentage warrants caution — it suggests a substantial portion of the data is modeled rather than measured.
 
 ```{r imputation-counts}
 intensity_raw      <- rds_data[[5]]
@@ -1112,7 +1112,7 @@ n_tot  <- length(obs_mask)
 pct_imp <- round(100 * n_imp / n_tot, 1)
 n_curated <- nrow(intensity_imputed)
 counts_table <- data.frame(
-  Parameter = c("Curated phosphopeptides", "Total measurements", "Observed values", "Imputed values", "Imputed (%)"),
+  Parameter = c("Curated PTM peptides", "Total measurements", "Observed values", "Imputed values", "Imputed (%)"),
   Value     = c(format(n_curated, big.mark = ","),
                 format(n_tot, big.mark = ","),
                 format(n_obs, big.mark = ","),
@@ -1133,7 +1133,7 @@ knitr::include_graphics(file.path(out_dirs$imputation, "global_imputation_missin
 
 ### Total Imputed Values per Peptide
 
-This chart summarizes how many values were imputed for each phosphopeptide across all samples. Peptides with a high proportion of imputed values should be interpreted with caution, as their quantification relies heavily on modeled rather than measured intensities.
+This chart summarizes how many values were imputed for each PTM peptide across all samples. Peptides with a high proportion of imputed values should be interpreted with caution, as their quantification relies heavily on modeled rather than measured intensities.
 
 ```{r imputation-total-counts, out.width="100%"}
 knitr::include_graphics(file.path(out_dirs$imputation, "global_imputation_total_counts.png"))
@@ -1153,7 +1153,7 @@ rmd_content <- paste0(rmd_content, imputation_content)
 rmd_content <- paste0(rmd_content, glue('\n
 ### Principal Component Analysis
 
-PCA was performed to visualize the overall patterns of phosphopeptide levels across
+PCA was performed to visualize the overall patterns of PTM peptide levels across
 samples and to identify potential batch effects or outliers. **What we expect:**
 Samples with similar profiles should cluster together, while dissimilar samples
 are expected to separate into distinct clusters.
@@ -1170,14 +1170,14 @@ if (!isTRUE(anova_summary$skipped)) {{
     if (file.exists(anova_path)) {{
       anova_df <- read.csv(anova_path)
       cat("A one-way ANOVA was performed across all", anova_summary$n_groups, "groups to identify",
-          "phosphopeptides that vary significantly beyond any single pairwise",
+          "PTM peptides that vary significantly beyond any single pairwise",
           "comparison. P-values were adjusted using the Benjamini-Hochberg (BH)",
           "method.\n\n")
       cat(paste0("**", anova_summary$n_sig, "** out of **", anova_summary$n_total,
-                 "** phosphopeptides are significantly variable across groups",
+                 "** PTM peptides are significantly variable across groups",
                  " (ANOVA FDR < 0.05).\n\n"))
       print(knitr::kable(head(anova_df, 20),
-        caption = "Top 20 phosphopeptides by one-way ANOVA (sorted by adjusted p-value)",
+        caption = "Top 20 PTM peptides by one-way ANOVA (sorted by adjusted p-value)",
         row.names = FALSE))
     }}
   }} else {{
@@ -1186,16 +1186,16 @@ if (!isTRUE(anova_summary$skipped)) {{
 }}
 ```
 
-### Global Phosphopeptide Heatmap
+### Global PTM Peptide Heatmap
 
 ```{{r global-heatmap-desc, results="asis"}}
 if (isTRUE(analysis_params$heatmap_norm == "zscore")) {{
   cat("The heatmap below shows z-score normalized expression of the top 1000
-phosphopeptides by coefficient of variation (CV) across all samples, clustered
+PTM peptides by coefficient of variation (CV) across all samples, clustered
 by similarity.")
 }} else {{
   cat("The heatmap below shows intensity expression of the top 1000
-phosphopeptides by coefficient of variation (CV) across all samples, clustered
+PTM peptides by coefficient of variation (CV) across all samples, clustered
 by similarity.")
 }}
 ```
@@ -1285,7 +1285,7 @@ kable(summary_table, caption = "")
 
 ### Query Differential Expression Hits Across All Analyses
 
-Use the search box below to look up any phosphopeptide. **Peptide ID** is the phosphopeptide identifier; **HGNC** is the gene symbol; **UniProt ID** is the UniProt accession. **Significant Comparisons** lists every comparison where the peptide was significant (adj. p-value < 0.05 and |FC| ≥ 1.5), or "Not Significant" if it did not meet that threshold in any comparison.
+Use the search box below to look up any PTM peptide. **Peptide ID** is the PTM peptide identifier; **HGNC** is the gene symbol; **UniProt ID** is the UniProt accession. **Significant Comparisons** lists every comparison where the peptide was significant (adj. p-value < 0.05 and |FC| ≥ 1.5), or "Not Significant" if it did not meet that threshold in any comparison.
 
 ```{{r query-protein}}
 all_rows <- dplyr::bind_rows(lapply(seq_along(comparisons), function(i) {{
@@ -1345,10 +1345,10 @@ DT::datatable(query_df,
   an **orange horizontal line** to indicate the significant p-value threshold of \\< 0.05. Therefore,
   every point (protein) above that orange line can be considered statistically significant (note:
   before FDR correction). In addition, the **black vertical lines** indicate 1.5 fold change.
-  Phosphopeptides highlighted in **orange** are more abundant in **{exp}** relative to **{ctrl}** (positive logFC).
-  Phosphopeptides highlighted in **blue** are more abundant in **{ctrl}** relative to **{exp}** (negative logFC).
-  Phosphopeptides in gray do not meet the thresholds for both logFC and p-value.
-- Data point: a phosphopeptide
+  PTM peptides highlighted in **orange** are more abundant in **{exp}** relative to **{ctrl}** (positive logFC).
+  PTM peptides highlighted in **blue** are more abundant in **{ctrl}** relative to **{exp}** (negative logFC).
+  PTM peptides in gray do not meet the thresholds for both logFC and p-value.
+- Data point: a PTM peptide
 - X-axis: log2 fold-change ({exp} / {ctrl}) — positive = higher in {exp}
 - Y-axis: -log10(p-value)
 
@@ -1442,7 +1442,7 @@ if (dap_flags[1] == 0) {{
 
 ```
 
-This table breaks down all significant phosphopeptides (adj. p-value < 0.05 and |FC| ≥ 1.5) by their imputation category, giving an overall picture of how much the significant hits relied on imputed values. Peptides classified as *complete-data* had no missing values, while *imputation-low/medium/high* indicate increasing levels of imputation. *on-off* is a special case where the peptide is fully observed in one group but completely missing in the other, representing a presence/absence pattern rather than a continuous abundance difference.
+This table breaks down all significant PTM peptides (adj. p-value < 0.05 and |FC| ≥ 1.5) by their imputation category, giving an overall picture of how much the significant hits relied on imputed values. Peptides classified as *complete-data* had no missing values, while *imputation-low/medium/high* indicate increasing levels of imputation. *on-off* is a special case where the peptide is fully observed in one group but completely missing in the other, representing a presence/absence pattern rather than a continuous abundance difference.
 
 ```{{r imputation-category-summary-{i} }}
 if (i <= length(results) && !is.null(results[[{i}]]) && !is.null(results[[{i}]]$limma)) {{
@@ -1457,18 +1457,18 @@ if (i <= length(results) && !is.null(results[[{i}]]) && !is.null(results[[{i}]]$
 ```
 ')
     comparison_section <- paste0(comparison_section, "\n\n", glue('
-#### Table of Differentially Abundant Phosphopeptides
+#### Table of Differentially Abundant PTM Peptides
 
-All significant phosphopeptides (adj. p-value < 0.05 and |FC| ≥ 1.5) with both nominal (**P-value**)
+All significant PTM peptides (adj. p-value < 0.05 and |FC| ≥ 1.5) with both nominal (**P-value**)
 and adjusted p-values (**Adjusted P-value**), sorted by adjusted p-value.
 
 ```{{r daps-desc-{i}, results="asis"}}
 
 if (dap_flags[1] > 0){{
-    cat("- Description: all significant differentially abundant phosphopeptides from the limma moderated t-test\n")
+    cat("- Description: all significant differentially abundant PTM peptides from the limma moderated t-test\n")
     cat("- **HGNC**: gene symbol\n")
     cat("- **UniProt ID**: UniProt accession identifier\n")
-    cat("- **Peptide ID**: specific phosphopeptide identifier\n")
+    cat("- **Peptide ID**: specific PTM peptide identifier\n")
     cat("- **logFC**: log\u2082 fold-change (experimental / control) — positive = higher in experimental, negative = higher in control\n")
     cat("- **P-value**: raw p-value from the limma moderated t-test\n")
     cat("- **Adjusted P-value**: Benjamini-Hochberg FDR-adjusted p-value\n")
@@ -1496,7 +1496,7 @@ if (dap_flags[1] > 0){{
       options = list(pageLength = 25)),
     columns = c("P-value", "Adjusted P-value"), digits = 3)
 }} else {{
-  cat("No significant differentially abundant phosphopeptides found\\n\\n")
+  cat("No significant differentially abundant PTM peptides found\\n\\n")
 }}
   
 ```
@@ -1516,7 +1516,7 @@ if (!isTRUE(analysis_params$skip_gsea)) {{
   pc <- results[[{i}]]$protein_counts
   if (!is.null(pc)) {{
     pc_df <- data.frame(
-      Step = c("Significant phosphopeptides", "Unique proteins (UniProt)", "Proteins after Ensembl mapping"),
+      Step = c("Significant PTM peptides", "Unique proteins (UniProt)", "Proteins after Ensembl mapping"),
       Count = c(pc$n_sig_peptides, pc$n_sig_uniprots, pc$n_mapped),
       stringsAsFactors = FALSE
     )

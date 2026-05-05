@@ -231,7 +231,7 @@ generate_volcano_protein <- function(data, exp_name, ctrl_name, p_thresh = 0.05,
 }
 
 
-generate_volcano_phospho <- function(data, exp_name, ctrl_name, p_thresh = 0.05, lfc = 0.58,
+generate_volcano_ptm <- function(data, exp_name, ctrl_name, p_thresh = 0.05, lfc = 0.58,
                                      sig = "adj.P.Val", out_dir = ".",
                                      color1 = "#D55E00", color2 = "#0072B2") {
 
@@ -375,7 +375,7 @@ generate_ma_plot_protein <- function(data, exp_name, ctrl_name, highlighted_ids 
 }
 
 
-generate_ma_plot_phospho <- function(data, exp_name, ctrl_name, highlighted_ids = NULL,
+generate_ma_plot_ptm <- function(data, exp_name, ctrl_name, highlighted_ids = NULL,
                                       p_thresh = 0.05, lfc = 0.58,
                                       color1 = "#D55E00", color2 = "#0072B2") {
   ma_df <- data %>%
@@ -647,9 +647,9 @@ generate_heatmap <- function(results_df, normalized_counts, p = 0.05, lfc = 0.58
 # gsea analysis functions
 # ==========================
 
-aggregate_phospho_for_gsea <- function(limma_results, peptide_metadata, p = 0.05, lfc = 0.58) {
+aggregate_ptm_for_gsea <- function(limma_results, peptide_metadata, p = 0.05, lfc = 0.58) {
   # uniprot_id is already present on limma_results (joined upstream in
-  # run_analysis_phospho); if for any reason it is absent, fall back to
+  # run_analysis_ptm); if for any reason it is absent, fall back to
   # joining peptide_metadata and deriving it from PG.UniProtIds
   if (!"uniprot_id" %in% colnames(limma_results)) {
     limma_results <- limma_results %>%
@@ -667,12 +667,12 @@ aggregate_phospho_for_gsea <- function(limma_results, peptide_metadata, p = 0.05
   n_sig_uniprots <- length(sig_uniprots)
 
   if (n_sig_uniprots == 0) {
-    flog.warn("No significant phosphopeptides found for GSEA aggregation")
+    flog.warn("No significant PTM peptides found for GSEA aggregation")
     return(NULL)
   }
 
   # For each qualifying UniProt ID, take the logFC of the most significant
-  # phosphopeptide (smallest adj.P.Val) as the representative value
+  # PTM peptide (smallest adj.P.Val) as the representative value
   aggregated <- limma_results %>%
     filter(uniprot_id %in% sig_uniprots) %>%
     group_by(uniprot_id) %>%
@@ -682,7 +682,7 @@ aggregate_phospho_for_gsea <- function(limma_results, peptide_metadata, p = 0.05
 
   # Map UniProt IDs to Ensembl IDs via biomart (same approach as regular pipeline)
   if (is.null(ensembl)) {
-    flog.warn("BioMart mart object is NULL — skipping Ensembl mapping for phospho GSEA")
+    flog.warn("BioMart mart object is NULL — skipping Ensembl mapping for PTM GSEA")
     return(NULL)
   }
   mapping <- tryCatch(
@@ -693,7 +693,7 @@ aggregate_phospho_for_gsea <- function(limma_results, peptide_metadata, p = 0.05
       mart       = ensembl
     ) %>% distinct(uniprotswissprot, .keep_all = TRUE),
     error = function(e) {
-      flog.error("BioMart query failed in phospho GSEA aggregation: %s",
+      flog.error("BioMart query failed in PTM GSEA aggregation: %s",
                  e$message)
       NULL
     }
@@ -706,7 +706,7 @@ aggregate_phospho_for_gsea <- function(limma_results, peptide_metadata, p = 0.05
   n_mapped <- nrow(aggregated)
 
   if (n_mapped == 0) {
-    flog.warn("No Ensembl IDs found for aggregated phospho UniProt IDs — GSEA skipped"
+    flog.warn("No Ensembl IDs found for aggregated PTM UniProt IDs — GSEA skipped"
     )
     return(NULL)
   }
@@ -885,9 +885,9 @@ run_analysis <- function(comparison, limma_params, normalized_counts, out_dirs, 
   })
 }
 
-run_analysis_phospho <- function(comparison, limma_params, normalized_counts, out_dirs, intensity_matrix_raw = NULL, peptide_metadata = NULL, ont_option = "BP", skip_gsea = FALSE, heatmap_norm = "zscore", color1 = "#D55E00", color2 = "#0072B2") {
+run_analysis_ptm <- function(comparison, limma_params, normalized_counts, out_dirs, intensity_matrix_raw = NULL, peptide_metadata = NULL, ont_option = "BP", skip_gsea = FALSE, heatmap_norm = "zscore", color1 = "#D55E00", color2 = "#0072B2") {
   tryCatch({
-    flog.info("=== Starting phospho analysis for comparison: %s ===", comparison$name)
+    flog.info("=== Starting PTM analysis for comparison: %s ===", comparison$name)
 
     limma_results <- perform_limma_analysis(limma_params, comparison$exp, comparison$ctrl)
     limma_results <- limma_results %>% rownames_to_column(var = "peptide_id")
@@ -905,7 +905,7 @@ run_analysis_phospho <- function(comparison, limma_params, normalized_counts, ou
         )
         distinct(m, uniprotswissprot, .keep_all = TRUE)
       }, error = function(e) {
-        flog.error("BioMart annotation failed for phospho comparison '%s': %s",
+        flog.error("BioMart annotation failed for PTM comparison '%s': %s",
                    comparison$name, e$message)
         data.frame(uniprotswissprot = character(), hgnc_symbol = character())
       })
@@ -947,19 +947,19 @@ run_analysis_phospho <- function(comparison, limma_params, normalized_counts, ou
     output_file <- create_file_path(out_dirs$de_data, comparison$name, "_limma")
     write.csv(limma_results, output_file)
 
-    flog.info("Generating phospho volcano plot: %s", comparison$name)
-    volcano_result <- generate_volcano_phospho(limma_results, comparison$exp, comparison$ctrl, color1 = color1, color2 = color2)
+    flog.info("Generating PTM volcano plot: %s", comparison$name)
+    volcano_result <- generate_volcano_ptm(limma_results, comparison$exp, comparison$ctrl, color1 = color1, color2 = color2)
     save_plot(volcano_result$plot, create_file_path(out_dirs$volcano, "", comparison$name, "_volcano.png"),
               width = 10, height = 8)
 
-    flog.info("Generating phospho MA plot: %s", comparison$name)
-    ma_plot <- generate_ma_plot_phospho(limma_results, comparison$exp, comparison$ctrl,
+    flog.info("Generating PTM MA plot: %s", comparison$name)
+    ma_plot <- generate_ma_plot_ptm(limma_results, comparison$exp, comparison$ctrl,
                                         highlighted_ids = volcano_result$highlighted_ids,
                                         color1 = color1, color2 = color2)
     save_plot(ma_plot, create_file_path(out_dirs$ma, "", comparison$name, "_ma.png"),
               width = 10, height = 8)
 
-    flog.info("Generating phospho heatmap: %s", comparison$name)
+    flog.info("Generating PTM heatmap: %s", comparison$name)
     png(create_file_path(out_dirs$heatmap, "", comparison$name, "_heatmap.png"),
         width = 2400, height = 3200, res = 300)
     ht <- generate_heatmap(limma_results, normalized_counts,
@@ -967,7 +967,7 @@ run_analysis_phospho <- function(comparison, limma_params, normalized_counts, ou
                            fig_dir = out_dirs$heatmap, design = limma_params$design,
                            row_id_col = "peptide_id",
                            heatmap_norm = heatmap_norm, color1 = color1, color2 = color2)
-    draw(ht, column_title = paste0(comparison$exp, " vs ", comparison$ctrl, " — Differentially Abundant Phosphopeptides"),
+    draw(ht, column_title = paste0(comparison$exp, " vs ", comparison$ctrl, " — Differentially Abundant PTM Peptides"),
          column_title_gp = grid::gpar(fontsize = 14, fontface = "bold"))
     dev.off()
 
@@ -976,11 +976,11 @@ run_analysis_phospho <- function(comparison, limma_params, normalized_counts, ou
       gse <- NULL
       protein_counts <- NULL
     } else {
-      flog.info("Running phospho GSEA for %s", comparison$name)
+      flog.info("Running PTM GSEA for %s", comparison$name)
       agg_result <- tryCatch(
-        aggregate_phospho_for_gsea(limma_results, peptide_metadata),
+        aggregate_ptm_for_gsea(limma_results, peptide_metadata),
         error = function(e) {
-          flog.error("Phospho GSEA aggregation failed for '%s': %s",
+          flog.error("PTM GSEA aggregation failed for '%s': %s",
                      comparison$name, e$message)
           NULL
         }
@@ -989,18 +989,18 @@ run_analysis_phospho <- function(comparison, limma_params, normalized_counts, ou
       gse <- tryCatch({
         if (!is.null(agg_result)) process_gsea(agg_result$data, ont_option = ont_option) else NULL
       }, error = function(e) {
-        flog.error("Phospho GSEA failed for '%s': %s", comparison$name, e$message)
+        flog.error("PTM GSEA failed for '%s': %s", comparison$name, e$message)
         NULL
       })
       if (!is.null(gse)) {
-        flog.info("Phospho GSEA returned results for %s", comparison$name)
+        flog.info("PTM GSEA returned results for %s", comparison$name)
         tryCatch({
           write.csv(as.data.frame(gse), create_file_path(out_dirs$gsea_data, comparison$name, "_go_analysis.csv"))
           gsea_plot <- create_barplot(gse, create_comparison_name(comparison$ctrl, comparison$exp, "GSEA "), color1 = color1, color2 = color2)
           save_plot(gsea_plot, create_file_path(out_dirs$gsea, "", comparison$name, "_gsea.png"),
                     width = 10, height = 12)
         }, error = function(e) {
-          flog.error("Failed to save phospho GSEA outputs for '%s': %s",
+          flog.error("Failed to save PTM GSEA outputs for '%s': %s",
                      comparison$name, e$message)
         })
       }
@@ -1009,7 +1009,7 @@ run_analysis_phospho <- function(comparison, limma_params, normalized_counts, ou
     return(list(limma = limma_results, gsea = gse, protein_counts = protein_counts, highlighted_ids = volcano_result$highlighted_ids))
 
   }, error = function(e) {
-    flog.error("run_analysis_phospho failed for comparison '%s': %s",
+    flog.error("run_analysis_ptm failed for comparison '%s': %s",
                comparison$name, e$message)
     return(NULL)
   })

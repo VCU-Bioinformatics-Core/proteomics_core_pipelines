@@ -2,10 +2,10 @@
 # Main pipeline functions
 # ==========================
 # run_regular_pipeline()  — protein-level differential abundance
-# run_phospho_pipeline()  — phosphopeptide-level differential abundance
+# run_ptm_pipeline()      — PTM peptide-level differential abundance
 #
 # These functions contain the full analysis logic previously in
-# workflow/de.regular.R and workflow/de.phospho.R. The thin CLI wrappers
+# workflow/de.regular.R and workflow/de.ptm.R. The thin CLI wrappers
 # in inst/scripts/ parse command-line arguments and call these functions.
 
 run_regular_pipeline <- function(
@@ -314,7 +314,7 @@ run_regular_pipeline <- function(
 }
 
 
-run_phospho_pipeline <- function(
+run_ptm_pipeline <- function(
   run_id,
   counts_file,
   samplesheet_file,
@@ -332,7 +332,7 @@ run_phospho_pipeline <- function(
   group_color2      = "#0072B2"
 ) {
   setup_logging(out_dir, run_id = run_id)
-  flog.info("Phospho pipeline started: runID=%s, genome=%s, outdir=%s", run_id, genome, out_dir)
+  flog.info("PTM pipeline started: runID=%s, genome=%s, outdir=%s", run_id, genome, out_dir)
 
   # ==========================
   # Load annotation DB
@@ -382,8 +382,8 @@ run_phospho_pipeline <- function(
 
   full_peptide_levels <- full_peptide_levels %>%
     filter(grepl("Phospho \\(STY\\)", EG.PrecursorId))
-  n_peptides_phospho <- nrow(full_peptide_levels)
-  log_peptide_count(full_peptide_levels, "Peptides - only phospho")
+  n_peptides_ptm <- nrow(full_peptide_levels)
+  log_peptide_count(full_peptide_levels, "Peptides - only PTM")
 
   rownames(full_peptide_levels) <- paste0(
     full_peptide_levels$PG.Genes, " -- ", full_peptide_levels$EG.PrecursorId
@@ -466,9 +466,19 @@ run_phospho_pipeline <- function(
                 n_peptides_not_imputable)
   }
 
+
+
+
+
+
+
   # ==========================
+  # Differential abundance analysisAnalysis loop fLimma design matrix + analysis loop
+  # ==========================
+  # Currently relies on limma but I will introduce a msstatsPTM correction to run_analysis_ptm
+  # DEVELOP BOOKMARK
+
   # Limma design matrix + analysis loop
-  # ==========================
   sample_info <- data.frame(sample = comparisons_raw$SampleID, condition = comparisons_raw$GroupID)
   design      <- model.matrix(~0 + condition, data = sample_info)
   colnames(design) <- levels(factor(sample_info$condition))
@@ -477,13 +487,20 @@ run_phospho_pipeline <- function(
   results <- vector("list", length(comparisons))
   for (i in seq_along(comparisons)) {
     flog.info("=== Analysis loop iteration %d of %d ===", i, length(comparisons))
-    curr_result <- run_analysis_phospho(
+    curr_result <- run_analysis_ptm(
       comparisons[[i]], limma_params, intensity_matrix, out_dirs, intensity_matrix_raw,
       peptide_metadata, ont_option = gsea_ont, skip_gsea = skip_gsea,
       heatmap_norm = heatmap_norm, color1 = group_color1, color2 = group_color2
     )
     if (!is.null(curr_result)) results[[i]] <- curr_result
   }
+
+
+
+
+
+
+
 
   # ==========================
   # PCA
@@ -528,7 +545,7 @@ run_phospho_pipeline <- function(
     n_anova_sig   <- sum(anova_padj < 0.05, na.rm = TRUE)
     n_anova_total <- nrow(mat)
     anova_df <- data.frame(
-      Phosphopeptide = rownames(mat),
+      PTM_peptide = rownames(mat),
       P_Value        = signif(anova_pvals, 3),
       Adj_P_Value    = signif(anova_padj, 3),
       stringsAsFactors = FALSE
@@ -545,7 +562,7 @@ run_phospho_pipeline <- function(
   # ==========================
   flog.info("Generating global heatmap")
   generate_global_heatmap(intensity_matrix, out_dirs, top_n = heatmap_top_n,
-                          molecule_label = "Phosphopeptides",
+                          molecule_label = "PTM Peptides",
                           heatmap_norm = heatmap_norm, color1 = group_color1, color2 = group_color2)
 
   flog.info("Generating imputation figures")
@@ -581,7 +598,7 @@ run_phospho_pipeline <- function(
   # ==========================
   imputation_params <- list(method = imputation_method, q = imputation_q)
   peptide_counts    <- list(total = n_peptides_total, no_crap = n_peptides_no_crap,
-                            phospho = n_peptides_phospho, not_imputable = n_peptides_not_imputable)
+                            ptm = n_peptides_ptm, not_imputable = n_peptides_not_imputable)
   analysis_params   <- list(genome = genome, gsea_ont = gsea_ont, skip_gsea = skip_gsea,
                             heatmap_top_n = heatmap_top_n, heatmap_norm = heatmap_norm,
                             color1 = group_color1, color2 = group_color2)
@@ -592,7 +609,7 @@ run_phospho_pipeline <- function(
   flog.info("Saving analysis RDS to %s", rds_path)
   saveRDS(rds, rds_path)
 
-  generate_report_phospho(rds_path, output_dir = out_dir)
+  generate_report_ptm(rds_path, output_dir = out_dir)
   flog.info("Pipeline complete: runID=%s", run_id)
   invisible(rds_path)
 }

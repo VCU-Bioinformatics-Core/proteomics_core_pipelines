@@ -1,9 +1,9 @@
 #!/usr/bin/env Rscript
 # ==========================
-# Phosphopeptide-level differential abundance — CLI entry point
+# PTM peptide-level differential abundance — CLI entry point
 # ==========================
 # This is a thin wrapper. All analysis logic lives in R/pipeline.R.
-# Load the package, parse arguments, and call run_phospho_pipeline().
+# Load the package, parse arguments, and call run_ptm_pipeline().
 #
 # During development (before installing):
 #   devtools::load_all("/global/projects/proteomics_core/pipelines/proteomics_core_pipelines")
@@ -12,7 +12,7 @@
 #   library(DAPRmd)
 #
 # Usage:
-#   Rscript inst/scripts/de.phospho.R --runid <id> --counts <path> --samplesheet <path> --outdir <dir> --annotation human
+#   Rscript inst/scripts/de.ptm.R --runid <id> --counts <path> --samplesheet <path> --outdir <dir> --annotation human
 
 library(devtools)
 # Resolve the package root from this script's own path, regardless of
@@ -73,7 +73,7 @@ if (is.null(opt$runid) || is.null(opt$counts) || is.null(opt$samplesheet)) {
   stop("--runid, --counts, and --samplesheet are required.")
 }
 
-run_phospho_pipeline(
+run_ptm_pipeline(
   run_id            = opt$runid,
   counts_file       = opt$counts,
   samplesheet_file  = opt$samplesheet,
