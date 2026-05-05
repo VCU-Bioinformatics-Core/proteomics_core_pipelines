@@ -16,6 +16,7 @@ Three installation approaches are provided, in order of preference:
 - **Approach 1** — conda creates a bare R environment; `devtools` resolves and installs all R dependencies at install time
 - **Approach 2** — conda YAML file pre-installs R and all dependencies; then `devtools` installs DAPRmd code only
 - **Approach 3** — same as 2 but dependencies are installed via explicit conda commands rather than a YAML file
+- **Approach 4** — uses renv which ensure compatibility with Rstudio instances (especially when a Docker/Singularity container is present)
 
 When installing DAPRmd on the VCU Cardinal server (or similar systems), we recommend conda due to system compatibility constraints. Cardinal runs RHEL 8 with glibc 2.28, which is compatible with conda-forge packages (built against glibc 2.17) but not with standard precompiled CRAN/Bioconductor binaries. These require glibc ≥ 2.32 and will fail on Cardinal. Note: JP is looking into upgrading glibc on Cardinal.
 
@@ -185,6 +186,22 @@ cd proteomics_core_pipelines
 
 # from the root of the proteomics_core_pipelines repo:
 Rscript -e "devtools::install('.', dependencies=FALSE)"
+```
+
+- **Approach 4** — use renv which ensure compatibility with Rstudio
+This approach has to be applied to each project directory. 
+
+Download the renv.lock file (from this repo) to your project directory
+```
+cd <your-project-dir>
+wget https://raw.githubusercontent.com/VCU-Bioinformatics-Core/proteomics_core_pipelines/refs/heads/dev/renv.lock
+```
+
+Setup the environment and install the package (within an R session
+```
+library(renv)
+renv::restore()
+remotes::install_github("VCU-Bioinformatics-Core/proteomics_core_pipelines")
 ```
 
 ### Verify the installation
