@@ -281,7 +281,7 @@ The package includes a small example dataset derived from the MSstats ovarian ca
 ```bash
 Rscript inst/scripts/de.regular.R \
   --counts inst/scripts/extdata/ovarian_intensity_matrix.csv \
-  --samplesheet inst/scripts/extdata/ovarian_samplesheet.csv \
+  --samplesheet inst/extdata/ovarian_samplesheet.csv \
   --outdir ovarian_results \
   --runid ovarian_example \
   --annotation human \
