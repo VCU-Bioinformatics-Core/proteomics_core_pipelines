@@ -1,8 +1,9 @@
-cd /global/projects/proteomics_core/pipelines/proteomics_core_pipelines/
-
-Rscript workflow/de.R \
---counts /global/projects/proteomics_core/analyst_workspace/pipeline_test_data/raw/20251001_U266_UT_VS_S+B_LFQ_Report.csv \
---samplesheet samplesheet.csv \
---outdir human_results \
---runid human_experiment \
---annotation human
+# run from the package directory
+Rscript inst/scripts/de.regular.R \
+    --counts inst/scripts/extdata/ovarian_intensity_matrix.csv \
+    --samplesheet inst/extdata/ovarian_samplesheet.csv \
+    --outdir test/ovarian_results \
+    --runid ovarian_example \
+    --annotation human \
+    --imputation none \
+    --skip-gsea
