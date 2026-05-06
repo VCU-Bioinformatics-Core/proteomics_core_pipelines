@@ -36,13 +36,15 @@ When installing DAPRmd on the VCU Cardinal server (or similar systems), we recom
 
 Step 1: Create a bare conda environment with R.
 ```bash
-conda create -n DAPRmd r-base=4.5.3 
+conda create -n DAPRmd r-base=4.5.3
 ```
 
 Step 2: Activate the environment, clone the repo, and install DAPRmd (devtools will resolve and install all R dependencies automatically).
 ```bash
 # activate the env
-conda activate DAPRmd 
+conda activate DAPRmd
+conda install conda-forge::r-devtools
+conda install -c conda-forge r-remotes
 
 # clone the repo
 git clone git@github.com:VCU-Bioinformatics-Core/proteomics_core_pipelines.git
@@ -51,6 +53,9 @@ git clone git@github.com:VCU-Bioinformatics-Core/proteomics_core_pipelines.git
 cd proteomics_core_pipelines
 
 # from the root of the proteomics_core_pipelines repo:
+Rscript --vanilla -e "remotes::install_local('.', dependencies=TRUE)"
+
+# try with devtools if the above fails
 Rscript -e "devtools::install('.', dependencies=TRUE)"
 ```
 
