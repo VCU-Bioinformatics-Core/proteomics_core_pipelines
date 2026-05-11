@@ -10,6 +10,7 @@ License: Apache License (>= 2)
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.3
+biocViews: Proteomics, DifferentialExpression, GeneSetEnrichment, Visualization
 Depends:
     R (>= 4.1.0)
 Imports:
@@ -43,8 +44,6 @@ Imports:
     S4Vectors,
     stringr,
     tibble,
-    grid
-Suggests:
+    grid,
     org.Hs.eg.db,
-    org.Mm.eg.db,
-    devtools
+    org.Mm.eg.db

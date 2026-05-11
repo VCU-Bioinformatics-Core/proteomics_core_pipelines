@@ -1,5 +1,5 @@
 # run from the package directory
-Rscript inst/scripts/de.regular.R \
+Rscript --vanilla inst/scripts/de.regular.R \
     --counts inst/scripts/extdata/ovarian_intensity_matrix.csv \
     --samplesheet inst/extdata/ovarian_samplesheet.csv \
     --outdir test/ovarian_results \
