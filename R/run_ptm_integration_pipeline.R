@@ -1,24 +1,28 @@
 # ==========================
-# Main pipeline functions
+# Pipeline for datasets with both PTM and protein data
 # ==========================
-# run_regular_pipeline()  — protein-level differential abundance
+# run_ptm_pipeline()      — PTM peptide-level differential abundance
 #
 # These functions contain the full analysis logic previously in
 # workflow/de.regular.R and workflow/de.ptm.R. The thin CLI wrappers
 # in inst/scripts/ parse command-line arguments and call these functions.
 
-#' Run the regular (protein-level) differential abundance pipeline
+#' Run the PTM (post-translational modification) differential abundance pipeline
 #'
-#' Reads protein-level intensity data, performs imputation, limma-based
-#' pairwise differential analysis, PCA, optional ANOVA, GSEA, and writes
-#' an HTML report plus all intermediate RDS/figure outputs.
+#' Reads PTM-level and protein-level intensity data, performs imputation,
+#' limma-based pairwise differential analysis, PCA, optional ANOVA, GSEA,
+#' and writes an HTML report plus all intermediate RDS/figure outputs.
 #'
 #' @param run_id Character. Unique identifier for this analysis run;
 #'   used in output file names and the HTML report title.
-#' @param counts_file Character. Path to the protein-level intensity matrix
-#'   (tab-separated, rows = proteins, cols = samples).
+#' @param ptm_input_file Character. Path to the PTM-level intensity matrix
+#'   (tab-separated, rows = PTM sites, cols = samples).
 #' @param samplesheet_file Character. Path to the sample sheet CSV describing
 #'   sample groups and pairwise comparisons.
+#' @param ptm_matrix_file Character. Path to the PTM-level intensity
+#'   matrix
+#' @param protein_matrix_file Character. Path to the protein-level intensity
+#'   matrix
 #' @param out_dir Character. Directory where all outputs will be written.
 #'   Created if it does not already exist.
 #' @param genome Character. Organism genome to use for annotation
@@ -30,7 +34,7 @@
 #'   methods. Default \code{0.01}.
 #' @param imputation_seed Integer. Random seed for reproducible imputation.
 #'   Default \code{42}.
-#' @param heatmap_top_n Integer. Number of top variable proteins to include
+#' @param heatmap_top_n Integer. Number of top variable PTM sites to include
 #'   in the global heatmap. Default \code{1000}.
 #' @param heatmap_norm Character. Normalisation applied before heatmap
 #'   (\code{"zscore"} or \code{"none"}). Default \code{"zscore"}.
@@ -49,18 +53,21 @@
 #'
 #' @examples
 #' \dontrun{
-#' run_regular_pipeline(
-#'   run_id           = "exp_001",
-#'   counts_file      = "data/protein_intensities.tsv",
-#'   samplesheet_file = "data/samplesheet.csv",
-#'   out_dir          = "results/exp_001"
+#' run_ptm_pipeline(
+#'   run_id             = "exp_001",
+#'   ptm_input_file     = "data/ptm_intensities.tsv",
+#'   samplesheet_file   = "data/samplesheet.csv",
+#'   ptm_matrix_file    = "data/ptm_intensities.tsv",
+#'   out_dir            = "results/exp_001"
 #' )
 #' }
-run_regular_pipeline <- function(
+run_ptm_integration_pipeline <- function(
   run_id,
-  counts_file,
   samplesheet_file,
+  ptm_matrix_file,
+  protein_matrix_file,
   out_dir,
+  ptm_marker = "Phospho \\(STY\\)",
   genome            = "mouse",
   imputation_method = "DEP-MinProb",
   imputation_q      = 0.01,
@@ -74,7 +81,7 @@ run_regular_pipeline <- function(
   group_color2      = "#0072B2"
 ) {
   setup_logging(out_dir, run_id = run_id)
-  flog.info("Pipeline started: runID=%s, genome=%s, outdir=%s", run_id, genome, out_dir)
+  flog.info("PTM pipeline started: runID=%s, genome=%s, outdir=%s", run_id, genome, out_dir)
 
   # ==========================
   # Load annotation DB
@@ -103,17 +110,18 @@ run_regular_pipeline <- function(
     flog.fatal("Invalid genome '%s'. Use 'mouse' or 'human'", genome)
     stop("Invalid genome specified. Use 'mouse' or 'human'")
   }
-
-   # ==========================
+  
+  
+  # ================================
   # Read and prepare the comparisons
-  # ==========================
+  # ================================
   comparisons_raw  <- read.csv(samplesheet_file)
   comparisons_cols <- colnames(comparisons_raw)[3:ncol(comparisons_raw)]
   comparisons <- list()
   for (comparisons_name in comparisons_cols) {
     comparisons_vector <- comparisons_raw[[comparisons_name]]
-    exp_group  <- unique(comparisons_raw$GroupID[comparisons_vector == 1 & !is.na(comparisons_vector)])
-    ctrl_group <- unique(comparisons_raw$GroupID[comparisons_vector == 0 & !is.na(comparisons_vector)])
+    exp_group  <- as.character(unique(comparisons_raw$GroupID[comparisons_vector == 1 & !is.na(comparisons_vector)]))
+    ctrl_group <- as.character(unique(comparisons_raw$GroupID[comparisons_vector == 0 & !is.na(comparisons_vector)]))
     if (length(exp_group) > 0 && length(ctrl_group) > 0) {
       comparisons[[length(comparisons) + 1]] <- list(
         name = comparisons_name, exp = exp_group, ctrl = ctrl_group
@@ -121,129 +129,154 @@ run_regular_pipeline <- function(
     }
   }
 
-  # ==========================
-  # Read and prepare data
-  # ==========================
+
+  # ================================
+  # Read and prepare PTM data matrix
+  # ================================
+
   out_dirs <- setup_directories(out_dir)
-  full_prot_levels <- data.frame(read_csv(counts_file, col_names = TRUE))
-  full_prot_levels <- full_prot_levels %>% filter(!is.na(PG.Genes))
-  n_proteins_total <- nrow(full_prot_levels)
+  
+  # loading the data and getting initial counts
+  full_ptm_peptide_levels <- data.frame(
+    read_csv(ptm_matrix_file, col_names = TRUE, na = c("", "NA", "Filtered"))
+  )
+  log_peptide_count <- function(df, prefix) flog.info("%s: %d", prefix, nrow(df))
+  n_peptides_total <- nrow(full_ptm_peptide_levels)
+  log_peptide_count(full_ptm_peptide_levels, "Peptides - Total Amount")
 
-  full_prot_levels <- full_prot_levels %>% filter(!grepl("cRAP[0-9]+", PG.ProteinAccessions))
-  n_proteins_no_crap <- nrow(full_prot_levels)
+  # excluding out the crap proteins 
+  full_ptm_peptide_levels <- full_ptm_peptide_levels %>%
+                              filter(!grepl("cRAP[0-9]+", PG.ProteinAccessions))
+  n_peptides_no_crap <- nrow(full_ptm_peptide_levels)
+  log_peptide_count(full_ptm_peptide_levels, "Peptides - without cRAP")
 
-  # TODO: address duplicate dropping strategy
-  full_prot_levels <- full_prot_levels %>% distinct(PG.ProteinAccessions, .keep_all = TRUE)
-  colnames(full_prot_levels) <- sub("^X\\.\\d+\\.\\.", "", colnames(full_prot_levels))
-  colnames(full_prot_levels) <- sub("\\.raw\\.PG\\.Quantity", "", colnames(full_prot_levels))
+  # filtering for PTM peptides only
+  full_ptm_peptide_levels <- full_ptm_peptide_levels %>%
+    filter(grepl(ptm_marker, EG.PrecursorId))
+  n_peptides_ptm <- nrow(full_ptm_peptide_levels)
+  log_peptide_count(full_ptm_peptide_levels, "Peptides - only PTM")
 
-  rownames(full_prot_levels) <- full_prot_levels$PG.ProteinAccessions
+  # updating the row name
+  rownames(full_ptm_peptide_levels) <- paste0(
+    full_ptm_peptide_levels$PG.Genes, " -- ", full_ptm_peptide_levels$EG.PrecursorId
+  )
 
-  protein_metadata <- full_prot_levels %>%
-    dplyr::select(uniprotswissprot = PG.ProteinAccessions, gene_name = PG.Genes) %>%
-    distinct(uniprotswissprot, .keep_all = TRUE)
+  # extracting numerical columns only and log2 transforming the data
+  non_numeric_cols <- c("PG.ProteinAccessions", "PG.Genes", "PG.UniProtIds",
+                        "PG.FASTAName", "EG.PrecursorId")
+  matrix <- full_ptm_peptide_levels %>% dplyr::select(-any_of(non_numeric_cols))
+  ptm_matrix <- log2(matrix + 1)
+  ptm_matrix_raw <- ptm_matrix
 
-  flog.info("Fetching Ensembl IDs from BioMart for GSEA annotation")
-  primary_accessions <- sub(";.*", "", protein_metadata$uniprotswissprot)
-  ensembl_map <- tryCatch({
-    getBM(
-      attributes = c("uniprotswissprot", "ensembl_gene_id"),
-      filters    = "uniprotswissprot",
-      values     = unique(primary_accessions),
-      mart       = ensembl
-    ) %>%
-      distinct(uniprotswissprot, .keep_all = TRUE)
-  }, error = function(e) {
-    flog.warn("BioMart Ensembl ID lookup failed: %s — continuing without Ensembl IDs", e$message)
-    data.frame(uniprotswissprot = character(), ensembl_gene_id = character())
-  })
-  protein_metadata <- protein_metadata %>%
-    mutate(primary_accession = sub(";.*", "", uniprotswissprot)) %>%
-    left_join(ensembl_map, by = c("primary_accession" = "uniprotswissprot")) %>%
-    dplyr::select(-primary_accession)
-  flog.info("Ensembl IDs mapped for %d of %d proteins",
-            sum(!is.na(protein_metadata$ensembl_gene_id)), nrow(protein_metadata))
+  ptm_peptide_metadata <- full_ptm_peptide_levels %>%
+    transmute(peptide_id = rownames(full_ptm_peptide_levels), PG.UniProtIds)
 
-  non_prot_cols <- c("PG.Pvalue", "PG.Qvalue", "PG.ProteinAccessions",
-                     "PG.Genes", "ensembl_gene_id", "PG.MolecularWeight",
-                     "PG.Organisms", "PG.ProteinDescriptions", "PG.FASTAName")
-  counts <- full_prot_levels %>% dplyr::select(-any_of(non_prot_cols))
 
-  intensity_matrix     <- log2(counts + 1)
-  intensity_matrix_raw <- intensity_matrix
 
-  # ==========================
-  # Imputation
-  # ==========================
+
+  # ==================================
+  # Imputation for the PTM data matrix
+  # ==================================
   DEP_METHODS <- c("MinProb", "knn", "bpca", "QRILC", "man")
   n_peptides_not_imputable <- 0L
+
+
+
 
   if (imputation_method == "none") {
     flog.info("Imputation skipped (--imputation none)")
 
   } else if (startsWith(imputation_method, "DEP-")) {
-    dep_fun <- sub("^DEP-", "", imputation_method)
-    if (!dep_fun %in% DEP_METHODS) {
-      stop(glue("Unknown DEP method '{dep_fun}'. Valid DEP methods: {paste(DEP_METHODS, collapse=', ')}"))
+    dep_func <- sub("^DEP-", "", imputation_method)
+    if (!dep_func %in% DEP_METHODS) {
+      stop(glue("Unknown DEP method '{dep_func}'. Valid DEP methods: {paste(DEP_METHODS, collapse=', ')}"))
     }
+    
+    # perform DEP-based imputation
     set.seed(imputation_seed)
     se <- SummarizedExperiment::SummarizedExperiment(
-      assays  = list(intensity = as.matrix(intensity_matrix)),
+      assays  = list(intensity = as.matrix(ptm_matrix)),
       colData = S4Vectors::DataFrame(label = comparisons_raw$SampleID, condition = comparisons_raw$GroupID),
-      rowData = S4Vectors::DataFrame(name  = rownames(intensity_matrix), ID = rownames(intensity_matrix))
+      rowData = S4Vectors::DataFrame(name  = rownames(ptm_matrix), ID = rownames(ptm_matrix))
     )
-    se_imputed <- if (dep_fun %in% c("MinProb", "QRILC")) {
-      DEP::impute(se, fun = dep_fun, q = imputation_q)
+    se_imputed <- if (dep_func %in% c("MinProb", "QRILC")) {
+      DEP::impute(se, fun = dep_func, q = imputation_q)
     } else {
-      DEP::impute(se, fun = dep_fun)
+      DEP::impute(se, fun = dep_func)
     }
-    intensity_matrix <- as.data.frame(SummarizedExperiment::assay(se_imputed))
+    ptm_matrix <- as.data.frame(SummarizedExperiment::assay(se_imputed))
     flog.info("Imputation applied: %s (q=%s)", imputation_method, imputation_q)
 
   } else {
-    fn_name <- paste0("impute_", imputation_method)
-    if (!exists(fn_name, mode = "function")) {
+    imp_func_name <- paste0("impute_", imputation_method)
+    if (!exists(imp_func_name, mode = "function")) {
       flog.fatal(
         "Unknown imputation method '%s'. For DEP methods prefix with 'DEP-'. For custom methods define %s() in R/custom_imputation.R.",
-        imputation_method, fn_name
+        imputation_method, imp_func_name
       )
       stop(glue(
         "Unknown imputation method '{imputation_method}'. ",
         "For DEP methods prefix with 'DEP-' (e.g. 'DEP-MinProb'). ",
-        "For custom methods, define `{fn_name}()` in R/custom_imputation.R."
+        "For custom methods, define `{imp_func_name}()` in R/custom_imputation.R."
       ))
     }
+    
+    # perform custom imputation
     set.seed(imputation_seed)
-    imp_func <- get(fn_name)
-    groups_vec <- setNames(comparisons_raw$GroupID, colnames(intensity_matrix))
-    imputed_mat <- imp_func(as.matrix(intensity_matrix), groups = groups_vec)
+    imp_func <- get(imp_func_name) # getting function loaded by R/custom_imputation.R from the global env
+    groups_vec <- setNames(comparisons_raw$GroupID, colnames(ptm_matrix))
+    imputed_mat <- imp_func(as.matrix(ptm_matrix), groups = groups_vec)
+
     n_peptides_not_imputable <- attr(imputed_mat, "n_not_imputable") %||% 0L
-    intensity_matrix <- as.data.frame(imputed_mat)
+    ptm_imp_matrix <- as.data.frame(imputed_mat)
+
+    #ptm_imp_matrix$PG.ProteinAccessions <- ptm_matrix
+    
+    # log the imputation process
     flog.info("Custom imputation applied: %s", imputation_method)
     if (n_peptides_not_imputable > 0)
       flog.warn("Discarded %d not-imputable peptide(s): all groups had <=1 valid value",
                 n_peptides_not_imputable)
   }
 
-  # save to file
-  write.csv(intensity_matrix, file.path(out_dirs$data, "protein_imputed_matrix.csv"))
-  flog.info("Imputed intensity matrix written to %s", file.path(out_dirs$data, "protein_imputed_matrix.csv.csv"))
+  # =============================
+  # Read and prepare protein data
+  # =============================
+  protein_imp_matrix <- data.frame(
+    read_csv(protein_matrix_file, col_names = TRUE, na = c("", "NA", "Filtered"))
+  )
+  protein_imp_matrix <- protein_imp_matrix %>% rename(PG.ProteinAccessions = `...1`)
 
-  # ==========================
-  # Limma design matrix + analysis loop
-  # ==========================
+  # ============================================================================
+  # Differential abundance analysis loop for MSstatsPTM like analysis
+  # ===========================================================================
+
+  # Limma design matrix
   sample_info <- data.frame(sample = comparisons_raw$SampleID, condition = comparisons_raw$GroupID)
   design      <- model.matrix(~0 + condition, data = sample_info)
   colnames(design) <- levels(factor(sample_info$condition))
-  limma_params <- list(E = intensity_matrix, design = design)
+  limma_params <- list(E = ptm_matrix, design = design)
 
+  # add back the protein accession for use in run_ptm_integration_analysis 
+  ptm_imp_with_prots <- merge(ptm_peptide_metadata, ptm_imp_matrix, by = "row.names", all.y = TRUE)
+  ptm_imp_with_prots <- ptm_imp_matrix2 %>% column_to_rownames("Row.names")
+
+  # analysis loop
   results <- vector("list", length(comparisons))
   for (i in seq_along(comparisons)) {
-    curr_result <- run_analysis(
-      comparisons[[i]], limma_params, intensity_matrix, out_dirs, intensity_matrix_raw,
-      ont_option = gsea_ont, skip_gsea = skip_gsea, protein_metadata = protein_metadata,
-      heatmap_norm = heatmap_norm, color1 = group_color1, color2 = group_color2
+    flog.info("=== Analysis loop iteration %d of %d ===", i, length(comparisons))
+    
+    curr_result <- run_ptm_integration_analysis(
+                      comparison=comparisons[[i]],
+                      limma_params=limma_params,
+                      ptm_imp_matrix = ptm_imp_with_prots,
+                      protein_imp_matrix = protein_imp_matrix,
+                      out_dirs = out_dirs,
+                      intensity_matrix_raw = ptm_matrix_raw,
+                      peptide_metadata = ptm_peptide_metadata,
+                      ensembl=ensembl
     )
+    
     if (!is.null(curr_result)) results[[i]] <- curr_result
   }
 
@@ -251,7 +284,7 @@ run_regular_pipeline <- function(
   # PCA
   # ==========================
   flog.info("Running Principal Component Analysis")
-  input_pca_matrix <- as.matrix(intensity_matrix)
+  input_pca_matrix <- as.matrix(ptm_matrix)
   finite_rows      <- apply(input_pca_matrix, 1, function(x) all(is.finite(x)))
   input_pca_matrix <- t(input_pca_matrix[finite_rows, ])
   pca_results  <- prcomp(input_pca_matrix, rank. = 3)
@@ -282,7 +315,7 @@ run_regular_pipeline <- function(
     n_anova_sig <- n_anova_total <- NULL
   } else if (n_anova_groups > 2) {
     group       <- factor(sample_info$condition)
-    mat         <- as.matrix(intensity_matrix)
+    mat         <- as.matrix(ptm_matrix)
     anova_pvals <- apply(mat, 1, function(x) {
       tryCatch(summary(aov(x ~ group))[[1]][["Pr(>F)"]][1], error = function(e) NA_real_)
     })
@@ -290,9 +323,9 @@ run_regular_pipeline <- function(
     n_anova_sig   <- sum(anova_padj < 0.05, na.rm = TRUE)
     n_anova_total <- nrow(mat)
     anova_df <- data.frame(
-      Protein     = rownames(mat),
-      P_Value     = signif(anova_pvals, 3),
-      Adj_P_Value = signif(anova_padj, 3),
+      PTM_peptide = rownames(mat),
+      P_Value        = signif(anova_pvals, 3),
+      Adj_P_Value    = signif(anova_padj, 3),
       stringsAsFactors = FALSE
     ) %>% dplyr::arrange(Adj_P_Value)
     write.csv(anova_df, file.path(out_dirs$anova, "global_anova.csv"), row.names = FALSE)
@@ -306,64 +339,58 @@ run_regular_pipeline <- function(
   # Global heatmap + imputation figures
   # ==========================
   flog.info("Generating global heatmap")
-  generate_global_heatmap(intensity_matrix, out_dirs, top_n = heatmap_top_n,
+  generate_global_heatmap(ptm_matrix, out_dirs, top_n = heatmap_top_n,
+                          molecule_label = "PTM Peptides",
                           heatmap_norm = heatmap_norm, color1 = group_color1, color2 = group_color2)
 
   flog.info("Generating imputation figures")
-  generate_imputation_figures(intensity_matrix_raw, intensity_matrix, out_dirs,
-                              molecule_label = "protein",
+
+  generate_imputation_figures(ptm_matrix_raw, ptm_imp_matrix, out_dirs,
+                              molecule_label = "peptide",
                               color1 = group_color1, color2 = group_color2)
 
   # ==========================
   # Master query table
   # ==========================
   flog.info("Building master query table")
+
   all_rows <- dplyr::bind_rows(lapply(seq_along(comparisons), function(i) {
     res <- results[[i]]$limma
     if (is.null(res)) return(NULL)
     res$comparison_name <- comparisons[[i]]$name
     res$is_sig <- !is.na(res$adj.P.Val) & res$adj.P.Val < 0.05 & abs(res$logFC) >= 0.58
-    res[, intersect(c("gene_name", "uniprotswissprot", "comparison_name", "is_sig"), colnames(res))]
+    res[, intersect(c("peptide_id", "hgnc_symbol", "uniprot_id", "comparison_name", "is_sig"), colnames(res))]
   }))
-  id_cols <- intersect(c("gene_name", "uniprotswissprot"), colnames(all_rows))
-  if (nrow(all_rows) == 0 || length(id_cols) == 0) {
-    query_df <- data.frame()
-  } else {
-    query_df <- all_rows %>%
-      dplyr::group_by(dplyr::across(dplyr::all_of(id_cols))) %>%
-      dplyr::summarise(
-        Significant_Comparisons = {
-          sig_comps <- comparison_name[is_sig]
-          if (length(sig_comps) == 0) "Not Significant" else paste(sig_comps, collapse = "; ")
-        },
-        .groups = "drop"
-      )
-    if ("gene_name" %in% colnames(query_df)) {
-      query_df <- query_df %>% dplyr::arrange(Significant_Comparisons == "Not Significant", gene_name)
-    } else {
-      query_df <- query_df %>% dplyr::arrange(Significant_Comparisons == "Not Significant")
-    }
-  }
+
+  query_df <- all_rows %>%
+    dplyr::group_by(dplyr::across(dplyr::any_of(c("peptide_id", "hgnc_symbol", "uniprot_id")))) %>%
+    dplyr::summarise(
+      Significant_Comparisons = {
+        sig_comps <- .data$comparison_name[.data$is_sig]
+        if (length(sig_comps) == 0) "Not Significant" else paste(sig_comps, collapse = "; ")
+      },
+      .groups = "drop"
+    ) %>%
+    dplyr::arrange(Significant_Comparisons == "Not Significant", peptide_id)
   write.csv(query_df, file.path(out_dirs$de_data, "master_query_table.csv"), row.names = FALSE)
 
   # ==========================
   # Save RDS + generate report
   # ==========================
   imputation_params <- list(method = imputation_method, q = imputation_q)
-  n_ensembl_mapped  <- sum(!is.na(protein_metadata$ensembl_gene_id))
-  protein_counts    <- list(total = n_proteins_total, no_crap = n_proteins_no_crap,
-                            not_imputable = n_peptides_not_imputable, ensembl_mapped = n_ensembl_mapped)
+  peptide_counts    <- list(total = n_peptides_total, no_crap = n_peptides_no_crap,
+                            ptm = n_peptides_ptm, not_imputable = n_peptides_not_imputable)
   analysis_params   <- list(genome = genome, gsea_ont = gsea_ont, skip_gsea = skip_gsea,
                             heatmap_top_n = heatmap_top_n, heatmap_norm = heatmap_norm,
                             color1 = group_color1, color2 = group_color2)
-  rds      <- list(results, comparisons, out_dirs, pca_plot, intensity_matrix_raw,
-                   intensity_matrix, imputation_params, sample_info, protein_counts,
+  rds      <- list(results, comparisons, out_dirs, pca_plot, ptm_matrix_raw,
+                   ptm_matrix, imputation_params, sample_info, peptide_counts,
                    analysis_params, anova_summary)
   rds_path <- file.path(out_dir, "analysis_results.rds")
   flog.info("Saving analysis RDS to %s", rds_path)
   saveRDS(rds, rds_path)
 
-  generate_report_regular(rds_path, output_dir = out_dir)
+  generate_report_ptm(rds_path, output_dir = out_dir)
   flog.info("Pipeline complete: runID=%s", run_id)
   invisible(rds_path)
 }

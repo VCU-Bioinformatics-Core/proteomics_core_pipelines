@@ -1,6 +1,14 @@
 # ==========================
 # Logging setup
 # ==========================
+
+#' @title Set Up Pipeline Logging
+#' @param outdir Character. Path to the output directory where the log file will be written.
+#'   Created recursively if it does not exist.
+#' @param run_id Character or NULL. Optional run identifier prepended to the log filename
+#'   (e.g. \code{"run01"} produces \code{run01_pipeline.log}). If NULL or empty, defaults
+#'   to \code{pipeline.log}.
+#' @return Invisibly returns the full path to the log file as a character string.
 setup_logging <- function(outdir, run_id = NULL) {
   dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
   log_name <- if (!is.null(run_id) && nzchar(run_id)) {
@@ -17,18 +25,41 @@ setup_logging <- function(outdir, run_id = NULL) {
 # ==========================
 # Helper Functions
 # ==========================
+
+#' @title Build a Standardised Output File Path
+#' @param base_dir Character. Base directory for the file.
+#' @param prefix Character. String prepended to \code{name} in the filename.
+#' @param name Character. Core part of the filename.
+#' @param extension Character. File extension including the leading dot. Default \code{".csv"}.
+#' @return Character string with the full file path.
 create_file_path <- function(base_dir, prefix, name, extension = ".csv") {
   file.path(base_dir, paste0(prefix, name, extension))
 }
 
+#' @title Build a Comparison Label
+#' @param exp Character. Name of the experimental group.
+#' @param ctrl Character. Name of the control group.
+#' @param prefix Character. Optional string prepended to the label. Default \code{""}.
+#' @return Character string of the form \code{"<prefix><exp> vs. <ctrl>"}.
 create_comparison_name <- function(exp, ctrl, prefix = "") {
   paste0(prefix, exp, " vs. ", ctrl)
 }
 
+#' @title Save a ggplot to Disk
+#' @param plot A \code{ggplot} object to save.
+#' @param filename Character. Full output file path including extension.
+#' @param width Numeric. Plot width in inches. Default \code{10}.
+#' @param height Numeric. Plot height in inches. Default \code{8}.
+#' @param dpi Numeric. Resolution in dots per inch. Default \code{300}.
+#' @return Invisibly returns \code{filename} (via \code{ggsave}).
 save_plot <- function(plot, filename, width = 10, height = 8, dpi = 300) {
   ggsave(plot, filename = filename, width = width, height = height, dpi = dpi, bg = "white")
 }
 
+#' @title Export a Plotly Object to a Self-Contained HTML File
+#' @param plotly_obj A \code{plotly} object to export.
+#' @param file_path Character. Destination HTML file path.
+#' @return Invisibly returns \code{NULL}. Logs a warning if the export fails.
 export_plotly_to_html <- function(plotly_obj, file_path) {
   tryCatch({
     if (!inherits(plotly_obj, "plotly")) stop("Invalid plotly object")
@@ -38,6 +69,13 @@ export_plotly_to_html <- function(plotly_obj, file_path) {
   })
 }
 
+#' @title Create Standard Pipeline Output Directory Structure
+#' @param base_dir Character. Root output directory. Will be normalised via
+#'   \code{normalizePath(..., mustWork = FALSE)}.
+#' @return Named list of character paths for each subdirectory:
+#'   \code{data}, \code{figures}, \code{de_data}, \code{anova}, \code{gsea_data},
+#'   \code{volcano}, \code{ma}, \code{heatmap}, \code{imputation}, \code{gsea}, \code{pca}.
+#'   All directories are created (recursively) as a side effect.
 setup_directories <- function(base_dir) {
   base_dir <- normalizePath(base_dir, mustWork = FALSE)
   dirs <- list(
@@ -58,8 +96,14 @@ setup_directories <- function(base_dir) {
   dirs
 }
 
-# Build a tree string of actual output files under out_dirs$data and out_dirs$figures.
-# Returns a single character string suitable for printing inside a code block.
+#' @title Build a Tree-Style String of Pipeline Output Files
+#' @details Renders the actual files present under \code{out_dirs$data} and
+#'   \code{out_dirs$figures} (and their standard subdirectories) as a Unicode
+#'   tree string suitable for embedding in a report code block. Subdirectories
+#'   with no files are silently omitted.
+#' @param out_dirs Named list of directory paths as returned by
+#'   \code{\link{setup_directories}}.
+#' @return Single character string with newline-separated tree lines rooted at \code{"."}.
 build_output_tree <- function(out_dirs) {
   B <- "├── "  # branch:  ├──
   L <- "└── "  # last:    └──
@@ -129,6 +173,20 @@ build_output_tree <- function(out_dirs) {
 # ==========================
 # limma analysis functions
 # ==========================
+
+#' @title Run a limma Differential Expression Analysis
+#' @param limma_params Named list containing at minimum:
+#'   \describe{
+#'     \item{E}{Numeric matrix of log2 intensities (features × samples).}
+#'     \item{design}{Model matrix as produced by \code{model.matrix}.}
+#'   }
+#' @param exp Character. Column name in \code{limma_params$design} for the experimental group.
+#' @param ctrl Character. Column name in \code{limma_params$design} for the control group.
+#' @param min_valid_samples Integer. Minimum number of valid (non-missing) samples required
+#'   per group. Default \code{2}. (Informational; filtering is expected upstream.)
+#' @return Data frame of limma results from \code{topTable} sorted by p-value, with columns
+#'   including \code{logFC}, \code{AveExpr}, \code{t}, \code{P.Value}, \code{adj.P.Val},
+#'   \code{B}. Stops with an error if the analysis fails.
 perform_limma_analysis <- function(limma_params, exp, ctrl, min_valid_samples=2) {
   tryCatch({
     flog.info("Performing limma analysis: %s vs %s", exp, ctrl)
@@ -156,6 +214,24 @@ perform_limma_analysis <- function(limma_params, exp, ctrl, min_valid_samples=2)
 # Shared visualisation functions
 # ==========================
 
+#' @title Generate a Global Heatmap of All Detected Molecules
+#' @details Filters to the top \code{top_n} most variable rows by coefficient of variation,
+#'   applies z-score or raw intensity normalisation, clusters rows and columns, and writes
+#'   a PNG to \code{out_dirs$heatmap/global_heatmap.png}.
+#' @param intensity_matrix Numeric matrix or data frame (features x samples) of log2
+#'   intensities. Rows with non-finite values are dropped before clustering.
+#' @param out_dirs Named list of output directories as returned by
+#'   \code{\link{setup_directories}}.
+#' @param top_n Integer. Maximum number of rows (by CV) to include. Default \code{1000}.
+#' @param molecule_label Character. Label used in plot titles and axis (e.g. \code{"Proteins"},
+#'   \code{"Peptides"}). Default \code{"Proteins"}.
+#' @param heatmap_norm Character. Normalisation method: \code{"zscore"} (default) scales each
+#'   row to mean 0 / sd 1; any other value uses raw intensities.
+#' @param color1 Character. Reserved colour for consistency with other plot helpers.
+#'   Default \code{"#D55E00"}.
+#' @param color2 Character. Reserved colour for consistency with other plot helpers.
+#'   Default \code{"#0072B2"}.
+#' @return Character string giving the full path to the saved PNG file.
 generate_global_heatmap <- function(intensity_matrix, out_dirs, top_n = 1000, molecule_label = "Proteins",
                                     heatmap_norm = "zscore",
                                     color1 = "#D55E00", color2 = "#0072B2") {
@@ -210,8 +286,26 @@ generate_global_heatmap <- function(intensity_matrix, out_dirs, top_n = 1000, mo
   return(out_path)
 }
 
-# Generate four imputation QC figures and save them to figures/imputation/.
-# molecule_label: "protein" or "peptide" — used in axis labels and filenames.
+#' @title Generate Imputation QC Figures
+#' @details Produces four PNG figures saved to \code{out_dirs$imputation}:
+#'   \enumerate{
+#'     \item Observed vs. imputed intensity histogram.
+#'     \item Number of missing values per sample (bar chart).
+#'     \item Total observed/imputed values by imputation count per molecule (stacked bar).
+#'     \item Distribution of imputation counts per molecule (bar chart with percentages).
+#'   }
+#' @param intensity_raw Numeric matrix or data frame (features x samples) of raw log2
+#'   intensities, with \code{NA} where values are missing.
+#' @param intensity_imputed Numeric matrix or data frame (features x samples) of imputed
+#'   log2 intensities. Row names must be a subset of \code{intensity_raw} row names.
+#' @param out_dirs Named list of output directories as returned by
+#'   \code{\link{setup_directories}}.
+#' @param molecule_label Character. Singular label for the molecule type used in axis and
+#'   title text (e.g. \code{"protein"}, \code{"peptide"}). Default \code{"protein"}.
+#' @param color1 Character. Hex colour for "Imputed" bars/fills. Default \code{"#D55E00"}.
+#' @param color2 Character. Hex colour for "Observed" bars/fills. Default \code{"#0072B2"}.
+#' @return Invisibly returns the path to the imputation figure directory
+#'   (\code{out_dirs$imputation}).
 generate_imputation_figures <- function(intensity_raw, intensity_imputed, out_dirs,
                                         molecule_label = "protein",
                                         color1 = "#D55E00", color2 = "#0072B2") {
@@ -219,13 +313,16 @@ generate_imputation_figures <- function(intensity_raw, intensity_imputed, out_di
 
   raw_mat     <- as.matrix(intensity_raw)
   imputed_mat <- as.matrix(intensity_imputed)
+  
   # Align raw_mat to post-filter rows (not-imputable rows may have been dropped)
   raw_mat  <- raw_mat[rownames(imputed_mat), , drop = FALSE]
   obs_mask <- !is.na(raw_mat)
 
   # --- 1. Observed vs Imputed histogram ---
   raw_vals <- data.frame(value = raw_mat[obs_mask],  type = "Observed")
+
   imp_vals <- data.frame(value = imputed_mat[!obs_mask], type = rep("Imputed", sum(!obs_mask)))
+
   all_vals      <- rbind(raw_vals, imp_vals)
   all_vals$type <- factor(all_vals$type, levels = c("Observed", "Imputed"))
 
@@ -306,29 +403,69 @@ generate_imputation_figures <- function(intensity_raw, intensity_imputed, out_di
   invisible(fig_dir)
 }
 
-generate_heatmap <- function(results_df, normalized_counts, p = 0.05, lfc = 0.58,
+#' @title Generate a Per-Comparison Differential Abundance Heatmap
+#' @details Filters \code{diff_df} to significant features (\code{adj.P.Val < p} and
+#'   \code{|logFC| >= lfc}), subsets \code{intensity_df} to the relevant samples, adds
+#'   a small jitter to break ties, and returns a \code{ComplexHeatmap::Heatmap} object
+#'   (not yet drawn or saved).
+#' @param diff_df Data frame of limma results (output of \code{\link{perform_limma_analysis}})
+#'   containing at minimum \code{adj.P.Val}, \code{logFC}, and the column named by
+#'   \code{row_id_col}.
+#' @param intensity_df Numeric data frame or matrix (features x samples) of log2 intensities.
+#'   Row names must match values in \code{diff_df[[row_id_col]]}.
+#' @param p Numeric. Adjusted p-value threshold for significance. Default \code{0.05}.
+#' @param lfc Numeric. Minimum absolute log2 fold-change threshold. Default \code{0.58}
+#'   (~1.5-fold).
+#' @param exp_name Character. Column name in \code{design} identifying experimental samples.
+#' @param ctrl_name Character. Column name in \code{design} identifying control samples.
+#' @param fig_dir Character. Directory for figure output (saving is the caller's
+#'   responsibility).
+#' @param design Model matrix (samples x groups) used to identify which samples belong to
+#'   each group.
+#' @param row_id_col Character. Column in \code{diff_df} whose values index rows of
+#'   \code{intensity_df}. Default \code{"uniprotswissprot"}.
+#' @param heatmap_norm Character. \code{"zscore"} (default) or any other value for raw
+#'   intensity.
+#' @param color1 Character. Reserved colour parameter for consistency. Default
+#'   \code{"#D55E00"}.
+#' @param color2 Character. Reserved colour parameter for consistency. Default
+#'   \code{"#0072B2"}.
+#' @return A \code{ComplexHeatmap::Heatmap} object ready to be drawn with \code{draw()}.
+generate_heatmap <- function(diff_df, intensity_df, p = 0.05, lfc = 0.58,
                              exp_name, ctrl_name, fig_dir, design,
                              row_id_col = "uniprotswissprot",
                              heatmap_norm = "zscore",
                              color1 = "#D55E00", color2 = "#0072B2") {
 
   # filter the data for certain pvalues and lfc
-  filtered_data <- results_df %>%
+  filtered_data <- diff_df %>%
     dplyr::filter((adj.P.Val < p & abs(logFC) >= lfc))
+  flog.info("generate_heatmap: %d rows after significance filter (p=%.2f, lfc=%.2f)", nrow(filtered_data), p, lfc)
+  flog.info("generate_heatmap: row_id_col='%s', values: %s", row_id_col, paste(head(filtered_data[[row_id_col]], 3), collapse=", "))
 
   # restrict columns to only the two groups being compared
-  all_samples  <- colnames(normalized_counts)
+  all_samples  <- colnames(intensity_df)
   exp_samples  <- all_samples[design[, exp_name]  == 1]
   ctrl_samples <- all_samples[design[, ctrl_name] == 1]
   comparison_samples <- c(exp_samples, ctrl_samples)
+  flog.info("generate_heatmap: exp_samples=%s", paste(exp_samples, collapse=", "))
+  flog.info("generate_heatmap: ctrl_samples=%s", paste(ctrl_samples, collapse=", "))
 
   # add jitter
-  values <- normalized_counts[filtered_data[[row_id_col]], comparison_samples] %>%
-    as.matrix() %>%
-    jitter(factor = 1, amount = 0.00001)
+  values <- intensity_df[filtered_data[[row_id_col]], comparison_samples] %>% as.matrix()
+  values <- values %>% jitter(factor = 1, amount = 0.00001)
+
+  flog.info("generate_heatmap: values matrix dim=%s, NA count=%d, Inf count=%d",
+            paste(dim(values), collapse="x"),
+            sum(is.na(values)),
+            sum(is.infinite(values)))
 
   if (heatmap_norm == "zscore") {
     plot_mat <- t(scale(t(values)))
+    flog.info("generate_heatmap: plot_mat after zscore dim=%s, NA count=%d, Inf count=%d",
+              paste(dim(plot_mat), collapse="x"),
+              sum(is.na(plot_mat)),
+              sum(is.infinite(plot_mat)))
     legend_name <- "Z-score"
     col_scale <- colorRamp2(c(min(plot_mat, na.rm = TRUE), 0, max(plot_mat, na.rm = TRUE)),
                             c("#2166AC", "white", "#B2182B"))
@@ -363,6 +500,22 @@ generate_heatmap <- function(results_df, normalized_counts, p = 0.05, lfc = 0.58
 # GSEA helper functions
 # ==========================
 
+#' @title Run Gene Set Enrichment Analysis (GSEA) via gseGO
+#' @details Builds a ranked gene list from \code{result$logFC} (keyed by
+#'   \code{result$ensembl_gene_id}), drops genes with near-zero fold-change
+#'   (\code{|logFC| < 0.1}), and runs \code{clusterProfiler::gseGO}. Returns
+#'   \code{NULL} (with a warning) if there are fewer than two genes or no
+#'   enriched terms are found.
+#' @param result Data frame of limma results containing at minimum \code{logFC} and
+#'   \code{ensembl_gene_id} columns.
+#' @param p Numeric. Adjusted p-value threshold (filtering of \code{result} is
+#'   expected upstream). Default \code{0.05}.
+#' @param lfc Numeric. Log2 fold-change threshold (passed through). Default \code{0.58}.
+#' @param ont_option Character. GO ontology to test: \code{"BP"} (default), \code{"MF"},
+#'   or \code{"CC"}.
+#' @return A \code{gseaResult} object with gene symbols resolved via
+#'   \code{setReadable}, or \code{NULL} if GSEA cannot be performed or yields no
+#'   significant terms.
 process_gsea <- function(result, p = 0.05, lfc = 0.58, ont_option = "BP") {
   tryCatch({
 
@@ -409,6 +562,17 @@ process_gsea <- function(result, p = 0.05, lfc = 0.58, ont_option = "BP") {
   })
 }
 
+#' @title Create a GSEA NES Bar Plot
+#' @details Selects up to 15 top positively enriched and 15 top negatively enriched GO
+#'   terms by NES, wraps long descriptions, and plots a horizontal bar chart coloured by
+#'   adjusted p-value.
+#' @param gse A \code{gseaResult} object (output of \code{\link{process_gsea}}).
+#' @param title Character. Plot title.
+#' @param color1 Character. Colour for the low end of the p-value gradient (most
+#'   significant). Default \code{"#D55E00"}.
+#' @param color2 Character. Colour for the high end (least significant). Default
+#'   \code{"#0072B2"}.
+#' @return A \code{ggplot} object. Not saved to disk — pass to \code{\link{save_plot}}.
 create_barplot <- function(gse, title, color1 = "#D55E00", color2 = "#0072B2") {
   res <- as.data.frame(gse)
 
