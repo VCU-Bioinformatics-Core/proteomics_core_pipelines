@@ -61,7 +61,7 @@
 #'   out_dir            = "results/exp_001"
 #' )
 #' }
-run_ptm_integration_pipeline <- function(
+run_ptm_ida_pipeline <- function(
   run_id,
   samplesheet_file,
   ptm_matrix_file,
@@ -129,7 +129,6 @@ run_ptm_integration_pipeline <- function(
     }
   }
 
-
   # ================================
   # Read and prepare PTM data matrix
   # ================================
@@ -171,17 +170,11 @@ run_ptm_integration_pipeline <- function(
   ptm_peptide_metadata <- full_ptm_peptide_levels %>%
     transmute(peptide_id = rownames(full_ptm_peptide_levels), PG.UniProtIds)
 
-
-
-
   # ==================================
   # Imputation for the PTM data matrix
   # ==================================
   DEP_METHODS <- c("MinProb", "knn", "bpca", "QRILC", "man")
   n_peptides_not_imputable <- 0L
-
-
-
 
   if (imputation_method == "none") {
     flog.info("Imputation skipped (--imputation none)")
@@ -257,16 +250,16 @@ run_ptm_integration_pipeline <- function(
   colnames(design) <- levels(factor(sample_info$condition))
   limma_params <- list(E = ptm_matrix, design = design)
 
-  # add back the protein accession for use in run_ptm_integration_analysis 
+  # add back the protein accession for use in run_single_ptm_ida_comparison
   ptm_imp_with_prots <- merge(ptm_peptide_metadata, ptm_imp_matrix, by = "row.names", all.y = TRUE)
-  ptm_imp_with_prots <- ptm_imp_matrix2 %>% column_to_rownames("Row.names")
+  ptm_imp_with_prots <- ptm_imp_with_prots %>% column_to_rownames("Row.names")
 
   # analysis loop
   results <- vector("list", length(comparisons))
   for (i in seq_along(comparisons)) {
     flog.info("=== Analysis loop iteration %d of %d ===", i, length(comparisons))
     
-    curr_result <- run_ptm_integration_analysis(
+    curr_result <- run_single_ptm_ida_comparison(
                       comparison=comparisons[[i]],
                       limma_params=limma_params,
                       ptm_imp_matrix = ptm_imp_with_prots,
@@ -390,7 +383,7 @@ run_ptm_integration_pipeline <- function(
   flog.info("Saving analysis RDS to %s", rds_path)
   saveRDS(rds, rds_path)
 
-  generate_report_ptm(rds_path, output_dir = out_dir)
+  generate_report_ptm_ida(rds_path, output_dir = out_dir)
   flog.info("Pipeline complete: runID=%s", run_id)
   invisible(rds_path)
 }

@@ -1,5 +1,33 @@
-# Function to generate automated R Markdown report
-# source("report_generator.R"); generate_report('analysis.rds', output_dir = getwd()) # test below
+#' @title Generate an Automated PTM Differential Abundance HTML Report
+#' @details Reads a pipeline RDS file, builds an R Markdown document with embedded
+#'   code chunks for all standard report sections (pipeline summary, analysis
+#'   parameters, peptide filtering, imputation QC, PCA, ANOVA, global heatmap,
+#'   per-comparison volcano / MA / heatmap / DAP tables / GSEA), and renders it to
+#'   a self-contained HTML file via \code{rmarkdown::render}.
+#'
+#'   Expected RDS structure (list indices):
+#'   \enumerate{
+#'     \item Differential analysis results list (one element per comparison).
+#'     \item Comparisons list (each with \code{name}, \code{exp}, \code{ctrl}).
+#'     \item Output directories named list (\code{out_dirs}).
+#'     \item PCA ggplot object.
+#'     \item Pre-imputation intensity matrix (with \code{NA}s).
+#'     \item Post-imputation intensity matrix.
+#'     \item Imputation parameters list (\code{method}, \code{q}).
+#'     \item Sample information data frame.
+#'     \item Peptide count summary list.
+#'     \item Analysis parameters list.
+#'     \item ANOVA summary list.
+#'   }
+#' @param analysis_results_path Character. Path to the \code{.rds} file produced by
+#'   the PTM pipeline runner.
+#' @param output_dir Character. Directory where the \code{.Rmd} and \code{.html} files
+#'   will be written. Created if it does not exist. Default \code{"./"}.
+#' @param report_prefix Character. Filename stem for both the intermediate \code{.Rmd}
+#'   and the final \code{.html}. Default \code{"ptm_analysis"}.
+#' @param analyst Character. Analyst name displayed in the report header. Default
+#'   \code{"Joaquin Reyna"}.
+#' @return Character string giving the full path to the rendered HTML report.
 generate_report_ptm <- function(analysis_results_path, output_dir = "./", report_prefix = "ptm_analysis", analyst="Joaquin Reyna") {
   
   

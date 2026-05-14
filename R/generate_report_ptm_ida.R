@@ -1,8 +1,7 @@
-
-#' @title Generate an Automated Protein-Level Differential Abundance HTML Report
+#' @title Generate an Automated PTM Differential Abundance HTML Report
 #' @details Reads a pipeline RDS file, builds an R Markdown document with embedded
 #'   code chunks for all standard report sections (pipeline summary, analysis
-#'   parameters, protein filtering, imputation QC, PCA, ANOVA, global heatmap,
+#'   parameters, peptide filtering, imputation QC, PCA, ANOVA, global heatmap,
 #'   per-comparison volcano / MA / heatmap / DAP tables / GSEA), and renders it to
 #'   a self-contained HTML file via \code{rmarkdown::render}.
 #'
@@ -16,21 +15,21 @@
 #'     \item Post-imputation intensity matrix.
 #'     \item Imputation parameters list (\code{method}, \code{q}).
 #'     \item Sample information data frame.
-#'     \item Protein count summary list.
+#'     \item Peptide count summary list.
 #'     \item Analysis parameters list.
 #'     \item ANOVA summary list.
 #'   }
 #' @param analysis_results_path Character. Path to the \code{.rds} file produced by
-#'   the regular (protein-level) pipeline runner.
+#'   the PTM pipeline runner.
 #' @param output_dir Character. Directory where the \code{.Rmd} and \code{.html} files
 #'   will be written. Created if it does not exist. Default \code{"./"}.
 #' @param report_prefix Character. Filename stem for both the intermediate \code{.Rmd}
-#'   and the final \code{.html}. Default \code{"proteomics_analysis"}.
+#'   and the final \code{.html}. Default \code{"ptm_analysis"}.
 #' @param analyst Character. Analyst name displayed in the report header. Default
 #'   \code{"Joaquin Reyna"}.
 #' @return Character string giving the full path to the rendered HTML report.
-# source("report_generator.R"); generate_report('analysis.rds', output_dir = getwd()) # test below
-generate_report_regular <- function(analysis_results_path, output_dir = "./", report_prefix = "proteomics_analysis", analyst="Joaquin Reyna") {
+generate_report_ptm_ida <- function(analysis_results_path, output_dir = "./", report_prefix = "ptm_analysis", analyst="Joaquin Reyna") {
+  
   
   # Validate inputs
   if (!file.exists(analysis_results_path)) {
@@ -69,7 +68,7 @@ generate_report_regular <- function(analysis_results_path, output_dir = "./", re
   
   # Create R Markdown template (beginning section)
   rmd_content <- glue('---
-title: "Proteomics Differential Abundance Analysis Report"
+title: "PTM Differential Abundance Analysis Report"
 author: "Bioinformatics Shared Resources at VCU"
 date: "{date}"
 output: 
@@ -86,14 +85,6 @@ output:
 knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE,
                       dpi = 150, fig.retina = 2)
 
-
-
-
-
-
-
-
-
 # Load results
 rds_data <- readRDS("{analysis_results_path}")
 results <- rds_data[[1]]
@@ -105,7 +96,7 @@ intensity_matrix_raw <- rds_data[[5]]
 intensity_matrix <- rds_data[[6]]
 #annotation <- rds_data[[7]]
 sample_info <- rds_data[[8]]
-protein_counts <- rds_data[[9]]
+peptide_counts <- rds_data[[9]]
 analysis_params <- rds_data[[10]]
 anova_summary <- rds_data[[11]]
 color1 <- if (!is.null(analysis_params$color1)) analysis_params$color1 else "#D55E00"
@@ -134,7 +125,7 @@ or downstream Ingenuity Pathway Analysis (IPA), please see the output directorie
 For this analysis we used the following steps:
 
 1. **Imputation**: Missing values were imputed prior to differential abundance testing.
-2. **Differential abundance**: Limma was used to identify differentially abundant proteins.
+2. **Differential abundance**: Ttest was used to identify differentially abundant PTM peptides.
 3. **Functional analysis**: Gene Set Enrichment Analysis (GSEA) was performed using clusterProfiler.
 4. **Thresholds**: Proteins with adjusted p-value < 0.05 and |FC| >= 1.5 (equivalent to log2(FC) = 0.58) were considered differentially abundant.
 
@@ -218,36 +209,38 @@ if (!is.null(analysis_params)) {{
 
 ## Global Sample Exploration
 
-### Protein Filtering Summary
+### Peptide Filtering Summary
 
-The following table tracks how many proteins remain at each stage of the filtering pipeline — from the initial search results through contaminant (cRAP) removal and imputation eligibility checks. Only proteins that pass all filters are carried forward into normalization and differential abundance testing.
+The following table tracks how many peptides remain at each stage of the filtering pipeline — from the initial search results through contaminant (cRAP) removal, PTM peptide selection, and imputation eligibility checks. Only peptides that pass all filters are carried forward into normalization and differential abundance testing.
 
 ```{{r global-summary}}
-if (!is.null(protein_counts)) {{
-  steps  <- c("Total proteins", "After cRAP removal")
-  counts <- c(protein_counts$total, protein_counts$no_crap)
-  if (!is.null(protein_counts$not_imputable) && protein_counts$not_imputable > 0) {{
+if (!is.null(peptide_counts)) {{
+  steps  <- c("Total peptides", "After cRAP removal", "PTM peptides only")
+  counts <- c(peptide_counts$total, peptide_counts$no_crap, peptide_counts$ptm)
+  if (!is.null(peptide_counts$not_imputable) && peptide_counts$not_imputable > 0) {{
     steps  <- c(steps,  "Not-imputable (discarded)")
-    counts <- c(counts, protein_counts$not_imputable)
-    steps  <- c(steps,  "Curated proteins (used downstream)")
-    counts <- c(counts, protein_counts$no_crap - protein_counts$not_imputable)
+    counts <- c(counts, peptide_counts$not_imputable)
+    steps  <- c(steps,  "Curated PTM peptides (used downstream)")
+    counts <- c(counts, peptide_counts$ptm - peptide_counts$not_imputable)
   }}
   summary_df <- data.frame(Step = steps, Count = counts, stringsAsFactors = FALSE)
   knitr::kable(summary_df)
+}} else {{
+  cat("Peptide count summary not available.")
 }}
 ```
 \n')
 
 rmd_content <- paste0(rmd_content, '
-### Protein Levels Across Observed Values Per Sample
+### Peptide Levels Across Observed Values Per Sample
 
 These boxplots display the distribution of raw (pre-imputation) observed intensities for each sample. Only measured values are included — missing values are excluded. Comparable median intensities and spread across samples indicate consistent sample loading and data quality, while large deviations may suggest normalization issues or outlier samples.
 
-```{r protein-boxplot, fig.width=max(8, ncol(intensity_matrix_raw) * 0.6), fig.height=5}
+```{r peptide-boxplot, fig.width=max(8, ncol(intensity_matrix_raw) * 0.6), fig.height=5}
 # Reshape raw matrix (pre-imputation) to long format, keeping only observed (non-NA) values
 bp_long <- as.data.frame(intensity_matrix_raw) %>%
-  tibble::rownames_to_column("protein") %>%
-  tidyr::pivot_longer(-protein, names_to = "sample", values_to = "intensity") %>%
+  tibble::rownames_to_column("peptide") %>%
+  tidyr::pivot_longer(-peptide, names_to = "sample", values_to = "intensity") %>%
   dplyr::filter(!is.na(intensity))
 
 # Preserve sample order from the matrix columns
@@ -255,7 +248,7 @@ bp_long$sample <- factor(bp_long$sample, levels = colnames(intensity_matrix_raw)
 
 ggplot(bp_long, aes(x = sample, y = intensity)) +
   geom_boxplot(fill = color2, outlier.size = 0.8, outlier.alpha = 0.5) +
-  labs(title = "Protein Levels Across Observed Values Per Sample",
+  labs(title = "Peptide Levels Across Observed Values Per Sample",
        x = "Sample", y = "Intensity") +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1),
@@ -267,7 +260,7 @@ ggplot(bp_long, aes(x = sample, y = intensity)) +
 imputation_content <- '\n
 ### Imputation Reporting
 
-This section documents the imputation strategy applied to handle missing values in the dataset. The parameters used are recorded for reproducibility, followed by a series of diagnostic plots that characterize the extent and distribution of imputed values across samples and proteins.
+This section documents the imputation strategy applied to handle missing values in the dataset. The parameters used are recorded for reproducibility, followed by a series of diagnostic plots that characterize the extent and distribution of imputed values across samples and PTM peptides.
 
 ### Parameters
 
@@ -287,10 +280,10 @@ kable(param_table)
 ### Observed vs. Imputed Intensity Values
 
 The histogram below shows the distribution of all log2 intensity values across
-all proteins. **Observed** (blue) values are those measured directly, while
+all PTM peptides. **Observed** (blue) values are those measured directly, while
 **Imputed** (orange) values are those that were missing and filled in. Imputed
-values typically appear as a secondary peak shifted towards the lower end of
-the distribution, reflecting the left-censored nature of missing-not-at-random
+values typically appear as a secondary peak shifted towards the lower end of the
+distribution, reflecting the left-censored nature of missing-not-at-random
 (MNAR) data in proteomics.
 
 ```{r imputation-histogram, out.width="100%"}
@@ -299,26 +292,26 @@ knitr::include_graphics(file.path(out_dirs$imputation, "global_imputation_histog
 
 ### Observed vs. Imputed Value Counts
 
-The table below summarizes the total number of observed and imputed intensity values across all curated proteins and samples. Observed values were measured directly by the instrument; imputed values replaced missing entries using the selected imputation method. A high imputation percentage warrants caution — it suggests a substantial portion of the data is modeled rather than measured.
+The table below summarizes the total number of observed and imputed intensity values across all curated PTM peptides and samples. Observed values were measured directly by the instrument; imputed values replaced missing entries using the selected imputation method. A high imputation percentage warrants caution — it suggests a substantial portion of the data is modeled rather than measured.
 
 ```{r imputation-counts}
-intensity_raw     <- rds_data[[5]]
-intensity_imputed <- rds_data[[6]]
+intensity_raw      <- rds_data[[5]]
+intensity_imputed  <- rds_data[[6]]
 raw_mat     <- as.matrix(intensity_raw)
 imputed_mat <- as.matrix(intensity_imputed)
 raw_mat  <- raw_mat[rownames(imputed_mat), , drop = FALSE]
 obs_mask <- !is.na(raw_mat)
-n_obs    <- sum(obs_mask)
-n_imp    <- sum(!obs_mask)
-n_tot    <- length(obs_mask)
-pct_imp  <- round(100 * n_imp / n_tot, 1)
+n_obs  <- sum(obs_mask)
+n_imp  <- sum(!obs_mask)
+n_tot  <- length(obs_mask)
+pct_imp <- round(100 * n_imp / n_tot, 1)
 n_curated <- nrow(intensity_imputed)
 counts_table <- data.frame(
-  Parameter = c("Curated proteins", "Total measurements", "Observed values", "Imputed values", "Imputed (%)"),
+  Parameter = c("Curated PTM peptides", "Total measurements", "Observed values", "Imputed values", "Imputed (%)"),
   Value     = c(format(n_curated, big.mark = ","),
-                format(n_tot,     big.mark = ","),
-                format(n_obs,     big.mark = ","),
-                format(n_imp,     big.mark = ","),
+                format(n_tot, big.mark = ","),
+                format(n_obs, big.mark = ","),
+                format(n_imp, big.mark = ","),
                 paste0(pct_imp, "%")),
   stringsAsFactors = FALSE
 )
@@ -333,19 +326,19 @@ This bar chart shows how many missing values were present in each sample before 
 knitr::include_graphics(file.path(out_dirs$imputation, "global_imputation_missing_per_sample.png"))
 ```
 
-### Total Imputed Values per Protein
+### Total Imputed Values per Peptide
 
-This chart summarizes how many values were imputed for each protein across all samples. Proteins with a high proportion of imputed values should be interpreted with caution, as their quantification relies heavily on modeled rather than measured intensities.
+This chart summarizes how many values were imputed for each PTM peptide across all samples. Peptides with a high proportion of imputed values should be interpreted with caution, as their quantification relies heavily on modeled rather than measured intensities.
 
 ```{r imputation-total-counts, out.width="100%"}
 knitr::include_graphics(file.path(out_dirs$imputation, "global_imputation_total_counts.png"))
 ```
 
-### Distribution of Imputed Values per Protein
+### Distribution of Imputed Values per Peptide
 
-This plot shows the per-protein distribution of imputed value counts. It helps identify whether imputation is concentrated in a small subset of proteins or spread broadly across the dataset, informing confidence in downstream differential abundance results.
+This plot shows the per-peptide distribution of imputed value counts. It helps identify whether imputation is concentrated in a small subset of peptides or spread broadly across the dataset, informing confidence in downstream differential abundance results.
 
-```{r imputation-per-protein, out.width="100%"}
+```{r imputation-per-peptide, out.width="100%"}
 knitr::include_graphics(file.path(out_dirs$imputation, "global_imputation_distribution.png"))
 ```
 '
@@ -355,10 +348,10 @@ rmd_content <- paste0(rmd_content, imputation_content)
 rmd_content <- paste0(rmd_content, glue('\n
 ### Principal Component Analysis
 
-PCA was performed to visualize the overall patterns of protein levels across samples and
-to identify potential batch effects or outliers. **What we expect:** Samples with similar
-profiles should cluster together, while dissimilar samples are expected to
-separate into distinct clusters.
+PCA was performed to visualize the overall patterns of PTM peptide levels across
+samples and to identify potential batch effects or outliers. **What we expect:**
+Samples with similar profiles should cluster together, while dissimilar samples
+are expected to separate into distinct clusters.
 
 ```{{r pca-plot, fig.width=7, fig.height=6 }}
 pca_plot
@@ -372,13 +365,14 @@ if (!isTRUE(anova_summary$skipped)) {{
     if (file.exists(anova_path)) {{
       anova_df <- read.csv(anova_path)
       cat("A one-way ANOVA was performed across all", anova_summary$n_groups, "groups to identify",
-          "proteins that vary significantly beyond any single pairwise comparison.",
-          "P-values were adjusted using the Benjamini-Hochberg (BH) method.\n\n")
+          "PTM peptides that vary significantly beyond any single pairwise",
+          "comparison. P-values were adjusted using the Benjamini-Hochberg (BH)",
+          "method.\n\n")
       cat(paste0("**", anova_summary$n_sig, "** out of **", anova_summary$n_total,
-                 "** proteins are significantly variable across groups",
+                 "** PTM peptides are significantly variable across groups",
                  " (ANOVA FDR < 0.05).\n\n"))
       print(knitr::kable(head(anova_df, 20),
-        caption = "Top 20 proteins by one-way ANOVA (sorted by adjusted p-value)",
+        caption = "Top 20 PTM peptides by one-way ANOVA (sorted by adjusted p-value)",
         row.names = FALSE))
     }}
   }} else {{
@@ -387,15 +381,17 @@ if (!isTRUE(anova_summary$skipped)) {{
 }}
 ```
 
-### Global Protein Heatmap
+### Global PTM Peptide Heatmap
 
 ```{{r global-heatmap-desc, results="asis"}}
 if (isTRUE(analysis_params$heatmap_norm == "zscore")) {{
-  cat("The heatmap below shows z-score normalized expression of the top 1000 proteins
-by coefficient of variation (CV) across all samples, clustered by similarity.")
+  cat("The heatmap below shows z-score normalized expression of the top 1000
+PTM peptides by coefficient of variation (CV) across all samples, clustered
+by similarity.")
 }} else {{
-  cat("The heatmap below shows intensity expression of the top 1000 proteins
-by coefficient of variation (CV) across all samples, clustered by similarity.")
+  cat("The heatmap below shows intensity expression of the top 1000
+PTM peptides by coefficient of variation (CV) across all samples, clustered
+by similarity.")
 }}
 ```
 
@@ -415,8 +411,6 @@ if (file.exists(global_heatmap_path)) {{
 
 ```{{r results-summary}}
 # Create a summary table for all comparisons
-n_ensembl_mapped <- if (!is.null(protein_counts$ensembl_mapped)) protein_counts$ensembl_mapped else NA_integer_
-
 summary_table <- data.frame(
   Comparison = character(),
   Experimental = character(),
@@ -424,7 +418,7 @@ summary_table <- data.frame(
   Total_DAPs = integer(),
   Upregulated = integer(),
   Downregulated = integer(),
-  `# Ensembl Mapped` = integer(),
+  `# Proteins Mapped` = integer(),
   GSEA_Performed = character(),
   stringsAsFactors = FALSE,
   check.names = FALSE
@@ -441,6 +435,7 @@ for (i in seq_along(comparisons)) {{
       down_daps <- sum(!is.na(res_df$adj.P.Val) & res_df$adj.P.Val < 0.05 & res_df$logFC <= -0.58)
 
       gsea_status <- ifelse(!is.null(results[[i]]$gsea), "Yes", "No")
+      n_proteins_mapped <- if (!is.null(results[[i]]$protein_counts)) results[[i]]$protein_counts$n_mapped else NA_integer_
 
       summary_table <- rbind(summary_table, data.frame(
         Comparison = comparisons[[i]]$name,
@@ -449,7 +444,7 @@ for (i in seq_along(comparisons)) {{
         Total_DAPs = total_daps,
         Upregulated = up_daps,
         Downregulated = down_daps,
-        `# Ensembl Mapped` = n_ensembl_mapped,
+        `# Proteins Mapped` = n_proteins_mapped,
         GSEA_Performed = gsea_status,
         stringsAsFactors = FALSE,
         check.names = FALSE
@@ -485,7 +480,7 @@ kable(summary_table, caption = "")
 
 ### Query Differential Expression Hits Across All Analyses
 
-Use the search boxes below to look up any protein. **Protein Name** is the gene symbol; **UniProt ID** is the Swiss-Prot accession. **Significant Comparisons** lists every comparison in which the protein was significant (adj. p-value < 0.05 and |FC| ≥ 1.5), or "Not Significant" if it did not meet that threshold in any comparison. Use the column search boxes (row below the header) to filter by protein name or UniProt ID — each column search box filters independently.
+Use the search box below to look up any PTM peptide. **Peptide ID** is the PTM peptide identifier; **HGNC** is the gene symbol; **UniProt ID** is the UniProt accession. **Significant Comparisons** lists every comparison where the peptide was significant (adj. p-value < 0.05 and |FC| ≥ 1.5), or "Not Significant" if it did not meet that threshold in any comparison.
 
 ```{{r query-protein}}
 all_rows <- dplyr::bind_rows(lapply(seq_along(comparisons), function(i) {{
@@ -493,39 +488,36 @@ all_rows <- dplyr::bind_rows(lapply(seq_along(comparisons), function(i) {{
   if (is.null(res)) return(NULL)
   res$comparison_name <- comparisons[[i]]$name
   res$is_sig <- !is.na(res$adj.P.Val) & res$adj.P.Val < 0.05 & abs(res$logFC) >= 0.58
-  res[, intersect(c("gene_name", "uniprotswissprot", "comparison_name", "is_sig"), colnames(res))]
+  res[, intersect(c("peptide_id", "hgnc_symbol", "uniprot_id", "comparison_name", "is_sig"), colnames(res))]
 }}))
-id_cols <- intersect(c("gene_name", "uniprotswissprot"), colnames(all_rows))
+id_cols <- intersect(c("peptide_id", "hgnc_symbol", "uniprot_id"), colnames(all_rows))
 if (nrow(all_rows) == 0 || length(id_cols) == 0) {{
   query_df <- data.frame()
 }} else {{
   query_df <- all_rows %>%
-    dplyr::group_by(dplyr::across(dplyr::all_of(id_cols))) %>%
+    dplyr::group_by(dplyr::across(dplyr::any_of(c("peptide_id", "hgnc_symbol", "uniprot_id")))) %>%
     dplyr::summarise(
-      Significant_Comparisons = {{
+      `Significant Comparisons` = {{
         sig_comps <- comparison_name[is_sig]
         if (length(sig_comps) == 0) "Not Significant" else paste(sig_comps, collapse = "<br>")
       }},
       .groups = "drop"
-    )
-  if ("gene_name" %in% colnames(query_df)) {{
-    query_df <- query_df %>% dplyr::arrange(Significant_Comparisons == "Not Significant", gene_name)
-  }} else {{
-    query_df <- query_df %>% dplyr::arrange(Significant_Comparisons == "Not Significant")
-  }}
-  query_df <- query_df %>%
-    dplyr::rename(dplyr::any_of(c("Protein Name" = "gene_name", "UniProt ID" = "uniprotswissprot",
-                                  "Significant Comparisons" = "Significant_Comparisons")))
+    ) %>%
+    dplyr::arrange(`Significant Comparisons` == "Not Significant", peptide_id) %>%
+    dplyr::rename(dplyr::any_of(c(
+      "HGNC"       = "hgnc_symbol",
+      "UniProt ID" = "uniprot_id",
+      "Peptide ID" = "peptide_id"
+    )))
 }}
 DT::datatable(query_df,
-              caption = "Protein significance across all comparisons",
               rownames = FALSE,
               escape = FALSE,
               filter = "top",
-              options = list(pageLength = 15, dom = "tip"))
+              options = list(pageLength = 15, dom = "ftip"))
 ```
 \n'))
-  
+
   # Add detailed sections for each comparison
   for (i in seq_along(comparisons)) {
     
@@ -548,10 +540,10 @@ DT::datatable(query_df,
   an **orange horizontal line** to indicate the significant p-value threshold of \\< 0.05. Therefore,
   every point (protein) above that orange line can be considered statistically significant (note:
   before FDR correction). In addition, the **black vertical lines** indicate 1.5 fold change.
-  Proteins highlighted in **orange** are more abundant in **{exp}** relative to **{ctrl}** (positive logFC).
-  Proteins highlighted in **blue** are more abundant in **{ctrl}** relative to **{exp}** (negative logFC).
-  Proteins in gray do not meet the thresholds for both logFC and p-value.
-- Data point: a protein
+  PTM peptides highlighted in **orange** are more abundant in **{exp}** relative to **{ctrl}** (positive logFC).
+  PTM peptides highlighted in **blue** are more abundant in **{ctrl}** relative to **{exp}** (negative logFC).
+  PTM peptides in gray do not meet the thresholds for both logFC and p-value.
+- Data point: a PTM peptide
 - X-axis: log2 fold-change ({exp} / {ctrl}) — positive = higher in {exp}
 - Y-axis: -log10(p-value)
 
@@ -571,7 +563,7 @@ if (file.exists(volcano_path)) {{
 - Description: visualizes the relationship between average expression and fold change.
   Points are colored by significance status. A horizontal dashed line marks y = 0
   (no change), and dotted lines mark ±log2(1.5) fold change thresholds.
-- Data point: a protein
+- Data point: a protein/peptide
 - X-axis: average log2 intensity across all samples (AveExpr)
 - Y-axis: log2 fold-change ({exp} / {ctrl})
 
@@ -583,6 +575,7 @@ if (file.exists(ma_path)) {{
   cat("MA plot not available for this comparison")
 }}
 ```
+
 
 **Heatmap**
 
@@ -601,7 +594,7 @@ if (isTRUE(analysis_params$heatmap_norm == "zscore")) {{
 ```
 
 
-```{{r heatmap-{i}}}
+```{{r heatmap-{i} }}
 # Display heatmap from file
 heatmap_path <- file.path(out_dirs$heatmap, paste0("{name}_heatmap.png"))
 if (file.exists(heatmap_path)) {{
@@ -617,11 +610,11 @@ if (file.exists(heatmap_path)) {{
 ```{{r top-daps-{i} }}
 # Display top DAPs table
 
-dap_flag = 0
+dap_flags = c(0,0)
 if (!is.null(results[[{i}]]) && !is.null(results[[{i}]]$limma)) {{
   imp_levels <- c("complete-data", "on-off", "imputation-low", "imputation-medium", "imputation-high", "not-significant", "other")
 
-  combined_sigs <- results[[{i}]]$limma %>%
+  sig_hits <- results[[{i}]]$limma %>%
     filter(!is.na(adj.P.Val) & adj.P.Val < 0.05 & abs(logFC) >= 0.58) %>%
     mutate(logFC = round(logFC, 2),
            pvalue = signif(P.Value, 3),
@@ -630,14 +623,21 @@ if (!is.null(results[[{i}]]) && !is.null(results[[{i}]]$limma)) {{
     arrange(padj)
 
   # update the flags
-  if (nrow(combined_sigs) > 0) {{
-    dap_flag <- 1
+  if (nrow(sig_hits) > 0) {{
+    dap_flags[1] <- 1
   }}
 
 }}
 ```
 
-This table breaks down all significant proteins (adj. p-value < 0.05 and |FC| ≥ 1.5) by their imputation category, giving an overall picture of how much the significant hits relied on imputed values. Proteins classified as *complete-data* had no missing values, while *imputation-low/medium/high* indicate increasing levels of imputation. *on-off* is a special case where the protein is fully observed in one group but completely missing in the other, representing a presence/absence pattern rather than a continuous abundance difference.
+```{{r top-check-daps-{i} }}
+if (dap_flags[1] == 0) {{
+  cat("No differential abundance results available for this comparison")
+}}
+
+```
+
+This table breaks down all significant PTM peptides (adj. p-value < 0.05 and |FC| ≥ 1.5) by their imputation category, giving an overall picture of how much the significant hits relied on imputed values. Peptides classified as *complete-data* had no missing values, while *imputation-low/medium/high* indicate increasing levels of imputation. *on-off* is a special case where the peptide is fully observed in one group but completely missing in the other, representing a presence/absence pattern rather than a continuous abundance difference.
 
 ```{{r imputation-category-summary-{i} }}
 if (i <= length(results) && !is.null(results[[{i}]]) && !is.null(results[[{i}]]$limma)) {{
@@ -650,45 +650,52 @@ if (i <= length(results) && !is.null(results[[{i}]]) && !is.null(results[[{i}]]$
   }}
 }}
 ```
+')
+    comparison_section <- paste0(comparison_section, "\n\n", glue('
+#### Table of Differentially Abundant PTM Peptides
 
-#### Table of Differentially Abundant Proteins
-
-All significant proteins (adj. p-value < 0.05 and |FC| ≥ 1.5), sorted by adjusted p-value.
+All significant PTM peptides (adj. p-value < 0.05 and |FC| ≥ 1.5) with both nominal (**P-value**)
+and adjusted p-values (**Adjusted P-value**), sorted by adjusted p-value.
 
 ```{{r daps-desc-{i}, results="asis"}}
 
-if (dap_flag > 0){{
-  cat("- Description: all significant differentially abundant proteins from the limma moderated t-test\n")
-  cat("- **Protein Name**: human-readable protein name\n")
-  cat("- **UniProt ID**: UniProt accession identifier\n")
-  cat("- **logFC**: log\u2082 fold-change (experimental / control) — positive = higher in experimental, negative = higher in control\n")
-  cat("- **P-value**: raw p-value from the limma moderated t-test\n")
-  cat("- **Adjusted P-value**: Benjamini-Hochberg FDR-adjusted p-value\n")
-  cat("- **Imputation Category**: extent of missing value imputation — *complete-data* (none), *imputation-low* (1 missing), *imputation-medium* (2 missing), *imputation-high* (3+ missing)\n\n")
+if (dap_flags[1] > 0){{
+    cat("- Description: all significant differentially abundant PTM peptides from the limma moderated t-test\n")
+    cat("- **HGNC**: gene symbol\n")
+    cat("- **UniProt ID**: UniProt accession identifier\n")
+    cat("- **Peptide ID**: specific PTM peptide identifier\n")
+    cat("- **logFC**: log\u2082 fold-change (experimental / control) — positive = higher in experimental, negative = higher in control\n")
+    cat("- **P-value**: raw p-value from the limma moderated t-test\n")
+    cat("- **Adjusted P-value**: Benjamini-Hochberg FDR-adjusted p-value\n")
+    cat("- **Imputation Category**: extent of missing value imputation — *complete-data* (none), *imputation-low* (1), *imputation-medium* (2), *imputation-high* (3+)\n\n")
 }}
 
 ```
 
 ```{{r daps-{i}}}
 
-if (dap_flag > 0){{
-  DT::datatable(
-    combined_sigs %>%
-      dplyr::select(dplyr::any_of(c("gene_name", "uniprotswissprot")),
-                    logFC, pvalue, padj, imputation_category) %>%
-      dplyr::rename(dplyr::any_of(c("Protein Name"       = "gene_name",
-                                    "UniProt ID"         = "uniprotswissprot",
-                                    "P-value"            = "pvalue",
-                                    "Adjusted P-value"   = "padj",
-                                    "Imputation Category" = "imputation_category"))),
-    caption = "All Significant Differentially Abundant Proteins",
-    filter = "top")
-
+if (dap_flags[1] > 0){{
+  DT::formatSignif(
+    DT::datatable(
+      sig_hits %>%
+        dplyr::select(dplyr::any_of(c("hgnc_symbol", "uniprot_id", "peptide_id")), logFC, pvalue, padj, imputation_category) %>%
+        dplyr::rename(dplyr::any_of(c(
+          "HGNC"               = "hgnc_symbol",
+          "UniProt ID"         = "uniprot_id",
+          "Peptide ID"         = "peptide_id",
+          "P-value"            = "pvalue",
+          "Adjusted P-value"   = "padj",
+          "Imputation Category" = "imputation_category"
+        ))),
+      filter = "top",
+      options = list(pageLength = 25)),
+    columns = c("P-value", "Adjusted P-value"), digits = 3)
 }} else {{
-  cat("No differential abundance results available for this comparison\n")
+  cat("No significant differentially abundant PTM peptides found\\n\\n")
 }}
   
 ```
+
 
 ```{{r gsea-header-{i}, results="asis"}}
 if (!isTRUE(analysis_params$skip_gsea)) {{
@@ -696,6 +703,20 @@ if (!isTRUE(analysis_params$skip_gsea)) {{
   cat("- Description: Gene Set Enrichment Analysis using Gene Ontology (GO) terms, displayed as a bar plot and table\n")
   cat("- X-axis: Normalized Enrichment Score (NES) — a positive NES indicates that the gene set is activated (upregulated) in the experimental condition, while a negative NES indicates that the gene set is suppressed (downregulated)\n")
   cat("- Y-axis: a given Gene Set\n\n")
+}}
+```
+
+```{{r gsea-protein-counts-{i}}}
+if (!isTRUE(analysis_params$skip_gsea)) {{
+  pc <- results[[{i}]]$protein_counts
+  if (!is.null(pc)) {{
+    pc_df <- data.frame(
+      Step = c("Significant PTM peptides", "Unique proteins (UniProt)", "Proteins after Ensembl mapping"),
+      Count = c(pc$n_sig_peptides, pc$n_sig_uniprots, pc$n_mapped),
+      stringsAsFactors = FALSE
+    )
+    knitr::kable(pc_df, caption = "Protein aggregation summary for GSEA")
+  }}
 }}
 ```
 
@@ -748,8 +769,8 @@ if (!isTRUE(analysis_params$skip_gsea)) {{
     cat("No GSEA results available for this comparison")
   }}
 }}
-```')
-    
+```'))
+
     rmd_content <- paste0(rmd_content, comparison_section)
   }
   
@@ -822,7 +843,7 @@ Please include the following statements in your acknowledgements manuscript sect
   fn <- glue('{report_prefix}.Rmd')
   
   rmd_file <- file.path(output_dir, fn)
-  writeLines(rmd_content[[1]], rmd_file)
+  writeLines(rmd_content, rmd_file)
   
   # Render the R Markdown to HTML
   rmarkdown::render(rmd_file, output_file = output_file, quiet = FALSE)

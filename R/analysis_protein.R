@@ -2,6 +2,31 @@
 # Protein-level analysis functions
 # ==========================
 
+#' @title Generate a Protein-Level Volcano Plot
+#' @details Colours points by significance and fold-change direction, labels the top 10
+#'   up- and down-regulated proteins by adjusted p-value (truncating long IDs to
+#'   \code{"ABC...XYZ"} format), and draws threshold lines at \code{±lfc} and at the
+#'   raw p-value boundary corresponding to the significance cut-off.
+#' @param data Data frame of limma results containing at minimum \code{logFC},
+#'   \code{P.Value}, \code{adj.P.Val}, and the column named by \code{label_col}.
+#' @param exp_name Character. Experimental group name used in axis labels.
+#' @param ctrl_name Character. Control group name used in axis labels.
+#' @param p_thresh Numeric. Adjusted p-value threshold for significance. Default
+#'   \code{0.05}.
+#' @param lfc Numeric. Minimum absolute log2 fold-change threshold. Default \code{0.58}.
+#' @param sig Character. Column name to use for significance filtering. Default
+#'   \code{"adj.P.Val"}.
+#' @param label_col Character. Column whose values are used as point labels. Default
+#'   \code{"uniprotswissprot"}.
+#' @param out_dir Character. Reserved output directory parameter (currently unused;
+#'   saving is the caller's responsibility). Default \code{"."}.
+#' @param color1 Character. Colour for up-regulated points. Default \code{"#D55E00"}.
+#' @param color2 Character. Colour for down-regulated points. Default \code{"#0072B2"}.
+#' @return Named list with elements:
+#'   \describe{
+#'     \item{plot}{A \code{ggplot} volcano plot object.}
+#'     \item{highlighted_ids}{Character vector of the labelled protein IDs (up to 20).}
+#'   }
 generate_volcano_protein <- function(data, exp_name, ctrl_name, p_thresh = 0.05, lfc = 0.58,
                                      sig = "adj.P.Val", label_col = "uniprotswissprot",
                                      out_dir = ".",
@@ -81,6 +106,27 @@ generate_volcano_protein <- function(data, exp_name, ctrl_name, p_thresh = 0.05,
 }
 
 
+#' @title Generate a Protein-Level MA Plot
+#' @details Plots average log2 intensity (AveExpr) on the x-axis against log2
+#'   fold-change on the y-axis, coloured by significance. Proteins in
+#'   \code{highlighted_ids} are labelled with the same truncation logic used in
+#'   \code{\link{generate_volcano_protein}}.
+#' @param data Data frame of limma results containing at minimum \code{AveExpr},
+#'   \code{logFC}, \code{adj.P.Val}, and the column named by \code{label_col}.
+#' @param exp_name Character. Experimental group name used in axis labels.
+#' @param ctrl_name Character. Control group name used in axis labels.
+#' @param highlighted_ids Character vector of protein IDs to label. Typically the
+#'   \code{highlighted_ids} element returned by \code{\link{generate_volcano_protein}}.
+#'   Pass \code{NULL} to skip labelling. Default \code{NULL}.
+#' @param p_thresh Numeric. Adjusted p-value threshold for colouring. Default \code{0.05}.
+#' @param lfc Numeric. Minimum absolute log2 fold-change for colouring. Default
+#'   \code{0.58}.
+#' @param label_col Character. Column used for point labels. Default
+#'   \code{"uniprotswissprot"}.
+#' @param color1 Character. Colour for up-regulated points. Default \code{"#D55E00"}.
+#' @param color2 Character. Colour for down-regulated points. Default \code{"#0072B2"}.
+#' @return A \code{ggplot} MA plot object. Not saved to disk — pass to
+#'   \code{\link{save_plot}}.
 generate_ma_plot_protein <- function(data, exp_name, ctrl_name, highlighted_ids = NULL,
                                       p_thresh = 0.05, lfc = 0.58,
                                       label_col = "uniprotswissprot",
@@ -144,6 +190,47 @@ generate_ma_plot_protein <- function(data, exp_name, ctrl_name, highlighted_ids 
 # Protein-level orchestration
 # ==========================
 
+#' @title Run Full Protein-Level Differential Analysis for a Single Comparison
+#' @details Orchestrates the end-to-end protein analysis pipeline for one contrast:
+#'   \enumerate{
+#'     \item Runs limma differential analysis via \code{\link{perform_limma_analysis}}.
+#'     \item Optionally joins protein metadata (e.g. gene names).
+#'     \item Optionally annotates results with imputation categories based on pre-imputation
+#'       NA counts.
+#'     \item Saves differential results to \code{out_dirs$de_data}.
+#'     \item Generates volcano, MA, and heatmap figures.
+#'     \item Optionally runs GSEA via \code{\link{process_gsea}} and saves results.
+#'   }
+#' @param comparison Named list with elements \code{name}, \code{exp}, and \code{ctrl}.
+#' @param limma_params Named list with elements \code{E} (intensity matrix) and
+#'   \code{design} (model matrix).
+#' @param normalized_counts Numeric matrix or data frame (proteins x samples) of
+#'   imputed log2 intensities passed to \code{\link{generate_heatmap}}.
+#' @param out_dirs Named list of output directories as returned by
+#'   \code{\link{setup_directories}}.
+#' @param intensity_matrix_raw Numeric matrix or data frame of pre-imputation intensities
+#'   (with \code{NA}s) used to compute imputation categories. Pass \code{NULL} to skip.
+#' @param ont_option Character. GO ontology for GSEA: \code{"BP"} (default), \code{"MF"},
+#'   or \code{"CC"}.
+#' @param skip_gsea Logical. If \code{TRUE}, GSEA is skipped entirely. Default
+#'   \code{FALSE}.
+#' @param protein_metadata Data frame with a \code{uniprotswissprot} column for joining
+#'   additional annotation (e.g. \code{PG.Genes}). Pass \code{NULL} to skip.
+#' @param heatmap_norm Character. \code{"zscore"} (default) or \code{"intensity"} for
+#'   the heatmap colour scale.
+#' @param color1 Character. Primary plot colour (up-regulated / imputed).
+#'   Default \code{"#D55E00"}.
+#' @param color2 Character. Secondary plot colour (down-regulated / observed).
+#'   Default \code{"#0072B2"}.
+#' @return Named list with elements:
+#'   \describe{
+#'     \item{limma}{Data frame of annotated differential analysis results.}
+#'     \item{gsea}{\code{gseaResult} object or \code{NULL} if GSEA was skipped or
+#'       failed.}
+#'     \item{highlighted_ids}{Character vector of protein IDs labelled on the volcano
+#'       plot.}
+#'   }
+#'   Returns \code{NULL} if the analysis fails entirely.
 run_analysis <- function(comparison, limma_params, normalized_counts, out_dirs, intensity_matrix_raw = NULL, ont_option = "BP", skip_gsea = FALSE, protein_metadata = NULL, heatmap_norm = "zscore", color1 = "#D55E00", color2 = "#0072B2") {
   tryCatch({
     flog.info("=== Starting analysis for comparison: %s ===", comparison$name)
