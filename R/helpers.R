@@ -171,46 +171,6 @@ build_output_tree <- function(out_dirs) {
 }
 
 # ==========================
-# limma analysis functions
-# ==========================
-
-#' @title Run a limma Differential Expression Analysis
-#' @param limma_params Named list containing at minimum:
-#'   \describe{
-#'     \item{E}{Numeric matrix of log2 intensities (features × samples).}
-#'     \item{design}{Model matrix as produced by \code{model.matrix}.}
-#'   }
-#' @param exp Character. Column name in \code{limma_params$design} for the experimental group.
-#' @param ctrl Character. Column name in \code{limma_params$design} for the control group.
-#' @param min_valid_samples Integer. Minimum number of valid (non-missing) samples required
-#'   per group. Default \code{2}. (Informational; filtering is expected upstream.)
-#' @return Data frame of limma results from \code{topTable} sorted by p-value, with columns
-#'   including \code{logFC}, \code{AveExpr}, \code{t}, \code{P.Value}, \code{adj.P.Val},
-#'   \code{B}. Stops with an error if the analysis fails.
-perform_limma_analysis <- function(limma_params, exp, ctrl, min_valid_samples=2) {
-  tryCatch({
-    flog.info("Performing limma analysis: %s vs %s", exp, ctrl)
-
-    # Build contrast
-    contrast_matrix <- makeContrasts(contrasts = paste0(exp, "-", ctrl),
-                                     levels = colnames(limma_params$design))
-
-    # Fit linear model
-    fit <- lmFit(limma_params$E, limma_params$design)
-    fit2 <- contrasts.fit(fit, contrast_matrix)
-    fit2 <- eBayes(fit2, robust = TRUE)
-
-    # Extract results
-    res <- topTable(fit2, coef = 1, number = Inf, sort.by = "P")
-    flog.info("Limma analysis complete: %d results", nrow(res))
-    return(as.data.frame(res))
-  }, error = function(e) {
-    flog.error("Limma analysis failed: %s", e$message)
-    stop(e)
-  })
-}
-
-# ==========================
 # Shared visualisation functions
 # ==========================
 
@@ -516,7 +476,7 @@ generate_heatmap <- function(diff_df, intensity_df, p = 0.05, lfc = 0.58,
 #' @return A \code{gseaResult} object with gene symbols resolved via
 #'   \code{setReadable}, or \code{NULL} if GSEA cannot be performed or yields no
 #'   significant terms.
-process_gsea <- function(result, p = 0.05, lfc = 0.58, ont_option = "BP") {
+process_gsea <- function(result, org_db, p = 0.05, lfc = 0.58, ont_option = "BP") {
   tryCatch({
 
     sig_genes <- result %>% arrange(desc(logFC))
@@ -548,14 +508,14 @@ process_gsea <- function(result, p = 0.05, lfc = 0.58, ont_option = "BP") {
                         scoreType = "std",
                         pvalueCutoff = 0.05,
                         pAdjustMethod = "fdr",
-                        OrgDb = annotation_db)
+                        OrgDb = org_db)
 
     if (is.null(gse_result) || nrow(gse_result@result) == 0) {
       flog.warn("No enriched GO terms found in GSEA result")
       return(NULL)
     }
 
-    setReadable(gse_result, OrgDb = annotation_db, keyType = "ENSEMBL")
+    setReadable(gse_result, OrgDb = org_db, keyType = "ENSEMBL")
   }, error = function(e) {
     flog.error("GSEA processing failed: %s", e$message)
     return(NULL)

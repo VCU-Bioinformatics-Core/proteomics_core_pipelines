@@ -1,3 +1,7 @@
 {
-  "r.rpath.linux": "/global/software/spack/opt/spack/linux-zen/r-4.5.0-6eha3mwbzs3ubsutlypuoad3lhyc452b/bin/Rscript"
+  "r.rpath.linux": "/global/software/spack/opt/spack/linux-zen/r-4.5.0-6eha3mwbzs3ubsutlypuoad3lhyc452b/bin/Rscript",
+  "python.defaultInterpreterPath": "/global/software/spack/opt/spack/linux-zen/r-4.5.0-6eha3mwbzs3ubsutlypuoad3lhyc452b/bin/Rscript",
+  "terminal.integrated.env.osx": {
+    "CONDA_DEFAULT_ENV": "DAPRmd"
+  }
 }

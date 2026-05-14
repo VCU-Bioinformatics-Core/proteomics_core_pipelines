@@ -15,7 +15,7 @@
 #'
 #' @param run_id Character. Unique identifier for this analysis run;
 #'   used in output file names and the HTML report title.
-#' @param counts_file Character. Path to the protein-level intensity matrix
+#' @param protein_matrix_file Character. Path to the protein-level intensity matrix
 #'   (tab-separated, rows = proteins, cols = samples).
 #' @param samplesheet_file Character. Path to the sample sheet CSV describing
 #'   sample groups and pairwise comparisons.
@@ -51,14 +51,14 @@
 #' \dontrun{
 #' run_regular_pipeline(
 #'   run_id           = "exp_001",
-#'   counts_file      = "data/protein_intensities.tsv",
+#'   protein_matrix_file      = "data/protein_intensities.tsv",
 #'   samplesheet_file = "data/samplesheet.csv",
 #'   out_dir          = "results/exp_001"
 #' )
 #' }
-run_regular_pipeline <- function(
+run_proteome_da_pipeline <- function(
   run_id,
-  counts_file,
+  protein_matrix_file,
   samplesheet_file,
   out_dir,
   genome            = "mouse",
@@ -80,8 +80,8 @@ run_regular_pipeline <- function(
   # Load annotation DB
   # ==========================
   if (genome == "human") {
-    if (!require("org.Hs.eg.db")) BiocManager::install("org.Hs.eg.db")
-    annotation_db <- org.Hs.eg.db
+    library(org.Hs.eg.db)
+    org_db <- org.Hs.eg.db
     ensembl <- tryCatch(
       useEnsembl("ensembl", dataset = "hsapiens_gene_ensembl"),
       error = function(e) {
@@ -90,8 +90,8 @@ run_regular_pipeline <- function(
       }
     )
   } else if (genome == "mouse") {
-    if (!require("org.Mm.eg.db")) BiocManager::install("org.Mm.eg.db")
-    annotation_db <- org.Mm.eg.db
+    library(org.Mm.eg.db)
+    org_db <- org.Mm.eg.db
     ensembl <- tryCatch(
       useEnsembl("ensembl", dataset = "mmusculus_gene_ensembl"),
       error = function(e) {
@@ -125,7 +125,7 @@ run_regular_pipeline <- function(
   # Read and prepare data
   # ==========================
   out_dirs <- setup_directories(out_dir)
-  full_prot_levels <- data.frame(read_csv(counts_file, col_names = TRUE))
+  full_prot_levels <- data.frame(read_csv(protein_matrix_file, col_names = TRUE))
   full_prot_levels <- full_prot_levels %>% filter(!is.na(PG.Genes))
   n_proteins_total <- nrow(full_prot_levels)
 
@@ -239,8 +239,8 @@ run_regular_pipeline <- function(
 
   results <- vector("list", length(comparisons))
   for (i in seq_along(comparisons)) {
-    curr_result <- run_analysis(
-      comparisons[[i]], limma_params, intensity_matrix, out_dirs, intensity_matrix_raw,
+    curr_result <- run_single_proteome_da_comparison(
+      comparisons[[i]], limma_params, intensity_matrix, out_dirs, intensity_matrix_raw, org_db=org_db,
       ont_option = gsea_ont, skip_gsea = skip_gsea, protein_metadata = protein_metadata,
       heatmap_norm = heatmap_norm, color1 = group_color1, color2 = group_color2
     )
@@ -363,7 +363,7 @@ run_regular_pipeline <- function(
   flog.info("Saving analysis RDS to %s", rds_path)
   saveRDS(rds, rds_path)
 
-  generate_report_regular(rds_path, output_dir = out_dir)
+  generate_report_proteome(rds_path, output_dir = out_dir)
   flog.info("Pipeline complete: runID=%s", run_id)
   invisible(rds_path)
 }

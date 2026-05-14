@@ -28,15 +28,13 @@
 #'     \item{highlighted_ids}{Character vector of the labelled protein IDs (up to 20).}
 #'   }
 generate_volcano_protein <- function(data, exp_name, ctrl_name, p_thresh = 0.05, lfc = 0.58,
-                                     sig = "adj.P.Val", label_col = "uniprotswissprot",
-                                     out_dir = ".",
-                                     color1 = "#D55E00", color2 = "#0072B2") {
-
+                                     sig = "adj.P.Val", label_col = "gene_name",
+                                     out_dir = ".", color1 = "#D55E00", color2 = "#0072B2") {
   labeled_dat <- data %>%
     mutate(
       color_tag = case_when(
-        eval(as.symbol(sig)) < p_thresh & logFC < -lfc ~ "Under expressed",
-        eval(as.symbol(sig)) < p_thresh & logFC > lfc ~ "Over expressed",
+        .data[[sig]] < p_thresh & logFC < -lfc ~ "Under expressed",
+        .data[[sig]] < p_thresh & logFC > lfc ~ "Over expressed",
         TRUE ~ NA_character_
       )
     )
@@ -57,11 +55,7 @@ generate_volcano_protein <- function(data, exp_name, ctrl_name, p_thresh = 0.05,
     mutate(
       highlight = ifelse(.data[[label_col]] %in% c(top_10_genes_up, top_10_genes_dn),
                          .data[[label_col]], NA),
-      label_display = ifelse(
-        !is.na(highlight) & nchar(highlight) > 9,
-        paste0(substr(highlight, 1, 3), "...", substr(highlight, nchar(highlight) - 2, nchar(highlight))),
-        highlight
-      )
+      label_display = highlight
     ) %>%
     filter(!is.na(logFC), !is.na(P.Value), is.finite(logFC), is.finite(P.Value))
 
@@ -128,8 +122,7 @@ generate_volcano_protein <- function(data, exp_name, ctrl_name, p_thresh = 0.05,
 #' @return A \code{ggplot} MA plot object. Not saved to disk — pass to
 #'   \code{\link{save_plot}}.
 generate_ma_plot_protein <- function(data, exp_name, ctrl_name, highlighted_ids = NULL,
-                                      p_thresh = 0.05, lfc = 0.58,
-                                      label_col = "uniprotswissprot",
+                                      p_thresh = 0.05, lfc = 0.58, label_col = "gene_name",
                                       color1 = "#D55E00", color2 = "#0072B2") {
   ma_df <- data %>%
     filter(!is.na(AveExpr), !is.na(logFC), is.finite(AveExpr), is.finite(logFC)) %>%
@@ -149,12 +142,7 @@ generate_ma_plot_protein <- function(data, exp_name, ctrl_name, highlighted_ids 
   ma_labeled <- if (!is.null(highlighted_ids)) {
     ma_df %>%
       filter(.data[[label_col]] %in% highlighted_ids) %>%
-      mutate(label_display = ifelse(
-        nchar(.data[[label_col]]) > 9,
-        paste0(substr(.data[[label_col]], 1, 3), "...",
-               substr(.data[[label_col]], nchar(.data[[label_col]]) - 2, nchar(.data[[label_col]]))),
-        .data[[label_col]]
-      ))
+      mutate(label_display = .data[[label_col]])
   } else NULL
 
   p <- ggplot(ma_df, aes(x = AveExpr, y = logFC, color = sig)) +
@@ -231,7 +219,7 @@ generate_ma_plot_protein <- function(data, exp_name, ctrl_name, highlighted_ids 
 #'       plot.}
 #'   }
 #'   Returns \code{NULL} if the analysis fails entirely.
-run_analysis <- function(comparison, limma_params, normalized_counts, out_dirs, intensity_matrix_raw = NULL, ont_option = "BP", skip_gsea = FALSE, protein_metadata = NULL, heatmap_norm = "zscore", color1 = "#D55E00", color2 = "#0072B2") {
+run_single_proteome_da_comparison <- function(comparison, limma_params, normalized_counts, out_dirs, org_db=NULL, intensity_matrix_raw = NULL, ont_option = "BP", skip_gsea = FALSE, protein_metadata = NULL, heatmap_norm = "zscore", color1 = "#D55E00", color2 = "#0072B2") {
   tryCatch({
     flog.info("=== Starting analysis for comparison: %s ===", comparison$name)
 
@@ -308,7 +296,7 @@ run_analysis <- function(comparison, limma_params, normalized_counts, out_dirs, 
       gse <- NULL
     } else {
       flog.info("Running GSEA for %s", comparison$name)
-      gse <- process_gsea(annotated_results, ont_option = ont_option)
+      gse <- process_gsea(annotated_results, org_db, ont_option = ont_option)
 
       if(!is.null(gse)) {
         flog.info("GSEA returned results for %s", comparison$name)
