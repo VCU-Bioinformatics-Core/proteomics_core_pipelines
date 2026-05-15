@@ -223,7 +223,7 @@ generate_ma_plot_ptm <- function(data, exp_name, ctrl_name, highlighted_ids = NU
 #'   }
 #'   Returns \code{NULL} if no significant peptides are found, BioMart fails, or no
 #'   Ensembl IDs are mapped.
-aggregate_ptm_for_gsea <- function(limma_results, peptide_metadata, p = 0.05, lfc = 0.58) {
+aggregate_ptm_for_gsea <- function(limma_results, peptide_metadata, ensembl, p = 0.05, lfc = 0.58) {
   # uniprot_id is already present on limma_results (joined upstream in
   # run_analysis_ptm); if for any reason it is absent, fall back to
   # joining peptide_metadata and deriving it from PG.UniProtIds
@@ -439,7 +439,7 @@ run_analysis_ptm <- function(comparison, limma_params, normalized_counts, out_di
       )
       protein_counts <- if (!is.null(agg_result)) agg_result$counts else NULL
       gse <- tryCatch({
-        if (!is.null(agg_result)) process_gsea(agg_result$data, ont_option = ont_option) else NULL
+        if (!is.null(agg_result)) process_gsea(agg_result$data, org_db, ont_option = ont_option) else NULL
       }, error = function(e) {
         flog.error("PTM GSEA failed for '%s': %s", comparison$name, e$message)
         NULL

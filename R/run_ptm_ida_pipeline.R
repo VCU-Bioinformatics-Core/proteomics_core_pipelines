@@ -83,12 +83,14 @@ run_ptm_ida_pipeline <- function(
   setup_logging(out_dir, run_id = run_id)
   flog.info("PTM pipeline started: runID=%s, genome=%s, outdir=%s", run_id, genome, out_dir)
 
+
+
   # ==========================
   # Load annotation DB
   # ==========================
   if (genome == "human") {
-    if (!require("org.Hs.eg.db")) BiocManager::install("org.Hs.eg.db")
-    annotation_db <- org.Hs.eg.db
+    library(org.Hs.eg.db)
+    org_db <- org.Hs.eg.db
     ensembl <- tryCatch(
       useEnsembl("ensembl", dataset = "hsapiens_gene_ensembl"),
       error = function(e) {
@@ -97,8 +99,8 @@ run_ptm_ida_pipeline <- function(
       }
     )
   } else if (genome == "mouse") {
-    if (!require("org.Mm.eg.db")) BiocManager::install("org.Mm.eg.db")
-    annotation_db <- org.Mm.eg.db
+    library(org.Mm.eg.db)
+    org_db <- org.Mm.eg.db
     ensembl <- tryCatch(
       useEnsembl("ensembl", dataset = "mmusculus_gene_ensembl"),
       error = function(e) {
@@ -110,8 +112,7 @@ run_ptm_ida_pipeline <- function(
     flog.fatal("Invalid genome '%s'. Use 'mouse' or 'human'", genome)
     stop("Invalid genome specified. Use 'mouse' or 'human'")
   }
-  
-  
+
   # ================================
   # Read and prepare the comparisons
   # ================================
@@ -267,7 +268,8 @@ run_ptm_ida_pipeline <- function(
                       out_dirs = out_dirs,
                       intensity_matrix_raw = ptm_matrix_raw,
                       peptide_metadata = ptm_peptide_metadata,
-                      ensembl=ensembl
+                      ensembl=ensembl,
+                      org_db=org_db
     )
     
     if (!is.null(curr_result)) results[[i]] <- curr_result

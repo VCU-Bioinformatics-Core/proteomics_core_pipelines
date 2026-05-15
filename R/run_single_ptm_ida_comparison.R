@@ -120,7 +120,7 @@ perform_multitest_ptm_ida_analysis <- function(comparison, exp_samples, ctrl_sam
                                               ptm_imp_matrix, protein_imp_matrix){
   results <- list()
   uniq_uniprot_ids <- unique(protein_imp_matrix$PG.ProteinAccessions)
-  # uniq_uniprot_ids <- head(uniq_uniprot_ids, 50)  # DEBUG: limit to 500
+  #uniq_uniprot_ids <- head(uniq_uniprot_ids, 50)  # DEBUG: limit to 500
   pb <- progress_bar$new(
     format = "[:bar] :current/:total (:percent) eta: :eta",
     total = length(uniq_uniprot_ids), clear = FALSE
@@ -182,6 +182,11 @@ perform_multitest_ptm_ida_analysis <- function(comparison, exp_samples, ctrl_sam
       )
     }
   }
+
+
+  #browser()
+
+
   results_df <- bind_rows(results) %>% mutate(adj.P.Val = p.adjust(P.Value, method = "BH"))
   return(results_df)
 }
@@ -236,7 +241,7 @@ perform_multitest_ptm_ida_analysis <- function(comparison, exp_samples, ctrl_sam
 #'   Returns \code{NULL} if the analysis fails entirely.
 run_single_ptm_ida_comparison <- function(comparison, limma_params, ptm_imp_matrix,
                                           protein_imp_matrix, out_dirs, intensity_matrix_raw = NULL,
-                                          peptide_metadata = NULL, ont_option = "BP", ensembl = NULL,
+                                          peptide_metadata = NULL, ont_option = "BP", ensembl = NULL, org_db = NULL,
                                           skip_gsea = FALSE, heatmap_norm = "zscore",
                                           color1 = "#D55E00", color2 = "#0072B2") {
 
@@ -364,7 +369,7 @@ run_single_ptm_ida_comparison <- function(comparison, limma_params, ptm_imp_matr
     } else {
       flog.info("Running PTM GSEA for %s", comparison$name)
       agg_result <- tryCatch(
-        aggregate_ptm_for_gsea(diff_results, peptide_metadata),
+        aggregate_ptm_for_gsea(diff_results, peptide_metadata, ensembl),
         error = function(e) {
           flog.error("PTM GSEA aggregation failed for '%s': %s",
                      comparison$name, e$message)
@@ -373,7 +378,7 @@ run_single_ptm_ida_comparison <- function(comparison, limma_params, ptm_imp_matr
       )
       protein_counts <- if (!is.null(agg_result)) agg_result$counts else NULL
       gse <- tryCatch({
-        if (!is.null(agg_result)) process_gsea(agg_result$data, ont_option = ont_option) else NULL
+        if (!is.null(agg_result)) process_gsea(agg_result$data, org_db, ont_option = ont_option) else NULL
       }, error = function(e) {
         flog.error("PTM GSEA failed for '%s': %s", comparison$name, e$message)
         NULL
