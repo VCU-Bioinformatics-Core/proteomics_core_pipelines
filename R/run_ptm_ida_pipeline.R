@@ -89,7 +89,6 @@ run_ptm_ida_pipeline <- function(
   # Load annotation DB
   # ==========================
   if (genome == "human") {
-    library(org.Hs.eg.db)
     org_db <- org.Hs.eg.db
     ensembl <- tryCatch(
       useEnsembl("ensembl", dataset = "hsapiens_gene_ensembl"),
@@ -99,7 +98,6 @@ run_ptm_ida_pipeline <- function(
       }
     )
   } else if (genome == "mouse") {
-    library(org.Mm.eg.db)
     org_db <- org.Mm.eg.db
     ensembl <- tryCatch(
       useEnsembl("ensembl", dataset = "mmusculus_gene_ensembl"),

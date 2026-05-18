@@ -29,7 +29,7 @@
 #' @param analyst Character. Analyst name displayed in the report header. Default
 #'   \code{"Joaquin Reyna"}.
 #' @return Character string giving the full path to the rendered HTML report.
-# source("report_generator.R"); generate_report('analysis.rds', output_dir = getwd()) # test below
+#' @export
 generate_report_proteome <- function(analysis_results_path, output_dir = "./", report_prefix = "proteomics_analysis", analyst="Joaquin Reyna") {
   
   # Validate inputs

@@ -1,10 +1,6 @@
 # ==========================
 # PTM-level analysis functions
 # ==========================
-library(tidyr)
-library(dplyr)
-library(progress)
-
 #' @title Generate a PTM-Level Volcano Plot
 #' @details Colours points by significance and fold-change direction, and labels the top
 #'   10 up- and down-regulated PTM peptides by adjusted p-value. Labels split the

@@ -84,7 +84,6 @@ run_ptm_pipeline <- function(
   # Load annotation DB
   # ==========================
   if (genome == "human") {
-    if (!require("org.Hs.eg.db")) BiocManager::install("org.Hs.eg.db")
     annotation_db <- org.Hs.eg.db
     ensembl <- tryCatch(
       useEnsembl("ensembl", dataset = "hsapiens_gene_ensembl"),
@@ -94,7 +93,6 @@ run_ptm_pipeline <- function(
       }
     )
   } else if (genome == "mouse") {
-    if (!require("org.Mm.eg.db")) BiocManager::install("org.Mm.eg.db")
     annotation_db <- org.Mm.eg.db
     ensembl <- tryCatch(
       useEnsembl("ensembl", dataset = "mmusculus_gene_ensembl"),

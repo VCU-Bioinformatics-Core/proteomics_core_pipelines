@@ -32,4 +32,6 @@
 #' @import stringr
 #' @import tibble
 #' @import grid
+#' @import tidyr
+#' @import progress
 NULL

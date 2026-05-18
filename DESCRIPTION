@@ -46,4 +46,6 @@ Imports:
     tibble,
     grid,
     org.Hs.eg.db,
-    org.Mm.eg.db
+    org.Mm.eg.db,
+    tidyr,
+    progress
