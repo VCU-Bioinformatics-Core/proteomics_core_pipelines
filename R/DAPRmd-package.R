@@ -32,4 +32,8 @@
 #' @import stringr
 #' @import tibble
 #' @import grid
+#' @import tidyr
+#' @import progress
+#' @import org.Hs.eg.db
+#' @import org.Mm.eg.db
 NULL

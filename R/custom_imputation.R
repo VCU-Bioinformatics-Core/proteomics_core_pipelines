@@ -16,7 +16,7 @@
 #
 # Example usage on the command line:
 #   Rscript de.regular.R --imputation 3by3 ...
-#   Rscript de.phospho.R --imputation 3by3 ...
+#   Rscript de.ptm.R --imputation 3by3 ...
 #
 # ------------------------------------------------------------------------------
 # Example: per-column half-minimum imputation (ignores groups)
@@ -45,6 +45,24 @@
 # Parameters:
 #   q  — quantile used as the mean for the left-tail draw (default 0.01)
 # ------------------------------------------------------------------------------
+#' @title Group-Aware Imputation for Experiments with >= 3 Samples per Group
+#' @details Per protein, per group: if >= 2 values are observed (1+ missing),
+#'   missing values are replaced with the group median; if <= 1 value is observed,
+#'   missing values are drawn from a global left-tail Gaussian (MinProb-style)
+#'   parameterised by the \code{q}-th quantile and MAD of all non-missing values.
+#'   Proteins where every group has <= 1 valid observation are discarded before
+#'   imputation and their count is stored in \code{attr(result, "n_not_imputable")}.
+#' @param mat Numeric matrix. Rows = proteins/peptides, columns = samples.
+#'   Values should be log2-transformed intensities; \code{NA} = missing.
+#' @param groups Named character vector mapping sample name to group/condition.
+#'   Names must match \code{colnames(mat)}. Every group must have >= 3 samples.
+#' @param q Numeric. Quantile of the pooled observed distribution used as the
+#'   mean for the left-tail Gaussian draw. Default \code{0.01}.
+#' @param ... Additional arguments absorbed for forward compatibility.
+#' @return Numeric matrix of the same dimensions as \code{mat} (minus discarded
+#'   proteins) with \code{NA}s replaced. The attribute \code{"n_not_imputable"}
+#'   gives the number of proteins removed prior to imputation.
+#' @export
 impute_3by3 <- function(mat, groups, q = 0.01, ...) {
 
   # Align groups to matrix column order by name

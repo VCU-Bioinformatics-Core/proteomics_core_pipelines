@@ -1,6 +1,14 @@
 # ==========================
 # Logging setup
 # ==========================
+
+#' @title Set Up Pipeline Logging
+#' @param outdir Character. Path to the output directory where the log file will be written.
+#'   Created recursively if it does not exist.
+#' @param run_id Character or NULL. Optional run identifier prepended to the log filename
+#'   (e.g. \code{"run01"} produces \code{run01_pipeline.log}). If NULL or empty, defaults
+#'   to \code{pipeline.log}.
+#' @return Invisibly returns the full path to the log file as a character string.
 setup_logging <- function(outdir, run_id = NULL) {
   dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
   log_name <- if (!is.null(run_id) && nzchar(run_id)) {
@@ -17,18 +25,41 @@ setup_logging <- function(outdir, run_id = NULL) {
 # ==========================
 # Helper Functions
 # ==========================
+
+#' @title Build a Standardised Output File Path
+#' @param base_dir Character. Base directory for the file.
+#' @param prefix Character. String prepended to \code{name} in the filename.
+#' @param name Character. Core part of the filename.
+#' @param extension Character. File extension including the leading dot. Default \code{".csv"}.
+#' @return Character string with the full file path.
 create_file_path <- function(base_dir, prefix, name, extension = ".csv") {
   file.path(base_dir, paste0(prefix, name, extension))
 }
 
+#' @title Build a Comparison Label
+#' @param exp Character. Name of the experimental group.
+#' @param ctrl Character. Name of the control group.
+#' @param prefix Character. Optional string prepended to the label. Default \code{""}.
+#' @return Character string of the form \code{"<prefix><exp> vs. <ctrl>"}.
 create_comparison_name <- function(exp, ctrl, prefix = "") {
   paste0(prefix, exp, " vs. ", ctrl)
 }
 
+#' @title Save a ggplot to Disk
+#' @param plot A \code{ggplot} object to save.
+#' @param filename Character. Full output file path including extension.
+#' @param width Numeric. Plot width in inches. Default \code{10}.
+#' @param height Numeric. Plot height in inches. Default \code{8}.
+#' @param dpi Numeric. Resolution in dots per inch. Default \code{300}.
+#' @return Invisibly returns \code{filename} (via \code{ggsave}).
 save_plot <- function(plot, filename, width = 10, height = 8, dpi = 300) {
   ggsave(plot, filename = filename, width = width, height = height, dpi = dpi, bg = "white")
 }
 
+#' @title Export a Plotly Object to a Self-Contained HTML File
+#' @param plotly_obj A \code{plotly} object to export.
+#' @param file_path Character. Destination HTML file path.
+#' @return Invisibly returns \code{NULL}. Logs a warning if the export fails.
 export_plotly_to_html <- function(plotly_obj, file_path) {
   tryCatch({
     if (!inherits(plotly_obj, "plotly")) stop("Invalid plotly object")
@@ -38,6 +69,13 @@ export_plotly_to_html <- function(plotly_obj, file_path) {
   })
 }
 
+#' @title Create Standard Pipeline Output Directory Structure
+#' @param base_dir Character. Root output directory. Will be normalised via
+#'   \code{normalizePath(..., mustWork = FALSE)}.
+#' @return Named list of character paths for each subdirectory:
+#'   \code{data}, \code{figures}, \code{de_data}, \code{anova}, \code{gsea_data},
+#'   \code{volcano}, \code{ma}, \code{heatmap}, \code{imputation}, \code{gsea}, \code{pca}.
+#'   All directories are created (recursively) as a side effect.
 setup_directories <- function(base_dir) {
   base_dir <- normalizePath(base_dir, mustWork = FALSE)
   dirs <- list(
@@ -53,17 +91,23 @@ setup_directories <- function(base_dir) {
     gsea = file.path(base_dir, "figures/gsea"),
     pca = file.path(base_dir, "figures/pca")
   )
-  
+
   walk(dirs, dir.create, recursive = TRUE, showWarnings = FALSE)
   dirs
 }
 
-# Build a tree string of actual output files under out_dirs$data and out_dirs$figures.
-# Returns a single character string suitable for printing inside a code block.
+#' @title Build a Tree-Style String of Pipeline Output Files
+#' @details Renders the actual files present under \code{out_dirs$data} and
+#'   \code{out_dirs$figures} (and their standard subdirectories) as a Unicode
+#'   tree string suitable for embedding in a report code block. Subdirectories
+#'   with no files are silently omitted.
+#' @param out_dirs Named list of directory paths as returned by
+#'   \code{\link{setup_directories}}.
+#' @return Single character string with newline-separated tree lines rooted at \code{"."}.
 build_output_tree <- function(out_dirs) {
-  B <- "\u251C\u2500\u2500 "  # branch:  ├──
-  L <- "\u2514\u2500\u2500 "  # last:    └──
-  P <- "\u2502   "            # pipe:    │
+  B <- "├── "  # branch:  ├──
+  L <- "└── "  # last:    └──
+  P <- "│   "            # pipe:    │
   S <- "    "                 # space
 
   # Helper: render a named list of subdirs as tree lines
@@ -127,317 +171,27 @@ build_output_tree <- function(out_dirs) {
 }
 
 # ==========================
-# limma analysis functions
+# Shared visualisation functions
 # ==========================
-perform_limma_analysis <- function(limma_params, exp, ctrl, min_valid_samples=2) {
-  tryCatch({
-    flog.info("Performing limma analysis: %s vs %s", exp, ctrl)
-    
-    # Build contrast
-    contrast_matrix <- makeContrasts(contrasts = paste0(exp, "-", ctrl),
-                                     levels = colnames(limma_params$design))
-    
-    # Fit linear model
-    fit <- lmFit(limma_params$E, limma_params$design)
-    fit2 <- contrasts.fit(fit, contrast_matrix)
-    fit2 <- eBayes(fit2, robust = TRUE)
-    
-    # Extract results
-    res <- topTable(fit2, coef = 1, number = Inf, sort.by = "P")
-    flog.info("Limma analysis complete: %d results", nrow(res))
-    return(as.data.frame(res))
-  }, error = function(e) {
-    flog.error("Limma analysis failed: %s", e$message)
-    stop(e)
-  })
-}
 
-generate_volcano_protein <- function(data, exp_name, ctrl_name, p_thresh = 0.05, lfc = 0.58,
-                                     sig = "adj.P.Val", label_col = "uniprotswissprot",
-                                     out_dir = ".",
-                                     color1 = "#D55E00", color2 = "#0072B2") {
-
-  labeled_dat <- data %>%
-    mutate(
-      color_tag = case_when(
-        eval(as.symbol(sig)) < p_thresh & logFC < -lfc ~ "Under expressed",
-        eval(as.symbol(sig)) < p_thresh & logFC > lfc ~ "Over expressed",
-        TRUE ~ NA_character_
-      )
-    )
-
-  top_10_genes_up <- labeled_dat %>%
-    filter(P.Value <= p_thresh & logFC >= lfc) %>%
-    arrange(eval(as.symbol(sig))) %>%
-    slice_head(n = 10) %>%
-    pull(.data[[label_col]])
-
-  top_10_genes_dn <- labeled_dat %>%
-    filter(P.Value <= p_thresh & logFC <= -lfc) %>%
-    arrange(eval(as.symbol(sig))) %>%
-    slice_head(n = 10) %>%
-    pull(.data[[label_col]])
-
-  labeled_dat <- labeled_dat %>%
-    mutate(
-      highlight = ifelse(.data[[label_col]] %in% c(top_10_genes_up, top_10_genes_dn),
-                         .data[[label_col]], NA),
-      label_display = ifelse(
-        !is.na(highlight) & nchar(highlight) > 9,
-        paste0(substr(highlight, 1, 3), "...", substr(highlight, nchar(highlight) - 2, nchar(highlight))),
-        highlight
-      )
-    ) %>%
-    filter(!is.na(logFC), !is.na(P.Value), is.finite(logFC), is.finite(P.Value))
-
-  labeled_dat <- labeled_dat %>%
-    mutate(sig_label = case_when(
-      eval(as.symbol(sig)) < p_thresh & logFC >  lfc ~ "Up-Regulated",
-      eval(as.symbol(sig)) < p_thresh & logFC < -lfc ~ "Down-Regulated",
-      TRUE ~ "Not Significant"
-    ))
-
-  # Place the hline at the raw P.Value boundary that corresponds to adj.P.Val < p_thresh,
-  # so the line aligns with the coloring. Fall back to -log10(p_thresh) if nothing is significant.
-  sig_boundary <- labeled_dat %>%
-    filter(sig_label != "Not Significant") %>%
-    summarise(y = if (n() > 0) min(-log10(P.Value)) else -log10(p_thresh)) %>%
-    pull(y)
-
-  volcano_plot <- ggplot(labeled_dat, aes(x = logFC, y = -log10(P.Value), color = sig_label)) +
-    geom_point(data = labeled_dat %>% filter(sig_label == "Not Significant"), alpha = 0.4) +
-    geom_point(data = labeled_dat %>% filter(sig_label != "Not Significant"), alpha = 0.7) +
-    scale_color_manual(
-      values = c("Up-Regulated" = color1, "Down-Regulated" = color2, "Not Significant" = "gray70"),
-      name = NULL
-    ) +
-    geom_label_repel(data = labeled_dat %>% filter(!is.na(label_display)),
-                     aes(x = logFC, y = -log10(P.Value), label = label_display),
-                     max.overlaps = Inf, show.legend = FALSE) +
-    geom_hline(yintercept = sig_boundary, col = "gray40", linetype = 2) +
-    geom_vline(xintercept = c(-lfc, lfc)) +
-    theme_minimal(base_size = 14) +
-    theme(legend.position = "right",
-          legend.text = element_text(size = 13),
-          legend.key.size = unit(1.2, "cm"),
-          axis.text = element_text(size = 12),
-          axis.title = element_text(size = 13)) +
-    labs(x = paste0("log2 fold-change (", exp_name, " / ", ctrl_name, ")\n",
-                    "\u2190 higher in ", ctrl_name, "          higher in ", exp_name, " \u2192"),
-         y = "-log10(P-value)",
-         title = create_comparison_name(exp_name, ctrl_name, "Differentially expressed genes - ")
-    )
-  return(list(plot = volcano_plot, highlighted_ids = c(top_10_genes_up, top_10_genes_dn)))
-}
-
-
-generate_volcano_phospho <- function(data, exp_name, ctrl_name, p_thresh = 0.05, lfc = 0.58,
-                                     sig = "adj.P.Val", out_dir = ".",
-                                     color1 = "#D55E00", color2 = "#0072B2") {
-
-  labeled_dat <- data %>%
-    mutate(
-      color_tag = case_when(
-        eval(as.symbol(sig)) < p_thresh & logFC < -lfc ~ "Under expressed",
-        eval(as.symbol(sig)) < p_thresh & logFC > lfc ~ "Over expressed",
-        TRUE ~ NA_character_
-      )
-    )
-
-  top_10_genes_up <- labeled_dat %>%
-    filter(P.Value <= p_thresh & logFC >= lfc) %>%
-    arrange(eval(as.symbol(sig))) %>%
-    slice_head(n = 10) %>%
-    pull(peptide_id)
-
-  top_10_genes_dn <- labeled_dat %>%
-    filter(P.Value <= p_thresh & logFC <= -lfc) %>%
-    arrange(eval(as.symbol(sig))) %>%
-    slice_head(n = 10) %>%
-    pull(peptide_id)
-
-  labeled_dat <- labeled_dat %>%
-    mutate(
-      highlight = ifelse(peptide_id %in% c(top_10_genes_up, top_10_genes_dn), peptide_id, NA),
-      label_display = ifelse(
-        !is.na(highlight),
-        {
-          parts <- strsplit(highlight, " -- ", fixed = TRUE)
-          protein_label <- sapply(parts, `[`, 1)
-          precursor_part <- sapply(parts, function(x) paste(x[-1], collapse = " -- "))
-          ifelse(
-            nchar(precursor_part) > 10,
-            paste0(protein_label, " -- ", substr(precursor_part, 1, 2), "...",
-                   substr(precursor_part, nchar(precursor_part) - 1, nchar(precursor_part))),
-            paste0(protein_label, " -- ", precursor_part)
-          )
-        },
-        NA_character_
-      )
-    ) %>%
-    filter(!is.na(logFC), !is.na(P.Value), is.finite(logFC), is.finite(P.Value))
-
-  labeled_dat <- labeled_dat %>%
-    mutate(sig_label = case_when(
-      eval(as.symbol(sig)) < p_thresh & logFC >  lfc ~ "Up-Regulated",
-      eval(as.symbol(sig)) < p_thresh & logFC < -lfc ~ "Down-Regulated",
-      TRUE ~ "Not Significant"
-    ))
-
-  sig_boundary <- labeled_dat %>%
-    filter(sig_label != "Not Significant") %>%
-    summarise(y = if (n() > 0) min(-log10(P.Value)) else -log10(p_thresh)) %>%
-    pull(y)
-
-  volcano_plot <- ggplot(labeled_dat, aes(x = logFC, y = -log10(P.Value), color = sig_label)) +
-    geom_point(data = labeled_dat %>% filter(sig_label == "Not Significant"), alpha = 0.4) +
-    geom_point(data = labeled_dat %>% filter(sig_label != "Not Significant"), alpha = 0.7) +
-    scale_color_manual(
-      values = c("Up-Regulated" = color1, "Down-Regulated" = color2, "Not Significant" = "gray70"),
-      name = NULL
-    ) +
-    geom_label_repel(data = labeled_dat %>% filter(!is.na(label_display)),
-                     aes(x = logFC, y = -log10(P.Value), label = label_display),
-                     max.overlaps = Inf, show.legend = FALSE) +
-    geom_hline(yintercept = sig_boundary, col = "gray40", linetype = 2) +
-    geom_vline(xintercept = c(-lfc, lfc)) +
-    theme_minimal(base_size = 14) +
-    theme(legend.position = "right",
-          legend.text = element_text(size = 13),
-          legend.key.size = unit(1.2, "cm"),
-          axis.text = element_text(size = 12),
-          axis.title = element_text(size = 13)) +
-    labs(x = paste0("log2 fold-change (", exp_name, " / ", ctrl_name, ")\n",
-                    "\u2190 higher in ", ctrl_name, "          higher in ", exp_name, " \u2192"),
-         y = "-log10(P-value)",
-         title = create_comparison_name(exp_name, ctrl_name, "Differentially expressed genes - ")
-    )
-  return(list(plot = volcano_plot, highlighted_ids = c(top_10_genes_up, top_10_genes_dn)))
-}
-
-
-generate_ma_plot_protein <- function(data, exp_name, ctrl_name, highlighted_ids = NULL,
-                                      p_thresh = 0.05, lfc = 0.58,
-                                      label_col = "uniprotswissprot",
-                                      color1 = "#D55E00", color2 = "#0072B2") {
-  ma_df <- data %>%
-    filter(!is.na(AveExpr), !is.na(logFC), is.finite(AveExpr), is.finite(logFC)) %>%
-    mutate(sig = case_when(
-      adj.P.Val < p_thresh & logFC >  lfc ~ "Up",
-      adj.P.Val < p_thresh & logFC < -lfc ~ "Down",
-      TRUE ~ "NS"
-    ))
-
-  ma_df <- ma_df %>%
-    mutate(sig = case_when(
-      sig == "Up"   ~ "Up-Regulated",
-      sig == "Down" ~ "Down-Regulated",
-      TRUE          ~ "Not Significant"
-    ))
-
-  ma_labeled <- if (!is.null(highlighted_ids)) {
-    ma_df %>%
-      filter(.data[[label_col]] %in% highlighted_ids) %>%
-      mutate(label_display = ifelse(
-        nchar(.data[[label_col]]) > 9,
-        paste0(substr(.data[[label_col]], 1, 3), "...",
-               substr(.data[[label_col]], nchar(.data[[label_col]]) - 2, nchar(.data[[label_col]]))),
-        .data[[label_col]]
-      ))
-  } else NULL
-
-  p <- ggplot(ma_df, aes(x = AveExpr, y = logFC, color = sig)) +
-    geom_point(data = ma_df %>% filter(sig == "Not Significant"), alpha = 0.3, size = 1) +
-    geom_point(data = ma_df %>% filter(sig != "Not Significant"), alpha = 0.6, size = 1) +
-    scale_color_manual(
-      values = c("Up-Regulated" = color1, "Down-Regulated" = color2, "Not Significant" = "gray60"),
-      name = NULL
-    ) +
-    geom_hline(yintercept = 0,    linetype = "dashed", color = "black") +
-    geom_hline(yintercept =  lfc, linetype = "dotted", color = "gray40") +
-    geom_hline(yintercept = -lfc, linetype = "dotted", color = "gray40") +
-    labs(x = "Average log2 intensity (AveExpr)",
-         y = paste0("log2 fold-change (", exp_name, " / ", ctrl_name, ")\n",
-                    "\n\u2190 higher in ", ctrl_name, "          higher in ", exp_name, " \u2192"),
-         title = create_comparison_name(exp_name, ctrl_name, "MA Plot - ")) +
-    theme_bw(base_size = 14) +
-    theme(legend.position = "right",
-          legend.text = element_text(size = 13),
-          legend.key.size = unit(1.2, "cm"),
-          axis.text = element_text(size = 12),
-          axis.title = element_text(size = 13))
-
-  if (!is.null(ma_labeled) && nrow(ma_labeled) > 0) {
-    p <- p + geom_label_repel(data = ma_labeled, aes(x = AveExpr, y = logFC, label = label_display, color = sig),
-                               max.overlaps = Inf, show.legend = FALSE, size = 3)
-  }
-  p
-}
-
-
-generate_ma_plot_phospho <- function(data, exp_name, ctrl_name, highlighted_ids = NULL,
-                                      p_thresh = 0.05, lfc = 0.58,
-                                      color1 = "#D55E00", color2 = "#0072B2") {
-  ma_df <- data %>%
-    filter(!is.na(AveExpr), !is.na(logFC), is.finite(AveExpr), is.finite(logFC)) %>%
-    mutate(sig = case_when(
-      adj.P.Val < p_thresh & logFC >  lfc ~ "Up",
-      adj.P.Val < p_thresh & logFC < -lfc ~ "Down",
-      TRUE ~ "NS"
-    ))
-
-  ma_df <- ma_df %>%
-    mutate(sig = case_when(
-      sig == "Up"   ~ "Up-Regulated",
-      sig == "Down" ~ "Down-Regulated",
-      TRUE          ~ "Not Significant"
-    ))
-
-  ma_labeled <- if (!is.null(highlighted_ids)) {
-    ma_df %>%
-      filter(peptide_id %in% highlighted_ids) %>%
-      mutate(label_display = {
-        parts <- strsplit(peptide_id, " -- ", fixed = TRUE)
-        protein_label <- sapply(parts, `[`, 1)
-        precursor_part <- sapply(parts, function(x) paste(x[-1], collapse = " -- "))
-        ifelse(
-          nchar(precursor_part) > 10,
-          paste0(protein_label, " -- ", substr(precursor_part, 1, 2), "...",
-                 substr(precursor_part, nchar(precursor_part) - 1, nchar(precursor_part))),
-          paste0(protein_label, " -- ", precursor_part)
-        )
-      })
-  } else NULL
-
-  p <- ggplot(ma_df, aes(x = AveExpr, y = logFC, color = sig)) +
-    geom_point(data = ma_df %>% filter(sig == "Not Significant"), alpha = 0.3, size = 1) +
-    geom_point(data = ma_df %>% filter(sig != "Not Significant"), alpha = 0.6, size = 1) +
-    scale_color_manual(
-      values = c("Up-Regulated" = color1, "Down-Regulated" = color2, "Not Significant" = "gray60"),
-      name = NULL
-    ) +
-    geom_hline(yintercept = 0,    linetype = "dashed", color = "black") +
-    geom_hline(yintercept =  lfc, linetype = "dotted", color = "gray40") +
-    geom_hline(yintercept = -lfc, linetype = "dotted", color = "gray40") +
-    labs(x = "Average log2 intensity (AveExpr)",
-         y = paste0("log2 fold-change (", exp_name, " / ", ctrl_name, ")\n",
-                    "\u2191 higher in ", exp_name, "\n\u2193 higher in ", ctrl_name),
-         title = create_comparison_name(exp_name, ctrl_name, "MA Plot - ")) +
-    theme_bw(base_size = 14) +
-    theme(legend.position = "right",
-          legend.text = element_text(size = 13),
-          legend.key.size = unit(1.2, "cm"),
-          axis.text = element_text(size = 12),
-          axis.title = element_text(size = 13))
-
-  if (!is.null(ma_labeled) && nrow(ma_labeled) > 0) {
-    p <- p + geom_label_repel(data = ma_labeled, aes(x = AveExpr, y = logFC, label = label_display, color = sig),
-                               max.overlaps = Inf, show.legend = FALSE, size = 3)
-  }
-  p
-}
-
-
+#' @title Generate a Global Heatmap of All Detected Molecules
+#' @details Filters to the top \code{top_n} most variable rows by coefficient of variation,
+#'   applies z-score or raw intensity normalisation, clusters rows and columns, and writes
+#'   a PNG to \code{out_dirs$heatmap/global_heatmap.png}.
+#' @param intensity_matrix Numeric matrix or data frame (features x samples) of log2
+#'   intensities. Rows with non-finite values are dropped before clustering.
+#' @param out_dirs Named list of output directories as returned by
+#'   \code{\link{setup_directories}}.
+#' @param top_n Integer. Maximum number of rows (by CV) to include. Default \code{1000}.
+#' @param molecule_label Character. Label used in plot titles and axis (e.g. \code{"Proteins"},
+#'   \code{"Peptides"}). Default \code{"Proteins"}.
+#' @param heatmap_norm Character. Normalisation method: \code{"zscore"} (default) scales each
+#'   row to mean 0 / sd 1; any other value uses raw intensities.
+#' @param color1 Character. Reserved colour for consistency with other plot helpers.
+#'   Default \code{"#D55E00"}.
+#' @param color2 Character. Reserved colour for consistency with other plot helpers.
+#'   Default \code{"#0072B2"}.
+#' @return Character string giving the full path to the saved PNG file.
 generate_global_heatmap <- function(intensity_matrix, out_dirs, top_n = 1000, molecule_label = "Proteins",
                                     heatmap_norm = "zscore",
                                     color1 = "#D55E00", color2 = "#0072B2") {
@@ -492,8 +246,26 @@ generate_global_heatmap <- function(intensity_matrix, out_dirs, top_n = 1000, mo
   return(out_path)
 }
 
-# Generate four imputation QC figures and save them to figures/imputation/.
-# molecule_label: "protein" or "peptide" — used in axis labels and filenames.
+#' @title Generate Imputation QC Figures
+#' @details Produces four PNG figures saved to \code{out_dirs$imputation}:
+#'   \enumerate{
+#'     \item Observed vs. imputed intensity histogram.
+#'     \item Number of missing values per sample (bar chart).
+#'     \item Total observed/imputed values by imputation count per molecule (stacked bar).
+#'     \item Distribution of imputation counts per molecule (bar chart with percentages).
+#'   }
+#' @param intensity_raw Numeric matrix or data frame (features x samples) of raw log2
+#'   intensities, with \code{NA} where values are missing.
+#' @param intensity_imputed Numeric matrix or data frame (features x samples) of imputed
+#'   log2 intensities. Row names must be a subset of \code{intensity_raw} row names.
+#' @param out_dirs Named list of output directories as returned by
+#'   \code{\link{setup_directories}}.
+#' @param molecule_label Character. Singular label for the molecule type used in axis and
+#'   title text (e.g. \code{"protein"}, \code{"peptide"}). Default \code{"protein"}.
+#' @param color1 Character. Hex colour for "Imputed" bars/fills. Default \code{"#D55E00"}.
+#' @param color2 Character. Hex colour for "Observed" bars/fills. Default \code{"#0072B2"}.
+#' @return Invisibly returns the path to the imputation figure directory
+#'   (\code{out_dirs$imputation}).
 generate_imputation_figures <- function(intensity_raw, intensity_imputed, out_dirs,
                                         molecule_label = "protein",
                                         color1 = "#D55E00", color2 = "#0072B2") {
@@ -501,13 +273,16 @@ generate_imputation_figures <- function(intensity_raw, intensity_imputed, out_di
 
   raw_mat     <- as.matrix(intensity_raw)
   imputed_mat <- as.matrix(intensity_imputed)
+  
   # Align raw_mat to post-filter rows (not-imputable rows may have been dropped)
   raw_mat  <- raw_mat[rownames(imputed_mat), , drop = FALSE]
   obs_mask <- !is.na(raw_mat)
 
   # --- 1. Observed vs Imputed histogram ---
   raw_vals <- data.frame(value = raw_mat[obs_mask],  type = "Observed")
+
   imp_vals <- data.frame(value = imputed_mat[!obs_mask], type = rep("Imputed", sum(!obs_mask)))
+
   all_vals      <- rbind(raw_vals, imp_vals)
   all_vals$type <- factor(all_vals$type, levels = c("Observed", "Imputed"))
 
@@ -588,29 +363,69 @@ generate_imputation_figures <- function(intensity_raw, intensity_imputed, out_di
   invisible(fig_dir)
 }
 
-generate_heatmap <- function(results_df, normalized_counts, p = 0.05, lfc = 0.58,
+#' @title Generate a Per-Comparison Differential Abundance Heatmap
+#' @details Filters \code{diff_df} to significant features (\code{adj.P.Val < p} and
+#'   \code{|logFC| >= lfc}), subsets \code{intensity_df} to the relevant samples, adds
+#'   a small jitter to break ties, and returns a \code{ComplexHeatmap::Heatmap} object
+#'   (not yet drawn or saved).
+#' @param diff_df Data frame of limma results (output of \code{\link{perform_limma_analysis}})
+#'   containing at minimum \code{adj.P.Val}, \code{logFC}, and the column named by
+#'   \code{row_id_col}.
+#' @param intensity_df Numeric data frame or matrix (features x samples) of log2 intensities.
+#'   Row names must match values in \code{diff_df[[row_id_col]]}.
+#' @param p Numeric. Adjusted p-value threshold for significance. Default \code{0.05}.
+#' @param lfc Numeric. Minimum absolute log2 fold-change threshold. Default \code{0.58}
+#'   (~1.5-fold).
+#' @param exp_name Character. Column name in \code{design} identifying experimental samples.
+#' @param ctrl_name Character. Column name in \code{design} identifying control samples.
+#' @param fig_dir Character. Directory for figure output (saving is the caller's
+#'   responsibility).
+#' @param design Model matrix (samples x groups) used to identify which samples belong to
+#'   each group.
+#' @param row_id_col Character. Column in \code{diff_df} whose values index rows of
+#'   \code{intensity_df}. Default \code{"uniprotswissprot"}.
+#' @param heatmap_norm Character. \code{"zscore"} (default) or any other value for raw
+#'   intensity.
+#' @param color1 Character. Reserved colour parameter for consistency. Default
+#'   \code{"#D55E00"}.
+#' @param color2 Character. Reserved colour parameter for consistency. Default
+#'   \code{"#0072B2"}.
+#' @return A \code{ComplexHeatmap::Heatmap} object ready to be drawn with \code{draw()}.
+generate_heatmap <- function(diff_df, intensity_df, p = 0.05, lfc = 0.58,
                              exp_name, ctrl_name, fig_dir, design,
                              row_id_col = "uniprotswissprot",
                              heatmap_norm = "zscore",
                              color1 = "#D55E00", color2 = "#0072B2") {
 
   # filter the data for certain pvalues and lfc
-  filtered_data <- results_df %>%
+  filtered_data <- diff_df %>%
     dplyr::filter((adj.P.Val < p & abs(logFC) >= lfc))
+  flog.info("generate_heatmap: %d rows after significance filter (p=%.2f, lfc=%.2f)", nrow(filtered_data), p, lfc)
+  flog.info("generate_heatmap: row_id_col='%s', values: %s", row_id_col, paste(head(filtered_data[[row_id_col]], 3), collapse=", "))
 
   # restrict columns to only the two groups being compared
-  all_samples  <- colnames(normalized_counts)
+  all_samples  <- colnames(intensity_df)
   exp_samples  <- all_samples[design[, exp_name]  == 1]
   ctrl_samples <- all_samples[design[, ctrl_name] == 1]
   comparison_samples <- c(exp_samples, ctrl_samples)
+  flog.info("generate_heatmap: exp_samples=%s", paste(exp_samples, collapse=", "))
+  flog.info("generate_heatmap: ctrl_samples=%s", paste(ctrl_samples, collapse=", "))
 
   # add jitter
-  values <- normalized_counts[filtered_data[[row_id_col]], comparison_samples] %>%
-    as.matrix() %>%
-    jitter(factor = 1, amount = 0.00001)
+  values <- intensity_df[filtered_data[[row_id_col]], comparison_samples] %>% as.matrix()
+  values <- values %>% jitter(factor = 1, amount = 0.00001)
+
+  flog.info("generate_heatmap: values matrix dim=%s, NA count=%d, Inf count=%d",
+            paste(dim(values), collapse="x"),
+            sum(is.na(values)),
+            sum(is.infinite(values)))
 
   if (heatmap_norm == "zscore") {
     plot_mat <- t(scale(t(values)))
+    flog.info("generate_heatmap: plot_mat after zscore dim=%s, NA count=%d, Inf count=%d",
+              paste(dim(plot_mat), collapse="x"),
+              sum(is.na(plot_mat)),
+              sum(is.infinite(plot_mat)))
     legend_name <- "Z-score"
     col_scale <- colorRamp2(c(min(plot_mat, na.rm = TRUE), 0, max(plot_mat, na.rm = TRUE)),
                             c("#2166AC", "white", "#B2182B"))
@@ -622,14 +437,13 @@ generate_heatmap <- function(results_df, normalized_counts, p = 0.05, lfc = 0.58
                             c("#2166AC", "white", "#B2182B"))
   }
 
-  # plot the heatmap
   ht <- Heatmap(
     plot_mat,
     name = legend_name,
     col = col_scale,
-    cluster_rows = TRUE,     # dendrograma de filas
-    cluster_columns = TRUE,  # dendrograma de columnas
-    show_row_names = FALSE,  # equivalente a labRow = NA
+    cluster_rows = TRUE,
+    cluster_columns = TRUE,
+    show_row_names = FALSE,
     show_column_names = TRUE,
     row_title = "Features",
     column_title = "Samples",
@@ -638,129 +452,21 @@ generate_heatmap <- function(results_df, normalized_counts, p = 0.05, lfc = 0.58
     column_title_gp = grid::gpar(fontsize = 12),
     row_title_gp = grid::gpar(fontsize = 12)
   )
-  
+
   return(ht)
-  
 }
 
-# ==========================
-# gsea analysis functions
-# ==========================
-
-aggregate_phospho_for_gsea <- function(limma_results, peptide_metadata, p = 0.05, lfc = 0.58) {
-  # uniprot_id is already present on limma_results (joined upstream in
-  # run_analysis_phospho); if for any reason it is absent, fall back to
-  # joining peptide_metadata and deriving it from PG.UniProtIds
-  if (!"uniprot_id" %in% colnames(limma_results)) {
-    limma_results <- limma_results %>%
-      left_join(peptide_metadata, by = "peptide_id") %>%
-      mutate(uniprot_id = sapply(strsplit(PG.UniProtIds, ";"), `[`, 1))
-  }
-
-  sig_peptides <- limma_results %>%
-    filter(adj.P.Val < p & abs(logFC) >= lfc)
-  n_sig_peptides <- nrow(sig_peptides)
-
-  sig_uniprots <- sig_peptides %>%
-    pull(uniprot_id) %>%
-    unique()
-  n_sig_uniprots <- length(sig_uniprots)
-
-  if (n_sig_uniprots == 0) {
-    flog.warn("No significant phosphopeptides found for GSEA aggregation")
-    return(NULL)
-  }
-
-  # For each qualifying UniProt ID, take the logFC of the most significant
-  # phosphopeptide (smallest adj.P.Val) as the representative value
-  aggregated <- limma_results %>%
-    filter(uniprot_id %in% sig_uniprots) %>%
-    group_by(uniprot_id) %>%
-    slice_min(adj.P.Val, n = 1, with_ties = FALSE) %>%
-    ungroup() %>%
-    dplyr::select(uniprot_id, logFC)
-
-  # Map UniProt IDs to Ensembl IDs via biomart (same approach as regular pipeline)
-  if (is.null(ensembl)) {
-    flog.warn("BioMart mart object is NULL — skipping Ensembl mapping for phospho GSEA")
-    return(NULL)
-  }
-  mapping <- tryCatch(
-    getBM(
-      attributes = c("uniprotswissprot", "ensembl_gene_id", "hgnc_symbol"),
-      filters    = "uniprotswissprot",
-      values     = unique(aggregated$uniprot_id),
-      mart       = ensembl
-    ) %>% distinct(uniprotswissprot, .keep_all = TRUE),
-    error = function(e) {
-      flog.error("BioMart query failed in phospho GSEA aggregation: %s",
-                 e$message)
-      NULL
-    }
-  )
-  if (is.null(mapping)) return(NULL)
-
-  aggregated <- aggregated %>%
-    left_join(mapping, by = c("uniprot_id" = "uniprotswissprot")) %>%
-    filter(!is.na(ensembl_gene_id))
-  n_mapped <- nrow(aggregated)
-
-  if (n_mapped == 0) {
-    flog.warn("No Ensembl IDs found for aggregated phospho UniProt IDs — GSEA skipped"
-    )
-    return(NULL)
-  }
-
-  counts <- list(n_sig_peptides = n_sig_peptides, n_sig_uniprots = n_sig_uniprots, n_mapped = n_mapped)
-  return(list(data = aggregated, counts = counts))
-}
-
-process_gsea <- function(result, p = 0.05, lfc = 0.58, ont_option = "BP") {
-  tryCatch({
-    
-    sig_genes <- result %>% arrange(desc(logFC))
-    sig_genes <- sig_genes %>% filter(!is.na(logFC))
-    
-    if(nrow(sig_genes) < 2) {
-      flog.warn("Not enough significant genes for GSEA (n < 2)")
-      return(NULL)
-    }
-    
-    # create a gene list where the names are ensembl genes
-    # and the values are logFC
-    gene_list <- sig_genes$logFC
-    names(gene_list) <- sig_genes$ensembl_gene_id
-    gene_list <- gene_list[!is.na(names(gene_list))]
-    gene_list <- gene_list[!duplicated(names(gene_list))]
-    gene_list <- gene_list[abs(gene_list) >= 0.1]  # drop near-zero logFC genes
-
-    if (length(gene_list) < 2) {
-      flog.warn("Not enough genes with Ensembl IDs for GSEA (n < 2)")
-      return(NULL)
-    }
-
-    gse_result <- gseGO(geneList = gene_list,
-                        ont = ont_option,
-                        minGSSize = 5,
-                        maxGSSize = 500,
-                        keyType = "ENSEMBL",
-                        scoreType = "std",
-                        pvalueCutoff = 0.05,
-                        pAdjustMethod = "fdr",
-                        OrgDb = annotation_db)
-
-    if (is.null(gse_result) || nrow(gse_result@result) == 0) {
-      flog.warn("No enriched GO terms found in GSEA result")
-      return(NULL)
-    }
-
-    setReadable(gse_result, OrgDb = annotation_db, keyType = "ENSEMBL")
-  }, error = function(e) {
-    flog.error("GSEA processing failed: %s", e$message)
-    return(NULL)
-  })
-}
-
+#' @title Create a GSEA NES Bar Plot
+#' @details Selects up to 15 top positively enriched and 15 top negatively enriched GO
+#'   terms by NES, wraps long descriptions, and plots a horizontal bar chart coloured by
+#'   adjusted p-value.
+#' @param gse A \code{gseaResult} object (output of \code{\link{process_gsea}}).
+#' @param title Character. Plot title.
+#' @param color1 Character. Colour for the low end of the p-value gradient (most
+#'   significant). Default \code{"#D55E00"}.
+#' @param color2 Character. Colour for the high end (least significant). Default
+#'   \code{"#0072B2"}.
+#' @return A \code{ggplot} object. Not saved to disk — pass to \code{\link{save_plot}}.
 create_barplot <- function(gse, title, color1 = "#D55E00", color2 = "#0072B2") {
   res <- as.data.frame(gse)
 
@@ -780,237 +486,4 @@ create_barplot <- function(gse, title, color1 = "#D55E00", color2 = "#0072B2") {
       plot.title         = element_text(hjust = 0.5, size = 11)
     ) +
     labs(x = "Normalized Enrichment Score (NES)", title = title)
-}
-
-# ==========================
-# centralizing function
-# ==========================
-
-run_analysis <- function(comparison, limma_params, normalized_counts, out_dirs, intensity_matrix_raw = NULL, ont_option = "BP", skip_gsea = FALSE, protein_metadata = NULL, heatmap_norm = "zscore", color1 = "#D55E00", color2 = "#0072B2") {
-  tryCatch({
-    flog.info("=== Starting analysis for comparison: %s ===", comparison$name)
-
-    limma_results <- perform_limma_analysis(limma_params, comparison$exp, comparison$ctrl)
-    limma_results <- limma_results %>% rownames_to_column(var = "uniprotswissprot")
-
-    # Join gene names from input data (PG.Genes column)
-    if (!is.null(protein_metadata)) {
-      annotated_results <- limma_results %>%
-        left_join(protein_metadata, by = "uniprotswissprot")
-    } else {
-      annotated_results <- limma_results
-    }
-
-    # Compute per-protein imputation category using pre-imputation NA counts
-    if (!is.null(intensity_matrix_raw)) {
-      all_samples  <- colnames(limma_params$E)
-      exp_samples  <- all_samples[limma_params$design[, comparison$exp]  == 1]
-      ctrl_samples <- all_samples[limma_params$design[, comparison$ctrl] == 1]
-      n_exp  <- length(exp_samples)
-      n_ctrl <- length(ctrl_samples)
-
-      na_exp   <- rowSums(is.na(intensity_matrix_raw[annotated_results$uniprotswissprot, exp_samples,  drop = FALSE]))
-      na_ctrl  <- rowSums(is.na(intensity_matrix_raw[annotated_results$uniprotswissprot, ctrl_samples, drop = FALSE]))
-      na_total <- na_exp + na_ctrl
-
-      annotated_results <- annotated_results %>%
-        mutate(
-          imputation_category = case_when(
-            adj.P.Val >= 0.05                                                      ~ "not-significant",
-            na_total == 0                                                           ~ "complete-data",
-            (na_exp == n_exp & na_ctrl == 0) | (na_ctrl == n_ctrl & na_exp == 0)  ~ "on-off",
-            na_total == 1                                                           ~ "imputation-low",
-            na_total == 2                                                           ~ "imputation-medium",
-            na_total >= 3                                                           ~ "imputation-high",
-            TRUE                                                                    ~ "other"
-          )
-        )
-      flog.info("Imputation category distribution for %s:\n%s",
-                comparison$name,
-                paste(capture.output(
-                  print(table(annotated_results$imputation_category))
-                ), collapse = "\n"))
-    }
-
-    output_file <- create_file_path(out_dirs$de_data, comparison$name, "_limma")
-    write.csv(annotated_results, output_file)
-
-    flog.info("Generating volcano plot: %s", comparison$name)
-    volcano_result <- generate_volcano_protein(annotated_results, comparison$exp, comparison$ctrl, color1 = color1, color2 = color2)
-    save_plot(volcano_result$plot, create_file_path(out_dirs$volcano, "", comparison$name, "_volcano.png"),
-              width = 10, height = 8)
-
-    flog.info("Generating MA plot: %s", comparison$name)
-    ma_plot <- generate_ma_plot_protein(annotated_results, comparison$exp, comparison$ctrl,
-                                        highlighted_ids = volcano_result$highlighted_ids,
-                                        color1 = color1, color2 = color2)
-    save_plot(ma_plot, create_file_path(out_dirs$ma, "", comparison$name, "_ma.png"),
-              width = 10, height = 8)
-
-    flog.info("Generating heatmap: %s", comparison$name)
-    png(create_file_path(out_dirs$heatmap, "", comparison$name, "_heatmap.png"),
-        width = 2400, height = 3200, res = 300)
-    ht <- generate_heatmap(limma_results, normalized_counts,
-                     exp_name = comparison$exp, ctrl_name = comparison$ctrl,
-                     fig_dir = out_dirs$heatmap, design = limma_params$design,
-                     heatmap_norm = heatmap_norm, color1 = color1, color2 = color2)
-    draw(ht, column_title = paste0(comparison$exp, " vs ", comparison$ctrl, " — Differentially Abundant Proteins"),
-         column_title_gp = grid::gpar(fontsize = 14, fontface = "bold"))
-    dev.off()
-
-    if (skip_gsea) {
-      flog.info("Skipping GSEA for %s (--skip-gsea flag set)", comparison$name)
-      gse <- NULL
-    } else {
-      flog.info("Running GSEA for %s", comparison$name)
-      gse <- process_gsea(annotated_results, ont_option = ont_option)
-
-      if(!is.null(gse)) {
-        flog.info("GSEA returned results for %s", comparison$name)
-        write.csv(as.data.frame(gse), create_file_path(out_dirs$gsea_data, "go_analysis_", comparison$name))
-
-        gsea_plot <- create_barplot(gse, create_comparison_name(comparison$exp, comparison$ctrl, "GSEA "), color1 = color1, color2 = color2)
-
-        save_plot(gsea_plot, create_file_path(out_dirs$gsea, "", comparison$name, "_gsea.png"),
-                  width = 10, height = 12)
-      }
-    }
-
-    return(list(limma = annotated_results, gsea = gse, highlighted_ids = volcano_result$highlighted_ids))
-
-
-  }, error = function(e) {
-    flog.error("run_analysis failed for comparison '%s': %s", comparison$name, e$message)
-    return(NULL)
-  })
-}
-
-run_analysis_phospho <- function(comparison, limma_params, normalized_counts, out_dirs, intensity_matrix_raw = NULL, peptide_metadata = NULL, ont_option = "BP", skip_gsea = FALSE, heatmap_norm = "zscore", color1 = "#D55E00", color2 = "#0072B2") {
-  tryCatch({
-    flog.info("=== Starting phospho analysis for comparison: %s ===", comparison$name)
-
-    limma_results <- perform_limma_analysis(limma_params, comparison$exp, comparison$ctrl)
-    limma_results <- limma_results %>% rownames_to_column(var = "peptide_id")
-
-    # Join peptide metadata to get UniProt IDs, then annotate with gene symbols
-    if (!is.null(peptide_metadata)) {
-      limma_results <- limma_results %>% left_join(peptide_metadata, by = "peptide_id") %>%
-        mutate(uniprot_id = sapply(strsplit(PG.UniProtIds, ";"), `[`, 1))
-      annotation <- tryCatch({
-        m <- getBM(
-          attributes = c("uniprotswissprot", "hgnc_symbol"),
-          filters    = "uniprotswissprot",
-          values     = unique(na.omit(limma_results$uniprot_id)),
-          mart       = ensembl
-        )
-        distinct(m, uniprotswissprot, .keep_all = TRUE)
-      }, error = function(e) {
-        flog.error("BioMart annotation failed for phospho comparison '%s': %s",
-                   comparison$name, e$message)
-        data.frame(uniprotswissprot = character(), hgnc_symbol = character())
-      })
-      limma_results <- limma_results %>%
-        left_join(annotation, by = c("uniprot_id" = "uniprotswissprot"))
-    }
-
-    # Compute per-protein imputation category using pre-imputation NA counts
-    if (!is.null(intensity_matrix_raw)) {
-      all_samples  <- colnames(limma_params$E)
-      exp_samples  <- all_samples[limma_params$design[, comparison$exp]  == 1]
-      ctrl_samples <- all_samples[limma_params$design[, comparison$ctrl] == 1]
-      n_exp  <- length(exp_samples)
-      n_ctrl <- length(ctrl_samples)
-
-      na_exp   <- rowSums(is.na(intensity_matrix_raw[limma_results$peptide_id, exp_samples,  drop = FALSE]))
-      na_ctrl  <- rowSums(is.na(intensity_matrix_raw[limma_results$peptide_id, ctrl_samples, drop = FALSE]))
-      na_total <- na_exp + na_ctrl
-
-      limma_results <- limma_results %>%
-        mutate(
-          imputation_category = case_when(
-            adj.P.Val >= 0.05                                                      ~ "not-significant",
-            na_total == 0                                                           ~ "complete-data",
-            (na_exp == n_exp & na_ctrl == 0) | (na_ctrl == n_ctrl & na_exp == 0)  ~ "on-off",
-            na_total == 1                                                           ~ "imputation-low",
-            na_total == 2                                                           ~ "imputation-medium",
-            na_total >= 3                                                           ~ "imputation-high",
-            TRUE                                                                    ~ "other"
-          )
-        )
-      flog.info("Imputation category distribution for %s:\n%s",
-                comparison$name,
-                paste(capture.output(
-                  print(table(limma_results$imputation_category))
-                ), collapse = "\n"))
-    }
-
-    output_file <- create_file_path(out_dirs$de_data, comparison$name, "_limma")
-    write.csv(limma_results, output_file)
-
-    flog.info("Generating phospho volcano plot: %s", comparison$name)
-    volcano_result <- generate_volcano_phospho(limma_results, comparison$exp, comparison$ctrl, color1 = color1, color2 = color2)
-    save_plot(volcano_result$plot, create_file_path(out_dirs$volcano, "", comparison$name, "_volcano.png"),
-              width = 10, height = 8)
-
-    flog.info("Generating phospho MA plot: %s", comparison$name)
-    ma_plot <- generate_ma_plot_phospho(limma_results, comparison$exp, comparison$ctrl,
-                                        highlighted_ids = volcano_result$highlighted_ids,
-                                        color1 = color1, color2 = color2)
-    save_plot(ma_plot, create_file_path(out_dirs$ma, "", comparison$name, "_ma.png"),
-              width = 10, height = 8)
-
-    flog.info("Generating phospho heatmap: %s", comparison$name)
-    png(create_file_path(out_dirs$heatmap, "", comparison$name, "_heatmap.png"),
-        width = 2400, height = 3200, res = 300)
-    ht <- generate_heatmap(limma_results, normalized_counts,
-                           exp_name = comparison$exp, ctrl_name = comparison$ctrl,
-                           fig_dir = out_dirs$heatmap, design = limma_params$design,
-                           row_id_col = "peptide_id",
-                           heatmap_norm = heatmap_norm, color1 = color1, color2 = color2)
-    draw(ht, column_title = paste0(comparison$exp, " vs ", comparison$ctrl, " — Differentially Abundant Phosphopeptides"),
-         column_title_gp = grid::gpar(fontsize = 14, fontface = "bold"))
-    dev.off()
-
-    if (skip_gsea) {
-      flog.info("Skipping GSEA for %s (--skip-gsea flag set)", comparison$name)
-      gse <- NULL
-      protein_counts <- NULL
-    } else {
-      flog.info("Running phospho GSEA for %s", comparison$name)
-      agg_result <- tryCatch(
-        aggregate_phospho_for_gsea(limma_results, peptide_metadata),
-        error = function(e) {
-          flog.error("Phospho GSEA aggregation failed for '%s': %s",
-                     comparison$name, e$message)
-          NULL
-        }
-      )
-      protein_counts <- if (!is.null(agg_result)) agg_result$counts else NULL
-      gse <- tryCatch({
-        if (!is.null(agg_result)) process_gsea(agg_result$data, ont_option = ont_option) else NULL
-      }, error = function(e) {
-        flog.error("Phospho GSEA failed for '%s': %s", comparison$name, e$message)
-        NULL
-      })
-      if (!is.null(gse)) {
-        flog.info("Phospho GSEA returned results for %s", comparison$name)
-        tryCatch({
-          write.csv(as.data.frame(gse), create_file_path(out_dirs$gsea_data, comparison$name, "_go_analysis.csv"))
-          gsea_plot <- create_barplot(gse, create_comparison_name(comparison$ctrl, comparison$exp, "GSEA "), color1 = color1, color2 = color2)
-          save_plot(gsea_plot, create_file_path(out_dirs$gsea, "", comparison$name, "_gsea.png"),
-                    width = 10, height = 12)
-        }, error = function(e) {
-          flog.error("Failed to save phospho GSEA outputs for '%s': %s",
-                     comparison$name, e$message)
-        })
-      }
-    }
-
-    return(list(limma = limma_results, gsea = gse, protein_counts = protein_counts, highlighted_ids = volcano_result$highlighted_ids))
-
-  }, error = function(e) {
-    flog.error("run_analysis_phospho failed for comparison '%s': %s",
-               comparison$name, e$message)
-    return(NULL)
-  })
 }

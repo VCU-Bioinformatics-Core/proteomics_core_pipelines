@@ -2,6 +2,7 @@
 .Rhistory
 .RData
 .Ruserdata
+renv/
 renv/library/
 renv/staging/
 renv/python/
@@ -11,3 +12,9 @@ README.log
 README.tex
 Rplots.pdf
 ovarian_results/
+ovarian_results
+.vscode/tmstate.json
+test/steven_grant/
+Rprofile
+.Rprofile
+.Rbuildignore
