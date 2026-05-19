@@ -75,7 +75,7 @@ if (is.null(opt$runid) || is.null(opt$counts) || is.null(opt$samplesheet)) {
 
 run_proteome_da_pipeline(
   run_id            = opt$runid,
-  counts_file       = opt$counts,
+  protein_matrix_file = opt$counts,
   samplesheet_file  = opt$samplesheet,
   out_dir           = opt$outdir,
   genome            = opt$annotation,
