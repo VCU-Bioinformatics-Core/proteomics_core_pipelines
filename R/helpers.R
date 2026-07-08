@@ -84,6 +84,7 @@ setup_directories <- function(base_dir) {
     de_data = file.path(base_dir, "data/de_data"),
     anova = file.path(base_dir, "data/anova"),
     gsea_data = file.path(base_dir, "data/gsea_data"),
+    ksea = file.path(base_dir, "data/ksea"),
     volcano = file.path(base_dir, "figures/volcano"),
     ma = file.path(base_dir, "figures/ma"),
     heatmap = file.path(base_dir, "figures/heatmap"),

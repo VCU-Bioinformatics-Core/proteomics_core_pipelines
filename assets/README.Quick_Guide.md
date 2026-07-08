@@ -278,7 +278,7 @@ This file contains metadata for each sample, including group identifiers and bin
 ### Human Analysis
 
 ```bash
-Rscript inst/scripts/de.regular.R \
+Rscript inst/scripts/da.proteome.R \
   --counts human_counts.tsv \
   --samplesheet samplesheet.csv \
   --outdir human_results \
@@ -289,7 +289,7 @@ Rscript inst/scripts/de.regular.R \
 ### Mouse Analysis
 
 ```bash
-Rscript inst/scripts/de.regular.R \
+Rscript inst/scripts/da.proteome.R \
   --counts mouse_counts.tsv \
   --samplesheet samplesheet.csv \
   --outdir mouse_results \
@@ -302,8 +302,8 @@ Rscript inst/scripts/de.regular.R \
 The package includes a small example dataset derived from the MSstats ovarian cancer SRM dataset (14 proteins, 10 control samples, 6 tumor samples).
 
 ```bash
-Rscript inst/scripts/de.regular.R \
-  --counts inst/scripts/extdata/ovarian_intensity_matrix.csv \
+Rscript inst/scripts/da.proteome.R \
+  --counts inst/extdata/ovarian_intensity_matrix.csv \
   --samplesheet inst/extdata/ovarian_samplesheet.csv \
   --outdir ovarian_results \
   --runid ovarian_example \
