@@ -48,4 +48,5 @@ Imports:
     org.Hs.eg.db,
     org.Mm.eg.db,
     tidyr,
-    progress
+    progress,
+    msigdbr

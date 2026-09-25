@@ -57,6 +57,12 @@ option_list <- list(
               help = "Gene ontology category for GSEA: 'BP', 'MF', 'CC', or 'ALL' [default= %default]"),
   make_option(c("--skip-gsea"), action = "store_true", default = FALSE,
               help = "Skip GSEA analysis [default= %default]"),
+  make_option(c("--gsea-method"), type = "character", default = "go",
+              help = "GSEA method: 'go' (gseGO) or 'msigdb' (MSigDB via msigdbr) [default= %default]"),
+  make_option(c("--msigdb-collection"), type = "character", default = "H",
+              help = "MSigDB collection code, used when --gsea-method=msigdb, e.g. 'H', 'C2', 'C5' [default= %default]"),
+  make_option(c("--msigdb-subcollection"), type = "character", default = NULL,
+              help = "MSigDB subcollection, used when --gsea-method=msigdb, e.g. 'CP:KEGG' [default= NULL]"),
   make_option(c("--skip-anova"), action = "store_true", default = FALSE,
               help = "Skip one-way ANOVA [default= %default]"),
   make_option(c("--group-color1"), type = "character", default = "#D55E00",
@@ -75,7 +81,7 @@ if (is.null(opt$runid) || is.null(opt$counts) || is.null(opt$samplesheet)) {
 
 run_proteome_da_pipeline(
   run_id            = opt$runid,
-  counts_file       = opt$counts,
+  protein_matrix_file = opt$counts,
   samplesheet_file  = opt$samplesheet,
   out_dir           = opt$outdir,
   genome            = opt$annotation,
@@ -86,6 +92,9 @@ run_proteome_da_pipeline(
   heatmap_norm      = opt$`heatmap-norm`,
   gsea_ont          = opt$`gsea-ont`,
   skip_gsea         = opt$`skip-gsea`,
+  gsea_method       = opt$`gsea-method`,
+  msigdb_collection   = opt$`msigdb-collection`,
+  msigdb_subcollection = opt$`msigdb-subcollection`,
   skip_anova        = opt$`skip-anova`,
   group_color1      = opt$`group-color1`,
   group_color2      = opt$`group-color2`

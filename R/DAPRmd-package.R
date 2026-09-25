@@ -8,6 +8,7 @@
 #' @import janitor
 #' @import scales
 #' @import clusterProfiler
+#' @import msigdbr
 #' @import enrichplot
 #' @import readr
 #' @import DT

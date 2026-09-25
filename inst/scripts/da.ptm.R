@@ -12,7 +12,7 @@
 #   library(DAPRmd)
 #
 # Usage:
-#   Rscript inst/scripts/de.ptm.R --runid <id> --counts <path> --samplesheet <path> --outdir <dir> --annotation human
+#   Rscript inst/scripts/de.ptm.R --runid <id> --ptm-matrix-file <path> --samplesheet <path> --outdir <dir> --annotation human
 
 library(devtools)
 # Resolve the package root from this script's own path, regardless of
@@ -27,8 +27,8 @@ load_all(.pkg_root)
 library(optparse)
 
 option_list <- list(
-  make_option(c("-c", "--counts"), type = "character", default = NULL,
-              help = "Required. Path to merged counts.tsv file"),
+  make_option(c("-c", "--ptm-matrix-file"), type = "character", default = NULL, dest="ptm_matrix_file",
+              help = "Required. Path to merged ptm-matrix-file file"),
   make_option(c("-s", "--samplesheet"), type = "character", default = NULL,
               help = "Required. Path to samplesheet.csv file"),
   make_option(c("-o", "--outdir"), type = "character", default = "./output",
@@ -68,15 +68,15 @@ option_list <- list(
 opt_parser <- OptionParser(option_list = option_list)
 opt        <- parse_args(opt_parser)
 
-if (is.null(opt$runid) || is.null(opt$counts) || is.null(opt$samplesheet)) {
+if (is.null(opt$runid) || is.null(opt$ptm_matrix_file) || is.null(opt$samplesheet)) {
   print_help(opt_parser)
-  stop("--runid, --counts, and --samplesheet are required.")
+  stop("--runid, --ptm-matrix-file, and --samplesheet are required.")
 }
 
 run_ptm_pipeline(
   run_id            = opt$runid,
-  counts_file       = opt$counts,
   samplesheet_file  = opt$samplesheet,
+  ptm_matrix_file   = opt$ptm_matrix_file,
   out_dir           = opt$outdir,
   genome            = opt$annotation,
   imputation_method = opt$imputation,

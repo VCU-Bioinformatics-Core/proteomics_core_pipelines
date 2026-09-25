@@ -74,7 +74,8 @@ export_plotly_to_html <- function(plotly_obj, file_path) {
 #'   \code{normalizePath(..., mustWork = FALSE)}.
 #' @return Named list of character paths for each subdirectory:
 #'   \code{data}, \code{figures}, \code{de_data}, \code{anova}, \code{gsea_data},
-#'   \code{volcano}, \code{ma}, \code{heatmap}, \code{imputation}, \code{gsea}, \code{pca}.
+#'   \code{ksea}, \code{volcano}, \code{ma}, \code{heatmap}, \code{imputation},
+#'   \code{gsea}, \code{pca}.
 #'   All directories are created (recursively) as a side effect.
 setup_directories <- function(base_dir) {
   base_dir <- normalizePath(base_dir, mustWork = FALSE)

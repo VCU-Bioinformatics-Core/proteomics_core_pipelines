@@ -197,16 +197,30 @@ if (!is.null(analysis_params)) {{
     analysis_params$gsea_ont
   )
   gsea_performed <- ifelse(isTRUE(analysis_params$skip_gsea), "No", "Yes")
+  gsea_method <- ifelse(!is.null(analysis_params$gsea_method), analysis_params$gsea_method, "go")
+  is_msigdb <- identical(gsea_method, "msigdb")
+  gsea_detail_label <- ifelse(is_msigdb, "MSigDB Collection", "GSEA Gene Ontology")
+  gsea_detail_value <- ifelse(
+    is_msigdb,
+    paste0(
+      analysis_params$msigdb_collection,
+      ifelse(!is.null(analysis_params$msigdb_subcollection) && nzchar(analysis_params$msigdb_subcollection),
+             paste0(":", analysis_params$msigdb_subcollection), "")
+    ),
+    ont_label
+  )
   params_df <- data.frame(
     Parameter = c(
       "Genome / Annotation",
-      "GSEA Gene Ontology",
+      "GSEA Method",
+      gsea_detail_label,
       "GSEA Performed",
       "Global Heatmap Top-N"
     ),
     Value = c(
       tools::toTitleCase(analysis_params$genome),
-      ont_label,
+      toupper(gsea_method),
+      gsea_detail_value,
       gsea_performed,
       as.character(analysis_params$heatmap_top_n)
     ),
@@ -692,8 +706,9 @@ if (dap_flag > 0){{
 
 ```{{r gsea-header-{i}, results="asis"}}
 if (!isTRUE(analysis_params$skip_gsea)) {{
+  gsea_source_label <- if (identical(analysis_params$gsea_method, "msigdb")) "MSigDB gene sets" else "Gene Ontology (GO) terms"
   cat("**Gene Set Enrichment Analysis**\n\n")
-  cat("- Description: Gene Set Enrichment Analysis using Gene Ontology (GO) terms, displayed as a bar plot and table\n")
+  cat(paste0("- Description: Gene Set Enrichment Analysis using ", gsea_source_label, ", displayed as a bar plot and table\n"))
   cat("- X-axis: Normalized Enrichment Score (NES) — a positive NES indicates that the gene set is activated (upregulated) in the experimental condition, while a negative NES indicates that the gene set is suppressed (downregulated)\n")
   cat("- Y-axis: a given Gene Set\n\n")
 }}
@@ -732,6 +747,7 @@ if (!isTRUE(analysis_params$skip_gsea)) {{
 if (!isTRUE(analysis_params$skip_gsea)) {{
   if (!is.null(results[[{i}]]) && !is.null(results[[{i}]]$gsea)) {{
     gsea_results <- as.data.frame(results[[{i}]]$gsea) %>%
+        filter(p.adjust < 0.1) %>%
         mutate(enrichmentScore=formatC(enrichmentScore, format="e", digits=2),
                NES=formatC(NES, format="e", digits=2),
                p.adjust=formatC(p.adjust, format="e", digits=2),
@@ -749,7 +765,7 @@ if (!isTRUE(analysis_params$skip_gsea)) {{
   }}
 }}
 ```')
-    
+
     rmd_content <- paste0(rmd_content, comparison_section)
   }
   

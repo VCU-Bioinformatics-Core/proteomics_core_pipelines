@@ -202,6 +202,15 @@ generate_ma_plot_protein <- function(data, exp_name, ctrl_name, highlighted_ids 
 #'   or \code{"CC"}.
 #' @param skip_gsea Logical. If \code{TRUE}, GSEA is skipped entirely. Default
 #'   \code{FALSE}.
+#' @param gsea_method Character. Which GSEA method to run: \code{"go"} (default)
+#'   or \code{"msigdb"}. Only one method runs per comparison.
+#' @param msigdb_species Character. Species name as expected by \code{msigdbr}
+#'   (e.g. \code{"Homo sapiens"} or \code{"Mus musculus"}), used only when
+#'   \code{gsea_method = "msigdb"}.
+#' @param msigdb_collection Character. MSigDB collection code (e.g. \code{"H"}),
+#'   used only when \code{gsea_method = "msigdb"}. Default \code{"H"}.
+#' @param msigdb_subcollection Character. MSigDB subcollection (e.g. \code{"CP:KEGG"}),
+#'   used only when \code{gsea_method = "msigdb"}. Default \code{NULL}.
 #' @param protein_metadata Data frame with a \code{uniprotswissprot} column for joining
 #'   additional annotation (e.g. \code{PG.Genes}). Pass \code{NULL} to skip.
 #' @param heatmap_norm Character. \code{"zscore"} (default) or \code{"intensity"} for
@@ -219,7 +228,7 @@ generate_ma_plot_protein <- function(data, exp_name, ctrl_name, highlighted_ids 
 #'       plot.}
 #'   }
 #'   Returns \code{NULL} if the analysis fails entirely.
-run_single_proteome_da_comparison <- function(comparison, limma_params, normalized_counts, out_dirs, org_db=NULL, intensity_matrix_raw = NULL, ont_option = "BP", skip_gsea = FALSE, protein_metadata = NULL, heatmap_norm = "zscore", color1 = "#D55E00", color2 = "#0072B2") {
+run_single_proteome_da_comparison <- function(comparison, limma_params, normalized_counts, out_dirs, org_db=NULL, intensity_matrix_raw = NULL, ont_option = "BP", skip_gsea = FALSE, gsea_method = "go", msigdb_species = "Homo sapiens", msigdb_collection = "H", msigdb_subcollection = NULL, protein_metadata = NULL, heatmap_norm = "zscore", color1 = "#D55E00", color2 = "#0072B2") {
   tryCatch({
     flog.info("=== Starting analysis for comparison: %s ===", comparison$name)
 
@@ -294,13 +303,27 @@ run_single_proteome_da_comparison <- function(comparison, limma_params, normaliz
     if (skip_gsea) {
       flog.info("Skipping GSEA for %s (--skip-gsea flag set)", comparison$name)
       gse <- NULL
+    } else if (gsea_method == "msigdb") {
+      flog.info("Running MSigDB GSEA for %s", comparison$name)
+      gse <- process_gsea_msigdb(annotated_results, species = msigdb_species,
+                                  collection = msigdb_collection, subcollection = msigdb_subcollection)
+
+      if (!is.null(gse)) {
+        flog.info("MSigDB GSEA returned results for %s", comparison$name)
+        write.csv(as.data.frame(gse), create_file_path(out_dirs$gsea_data, "msigdb_analysis_", comparison$name), row.names = FALSE, quote = FALSE)
+
+        gsea_plot <- create_barplot(gse, create_comparison_name(comparison$exp, comparison$ctrl, "MSigDB GSEA "), color1 = color1, color2 = color2)
+
+        save_plot(gsea_plot, create_file_path(out_dirs$gsea, "", comparison$name, "_gsea.png"),
+                  width = 10, height = 12)
+      }
     } else {
-      flog.info("Running GSEA for %s", comparison$name)
+      flog.info("Running GO GSEA for %s", comparison$name)
       gse <- process_gsea(annotated_results, org_db, ont_option = ont_option)
 
       if(!is.null(gse)) {
         flog.info("GSEA returned results for %s", comparison$name)
-        write.csv(as.data.frame(gse), create_file_path(out_dirs$gsea_data, "go_analysis_", comparison$name))
+        write.csv(as.data.frame(gse), create_file_path(out_dirs$gsea_data, "go_analysis_", comparison$name), row.names = FALSE, quote = FALSE)
 
         gsea_plot <- create_barplot(gse, create_comparison_name(comparison$exp, comparison$ctrl, "GSEA "), color1 = color1, color2 = color2)
 

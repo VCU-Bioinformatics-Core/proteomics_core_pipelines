@@ -42,6 +42,13 @@
 #'   (\code{"BP"}, \code{"MF"}, or \code{"CC"}). Default \code{"BP"}.
 #' @param skip_gsea Logical. If \code{TRUE}, skip GSEA entirely.
 #'   Default \code{FALSE}.
+#' @param gsea_method Character. Which GSEA method to run: \code{"go"} (default)
+#'   or \code{"msigdb"}. Only one method runs per pipeline invocation.
+#' @param msigdb_collection Character. MSigDB collection code (e.g. \code{"H"} for
+#'   Hallmark), used only when \code{gsea_method = "msigdb"}. Default \code{"H"}.
+#' @param msigdb_subcollection Character. MSigDB subcollection (e.g.
+#'   \code{"CP:KEGG"}), used only when \code{gsea_method = "msigdb"}. Default
+#'   \code{NULL} (no subcategory filter).
 #' @param skip_anova Logical. If \code{TRUE}, skip one-way ANOVA across all
 #'   groups. Default \code{FALSE}.
 #' @param group_color1 Character. Hex colour for the first group in plots.
@@ -76,6 +83,9 @@ run_ptm_ida_site_level_pipeline <- function(
   heatmap_norm      = "zscore",
   gsea_ont          = "BP",
   skip_gsea         = FALSE,
+  gsea_method       = "go",
+  msigdb_collection   = "H",
+  msigdb_subcollection = NULL,
   skip_anova        = FALSE,
   group_color1      = "#D55E00",
   group_color2      = "#0072B2"
@@ -88,6 +98,7 @@ run_ptm_ida_site_level_pipeline <- function(
   # ==========================
   if (genome == "human") {
     org_db <- org.Hs.eg.db
+    msigdb_species <- "Homo sapiens"
     ensembl <- tryCatch(
       useEnsembl("ensembl", dataset = "hsapiens_gene_ensembl"),
       error = function(e) {
@@ -97,6 +108,7 @@ run_ptm_ida_site_level_pipeline <- function(
     )
   } else if (genome == "mouse") {
     org_db <- org.Mm.eg.db
+    msigdb_species <- "Mus musculus"
     ensembl <- tryCatch(
       useEnsembl("ensembl", dataset = "mmusculus_gene_ensembl"),
       error = function(e) {
@@ -280,7 +292,13 @@ run_ptm_ida_site_level_pipeline <- function(
                       intensity_matrix_raw = ptm_matrix_raw,
                       peptide_metadata = ptm_peptide_metadata,
                       ensembl=ensembl,
-                      org_db=org_db
+                      org_db=org_db,
+                      ont_option = gsea_ont,
+                      skip_gsea = skip_gsea,
+                      gsea_method = gsea_method,
+                      msigdb_species = msigdb_species,
+                      msigdb_collection = msigdb_collection,
+                      msigdb_subcollection = msigdb_subcollection
     )
     
     if (!is.null(curr_result)) results[[i]] <- curr_result
@@ -387,6 +405,8 @@ run_ptm_ida_site_level_pipeline <- function(
   peptide_counts    <- list(total = n_peptides_total, no_crap = n_peptides_no_crap,
                             ptm = n_peptides_ptm, not_imputable = n_peptides_not_imputable)
   analysis_params   <- list(genome = genome, gsea_ont = gsea_ont, skip_gsea = skip_gsea,
+                            gsea_method = gsea_method, msigdb_collection = msigdb_collection,
+                            msigdb_subcollection = msigdb_subcollection,
                             heatmap_top_n = heatmap_top_n, heatmap_norm = heatmap_norm,
                             color1 = group_color1, color2 = group_color2)
   rds      <- list(results, comparisons, out_dirs, pca_plot, ptm_matrix_raw,

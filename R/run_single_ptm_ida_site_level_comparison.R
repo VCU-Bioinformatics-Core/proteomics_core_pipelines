@@ -124,6 +124,15 @@ perform_multitest_ptm_ida_analysis2 <- function(comparison, exp_samples, ctrl_sa
 #'   annotation. Pass \code{NULL} to skip BioMart lookup.
 #' @param skip_gsea Logical. If \code{TRUE}, GSEA is skipped entirely. Default
 #'   \code{FALSE}.
+#' @param gsea_method Character. Which GSEA method to run: \code{"go"} (default)
+#'   or \code{"msigdb"}. Only one method runs per comparison.
+#' @param msigdb_species Character. Species name as expected by \code{msigdbr}
+#'   (e.g. \code{"Homo sapiens"} or \code{"Mus musculus"}), used only when
+#'   \code{gsea_method = "msigdb"}.
+#' @param msigdb_collection Character. MSigDB collection code (e.g. \code{"H"}),
+#'   used only when \code{gsea_method = "msigdb"}. Default \code{"H"}.
+#' @param msigdb_subcollection Character. MSigDB subcollection (e.g. \code{"CP:KEGG"}),
+#'   used only when \code{gsea_method = "msigdb"}. Default \code{NULL}.
 #' @param heatmap_norm Character. \code{"zscore"} (default) or \code{"intensity"} for
 #'   the heatmap colour scale.
 #' @param color1 Character. Primary plot colour (e.g. down-regulated / imputed).
@@ -143,7 +152,8 @@ perform_multitest_ptm_ida_analysis2 <- function(comparison, exp_samples, ctrl_sa
 run_single_ptm_ida_site_level_comparison <- function(comparison, limma_params, ptm_imp_matrix,
                                           protein_imp_matrix, out_dirs, intensity_matrix_raw = NULL,
                                           peptide_metadata = NULL, ont_option = "BP", ensembl = NULL, org_db = NULL,
-                                          skip_gsea = FALSE, heatmap_norm = "zscore",
+                                          skip_gsea = FALSE, gsea_method = "go", msigdb_species = "Homo sapiens",
+                                          msigdb_collection = "H", msigdb_subcollection = NULL, heatmap_norm = "zscore",
                                           color1 = "#D55E00", color2 = "#0072B2") {
 
   tryCatch({
@@ -328,7 +338,6 @@ run_single_ptm_ida_site_level_comparison <- function(comparison, limma_params, p
       gse <- NULL
       protein_counts <- NULL
     } else {
-      flog.info("Running PTM GSEA for %s", comparison$name)
       agg_result <- tryCatch(
         aggregate_ptm_for_gsea(diff_results, peptide_metadata, ensembl),
         error = function(e) {
@@ -338,26 +347,51 @@ run_single_ptm_ida_site_level_comparison <- function(comparison, limma_params, p
         }
       )
       protein_counts <- if (!is.null(agg_result)) agg_result$counts else NULL
-      gse <- tryCatch({
-        if (!is.null(agg_result)) process_gsea(agg_result$data, org_db, ont_option = ont_option) else NULL
-      }, error = function(e) {
-        flog.error("PTM GSEA failed for '%s': %s", comparison$name, e$message)
-        NULL
-      })
-      if (!is.null(gse)) {
-        flog.info("PTM GSEA returned results for %s", comparison$name)
-        tryCatch({
-          write.csv(as.data.frame(gse), create_file_path(out_dirs$gsea_data, comparison$name, "_go_analysis.csv"))
-          gsea_plot <- create_barplot(gse, create_comparison_name(comparison$ctrl, comparison$exp, "GSEA "), color1 = color1, color2 = color2)
-          save_plot(gsea_plot, create_file_path(out_dirs$gsea, "", comparison$name, "_gsea.png"),
-                    width = 10, height = 12)
+
+      if (gsea_method == "msigdb") {
+        flog.info("Running PTM MSigDB GSEA for %s", comparison$name)
+        gse <- tryCatch({
+          if (!is.null(agg_result)) process_gsea_msigdb(agg_result$data, species = msigdb_species,
+                                                          collection = msigdb_collection, subcollection = msigdb_subcollection) else NULL
         }, error = function(e) {
-          flog.error("Failed to save PTM GSEA outputs for '%s': %s",
-                     comparison$name, e$message)
+          flog.error("PTM MSigDB GSEA failed for '%s': %s", comparison$name, e$message)
+          NULL
         })
+        if (!is.null(gse)) {
+          flog.info("PTM MSigDB GSEA returned results for %s", comparison$name)
+          tryCatch({
+            write.csv(as.data.frame(gse), create_file_path(out_dirs$gsea_data, comparison$name, "_msigdb_analysis.csv"), row.names = FALSE, quote = FALSE)
+            gsea_plot <- create_barplot(gse, create_comparison_name(comparison$ctrl, comparison$exp, "MSigDB GSEA "), color1 = color1, color2 = color2)
+            save_plot(gsea_plot, create_file_path(out_dirs$gsea, "", comparison$name, "_gsea.png"),
+                      width = 10, height = 12)
+          }, error = function(e) {
+            flog.error("Failed to save PTM MSigDB GSEA outputs for '%s': %s",
+                       comparison$name, e$message)
+          })
+        }
+      } else {
+        flog.info("Running PTM GSEA for %s", comparison$name)
+        gse <- tryCatch({
+          if (!is.null(agg_result)) process_gsea(agg_result$data, org_db, ont_option = ont_option) else NULL
+        }, error = function(e) {
+          flog.error("PTM GSEA failed for '%s': %s", comparison$name, e$message)
+          NULL
+        })
+        if (!is.null(gse)) {
+          flog.info("PTM GSEA returned results for %s", comparison$name)
+          tryCatch({
+            write.csv(as.data.frame(gse), create_file_path(out_dirs$gsea_data, comparison$name, "_go_analysis.csv"), row.names = FALSE, quote = FALSE)
+            gsea_plot <- create_barplot(gse, create_comparison_name(comparison$ctrl, comparison$exp, "GSEA "), color1 = color1, color2 = color2)
+            save_plot(gsea_plot, create_file_path(out_dirs$gsea, "", comparison$name, "_gsea.png"),
+                      width = 10, height = 12)
+          }, error = function(e) {
+            flog.error("Failed to save PTM GSEA outputs for '%s': %s",
+                       comparison$name, e$message)
+          })
+        }
       }
     }
-    
+
     return(list(limma = diff_results, gsea = gse, protein_counts = protein_counts, highlighted_ids = volcano_result$highlighted_ids))
 
   }, error = function(e) {

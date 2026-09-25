@@ -443,7 +443,7 @@ run_analysis_ptm <- function(comparison, limma_params, normalized_counts, out_di
       if (!is.null(gse)) {
         flog.info("PTM GSEA returned results for %s", comparison$name)
         tryCatch({
-          write.csv(as.data.frame(gse), create_file_path(out_dirs$gsea_data, comparison$name, "_go_analysis.csv"))
+          write.csv(as.data.frame(gse), create_file_path(out_dirs$gsea_data, comparison$name, "_go_analysis.csv"), row.names = FALSE, quote = FALSE)
           gsea_plot <- create_barplot(gse, create_comparison_name(comparison$ctrl, comparison$exp, "GSEA "), color1 = color1, color2 = color2)
           save_plot(gsea_plot, create_file_path(out_dirs$gsea, "", comparison$name, "_gsea.png"),
                     width = 10, height = 12)

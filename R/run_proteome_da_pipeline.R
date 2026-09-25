@@ -38,6 +38,16 @@
 #'   (\code{"BP"}, \code{"MF"}, or \code{"CC"}). Default \code{"BP"}.
 #' @param skip_gsea Logical. If \code{TRUE}, skip GSEA entirely.
 #'   Default \code{FALSE}.
+#' @param gsea_method Character. Which GSEA method to run: \code{"go"} (default,
+#'   \code{clusterProfiler::gseGO}) or \code{"msigdb"} (\code{clusterProfiler::GSEA}
+#'   against an MSigDB collection via \code{msigdbr}). Only one method runs per
+#'   pipeline invocation.
+#' @param msigdb_collection Character. MSigDB collection code (e.g. \code{"H"} for
+#'   Hallmark, \code{"C2"} for curated gene sets), used only when
+#'   \code{gsea_method = "msigdb"}. Default \code{"H"}.
+#' @param msigdb_subcollection Character. MSigDB subcollection (e.g.
+#'   \code{"CP:KEGG"}), used only when \code{gsea_method = "msigdb"}. Default
+#'   \code{NULL} (no subcategory filter).
 #' @param skip_anova Logical. If \code{TRUE}, skip one-way ANOVA across all
 #'   groups. Default \code{FALSE}.
 #' @param group_color1 Character. Hex colour for the first group in plots.
@@ -69,6 +79,9 @@ run_proteome_da_pipeline <- function(
   heatmap_norm      = "zscore",
   gsea_ont          = "BP",
   skip_gsea         = FALSE,
+  gsea_method       = "go",
+  msigdb_collection   = "H",
+  msigdb_subcollection = NULL,
   skip_anova        = FALSE,
   group_color1      = "#D55E00",
   group_color2      = "#0072B2"
@@ -81,6 +94,7 @@ run_proteome_da_pipeline <- function(
   # ==========================
   if (genome == "human") {
     org_db <- org.Hs.eg.db
+    msigdb_species <- "Homo sapiens"
     ensembl <- tryCatch(
       useEnsembl("ensembl", dataset = "hsapiens_gene_ensembl"),
       error = function(e) {
@@ -90,6 +104,7 @@ run_proteome_da_pipeline <- function(
     )
   } else if (genome == "mouse") {
     org_db <- org.Mm.eg.db
+    msigdb_species <- "Mus musculus"
     ensembl <- tryCatch(
       useEnsembl("ensembl", dataset = "mmusculus_gene_ensembl"),
       error = function(e) {
@@ -145,7 +160,7 @@ run_proteome_da_pipeline <- function(
   primary_accessions <- sub(";.*", "", protein_metadata$uniprotswissprot)
   ensembl_map <- tryCatch({
     getBM(
-      attributes = c("uniprotswissprot", "ensembl_gene_id"),
+      attributes = c("uniprotswissprot", "ensembl_gene_id", "hgnc_symbol"),
       filters    = "uniprotswissprot",
       values     = unique(primary_accessions),
       mart       = ensembl
@@ -153,7 +168,7 @@ run_proteome_da_pipeline <- function(
       distinct(uniprotswissprot, .keep_all = TRUE)
   }, error = function(e) {
     flog.warn("BioMart Ensembl ID lookup failed: %s — continuing without Ensembl IDs", e$message)
-    data.frame(uniprotswissprot = character(), ensembl_gene_id = character())
+    data.frame(uniprotswissprot = character(), ensembl_gene_id = character(), hgnc_symbol = character())
   })
   protein_metadata <- protein_metadata %>%
     mutate(primary_accession = sub(";.*", "", uniprotswissprot)) %>%
@@ -239,7 +254,9 @@ run_proteome_da_pipeline <- function(
   for (i in seq_along(comparisons)) {
     curr_result <- run_single_proteome_da_comparison(
       comparisons[[i]], limma_params, intensity_matrix, out_dirs, intensity_matrix_raw, org_db=org_db,
-      ont_option = gsea_ont, skip_gsea = skip_gsea, protein_metadata = protein_metadata,
+      ont_option = gsea_ont, skip_gsea = skip_gsea, gsea_method = gsea_method, protein_metadata = protein_metadata,
+      msigdb_species = msigdb_species, msigdb_collection = msigdb_collection,
+      msigdb_subcollection = msigdb_subcollection,
       heatmap_norm = heatmap_norm, color1 = group_color1, color2 = group_color2
     )
     if (!is.null(curr_result)) results[[i]] <- curr_result
@@ -352,6 +369,8 @@ run_proteome_da_pipeline <- function(
   protein_counts    <- list(total = n_proteins_total, no_crap = n_proteins_no_crap,
                             not_imputable = n_peptides_not_imputable, ensembl_mapped = n_ensembl_mapped)
   analysis_params   <- list(genome = genome, gsea_ont = gsea_ont, skip_gsea = skip_gsea,
+                            gsea_method = gsea_method, msigdb_collection = msigdb_collection,
+                            msigdb_subcollection = msigdb_subcollection,
                             heatmap_top_n = heatmap_top_n, heatmap_norm = heatmap_norm,
                             color1 = group_color1, color2 = group_color2)
   rds      <- list(results, comparisons, out_dirs, pca_plot, intensity_matrix_raw,
