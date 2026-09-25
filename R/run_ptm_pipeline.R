@@ -160,7 +160,7 @@ run_ptm_pipeline <- function(
   non_numeric_cols <- c("PG.ProteinAccessions", "PG.Genes", "PG.UniProtIds",
                         "PG.FASTAName", "EG.PrecursorId")
   matrix <- full_ptm_peptide_levels %>% dplyr::select(-any_of(non_numeric_cols))
-  ptm_matrix <- log2(matrix + 1)
+  ptm_matrix <- align_to_samplesheet(log2(matrix + 1), comparisons_raw)
   ptm_matrix_raw <- ptm_matrix
 
   ptm_peptide_metadata <- full_ptm_peptide_levels %>%

@@ -167,7 +167,7 @@ run_proteome_da_pipeline <- function(
                      "PG.Organisms", "PG.ProteinDescriptions", "PG.FASTAName")
   counts <- full_prot_levels %>% dplyr::select(-any_of(non_prot_cols))
 
-  intensity_matrix     <- log2(counts + 1)
+  intensity_matrix     <- align_to_samplesheet(log2(counts + 1), comparisons_raw)
   intensity_matrix_raw <- intensity_matrix
 
   # ==========================

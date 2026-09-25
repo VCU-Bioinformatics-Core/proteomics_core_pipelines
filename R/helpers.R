@@ -96,6 +96,33 @@ setup_directories <- function(base_dir) {
   dirs
 }
 
+#' @title Align Matrix Columns to Samplesheet Order
+#' @details Downstream code (limma design, DEP colData, PCA grouping, custom
+#'   imputation groups) pairs samplesheet rows with matrix columns by position,
+#'   so the matrix columns must be in the same order as
+#'   \code{samplesheet$SampleID}. Stops if the sample sets differ. SampleIDs are
+#'   compared after \code{make.names()}, since the matrices are read through
+#'   \code{data.frame()} (e.g. \code{"Control-4949"} becomes \code{"Control.4949"}).
+#' @param mat Data frame or matrix with one column per sample.
+#' @param samplesheet Data frame with a \code{SampleID} column.
+#' @return \code{mat} with columns reordered to match \code{samplesheet$SampleID}.
+align_to_samplesheet <- function(mat, samplesheet) {
+  sample_ids <- make.names(as.character(samplesheet$SampleID))
+  missing_in_matrix <- setdiff(sample_ids, colnames(mat))
+  missing_in_sheet  <- setdiff(colnames(mat), sample_ids)
+  if (length(missing_in_matrix) > 0 || length(missing_in_sheet) > 0) {
+    msg <- sprintf(
+      "Samplesheet SampleIDs and matrix columns do not match. In samplesheet only: [%s]. In matrix only: [%s]",
+      paste(missing_in_matrix, collapse = ", "), paste(missing_in_sheet, collapse = ", ")
+    )
+    flog.fatal(msg)
+    stop(msg)
+  }
+  if (!identical(colnames(mat), sample_ids))
+    flog.info("Reordering matrix columns to match samplesheet SampleID order")
+  mat[, sample_ids, drop = FALSE]
+}
+
 #' @title Build a Tree-Style String of Pipeline Output Files
 #' @details Renders the actual files present under \code{out_dirs$data} and
 #'   \code{out_dirs$figures} (and their standard subdirectories) as a Unicode
