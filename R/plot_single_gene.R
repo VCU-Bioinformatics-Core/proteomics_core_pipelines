@@ -31,7 +31,9 @@ read_limma_results <- function(limma_files) {
 #'   protein groups). For each matching protein, builds a strip plot of imputed
 #'   log2 intensities with one strip per samplesheet group (in samplesheet order)
 #'   and a mean crossbar per group, and places a table of the limma statistics
-#'   from every comparison underneath.
+#'   from every comparison underneath. When \code{raw_matrix} is supplied,
+#'   values that were missing before imputation are drawn as asterisks and a
+#'   shape legend (Observed / Imputed) is added.
 #' @param gene Character. Gene symbol or UniProt accession to plot.
 #' @param imputed_matrix Numeric data frame or matrix (proteins x samples) of
 #'   imputed log2 intensities with protein accessions as row names, e.g. the
@@ -44,9 +46,14 @@ read_limma_results <- function(limma_files) {
 #' @param color_palette Optional character vector of colours, one per group.
 #'   Default \code{NULL} uses RColorBrewer \code{"Set1"} (or ggplot's default hue
 #'   palette when there are more than 9 groups).
+#' @param raw_matrix Optional numeric data frame or matrix (proteins x samples)
+#'   of pre-imputation log2 intensities with \code{NA} for missing values, e.g.
+#'   the pipeline's \code{data/protein_raw_matrix.csv}. Used only to flag which
+#'   points were imputed. Default \code{NULL} draws every point as observed.
 #' @return Named list of \code{gtable} objects (plot + stats table), one per
 #'   matching protein accession. Save each with \code{\link{save_plot}}.
-plot_single_gene <- function(gene, imputed_matrix, limma_df, samplesheet, color_palette = NULL) {
+plot_single_gene <- function(gene, imputed_matrix, limma_df, samplesheet, color_palette = NULL,
+                             raw_matrix = NULL) {
   stat_cols <- c("logFC", "AveExpr", "t", "P.Value", "adj.P.Val", "B")
   required  <- c("uniprotswissprot", "comparison", stat_cols)
   missing_cols <- setdiff(required, colnames(limma_df))
@@ -75,6 +82,8 @@ plot_single_gene <- function(gene, imputed_matrix, limma_df, samplesheet, color_
 
   # --- Sample -> group mapping in samplesheet order ---
   imputed_matrix <- align_to_samplesheet(as.data.frame(imputed_matrix), samplesheet)
+  if (!is.null(raw_matrix))
+    raw_matrix <- align_to_samplesheet(as.data.frame(raw_matrix), samplesheet)
   group_levels <- unique(as.character(samplesheet$GroupID))
   group_n      <- table(factor(samplesheet$GroupID, levels = group_levels))
   group_labels <- setNames(paste0(group_levels, "\n(n=", group_n, ")"), group_levels)
@@ -96,18 +105,35 @@ plot_single_gene <- function(gene, imputed_matrix, limma_df, samplesheet, color_
       value  = as.numeric(unlist(imputed_matrix[acc, ]))
     )
 
+    # Flag values that were missing before imputation
+    is_imputed <- rep(FALSE, nrow(plot_df))
+    if (!is.null(raw_matrix)) {
+      if (acc %in% rownames(raw_matrix)) {
+        is_imputed <- is.na(unlist(raw_matrix[acc, ]))
+      } else {
+        flog.warn("Accession %s absent from the raw matrix; treating all values as observed", acc)
+      }
+    }
+    plot_df$status <- factor(ifelse(is_imputed, "Imputed", "Observed"), levels = c("Observed", "Imputed"))
+
     acc_stats <- limma_df[limma_df$uniprotswissprot == acc, , drop = FALSE]
     symbol <- if ("gene_name" %in% colnames(acc_stats)) na.omit(acc_stats$gene_name)[1] else NA
     title  <- if (!is.na(symbol)) paste0(symbol, " (", acc, ")") else acc
 
     p <- ggplot(plot_df, aes(x = group, y = value, color = group)) +
       stat_summary(fun = mean, geom = "crossbar", width = 0.5, color = "gray30", linewidth = 0.4) +
-      geom_jitter(width = 0.15, height = 0, size = 2.5, alpha = 0.8) +
+      geom_jitter(aes(shape = status), width = 0.15, height = 0, size = 2.5, stroke = 1, alpha = 0.8,
+                  show.legend = !is.null(raw_matrix)) +  # TRUE keeps the Imputed key when unused
       color_scale +
+      scale_shape_manual(values = c(Observed = 16, Imputed = 8), name = NULL, drop = FALSE,
+                         guide = if (is.null(raw_matrix)) "none" else "legend") +
       scale_x_discrete(labels = group_labels) +
-      labs(x = "Group", y = "Imputed log2 intensity", title = title) +
+      labs(x = "Group", y = "Imputed log2 intensity", title = title,
+           caption = if (!is.null(raw_matrix))
+             paste0("Imputed values: ", sum(is_imputed), " of ", length(is_imputed)) else NULL) +
       theme_bw(base_size = 13) +
-      theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+      theme(plot.title = element_text(hjust = 0.5, face = "bold"),
+            legend.position = "top")
 
     # --- limma statistics table ---
     stats_tbl <- acc_stats[, c("comparison", stat_cols), drop = FALSE]

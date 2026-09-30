@@ -10,7 +10,8 @@
 #   Rscript inst/scripts/plot_single_gene.R --gene CD59 \
 #     --imputed <outdir>/data/protein_imputed_matrix.csv \
 #     --limma <outdir>/data/de_data/compA_limma.csv,<outdir>/data/de_data/compB_limma.csv \
-#     --samplesheet <samplesheet.csv> --out CD59_strip_plot.png
+#     --samplesheet <samplesheet.csv> --out CD59_strip_plot.png \
+#     --raw <outdir>/data/protein_raw_matrix.csv   # optional: mark imputed values
 
 library(devtools)
 # Resolve the package root from this script's own path, regardless of
@@ -33,6 +34,8 @@ option_list <- list(
               help = "Required. Comma-separated path(s) to <comparison>_limma.csv file(s) (<outdir>/data/de_data/)"),
   make_option(c("-s", "--samplesheet"), type = "character", default = NULL,
               help = "Required. Path to samplesheet.csv file used for the pipeline run"),
+  make_option(c("-w", "--raw"), type = "character", default = NULL,
+              help = "Optional. Path to <outdir>/data/protein_raw_matrix.csv; imputed values are drawn as asterisks"),
   make_option(c("-o", "--out"), type = "character", default = NULL,
               help = "Output PNG path [default= ./<gene>_strip_plot.png]"),
   make_option(c("--width"), type = "double", default = 7,
@@ -53,8 +56,9 @@ limma_files    <- trimws(strsplit(opt$limma, ",")[[1]])
 limma_df       <- read_limma_results(limma_files)
 imputed_matrix <- read.csv(opt$imputed, row.names = 1, check.names = TRUE)
 samplesheet    <- read.csv(opt$samplesheet)
+raw_matrix     <- if (is.null(opt$raw)) NULL else read.csv(opt$raw, row.names = 1, check.names = TRUE)
 
-plots <- plot_single_gene(opt$gene, imputed_matrix, limma_df, samplesheet)
+plots <- plot_single_gene(opt$gene, imputed_matrix, limma_df, samplesheet, raw_matrix = raw_matrix)
 
 out    <- if (is.null(opt$out)) paste0(opt$gene, "_strip_plot.png") else opt$out
 height <- if (is.null(opt$height)) 5 + 0.3 * length(limma_files) else opt$height

@@ -225,7 +225,9 @@ run_proteome_da_pipeline <- function(
 
   # save to file
   write.csv(intensity_matrix, file.path(out_dirs$data, "protein_imputed_matrix.csv"))
-  flog.info("Imputed intensity matrix written to %s", file.path(out_dirs$data, "protein_imputed_matrix.csv.csv"))
+  flog.info("Imputed intensity matrix written to %s", file.path(out_dirs$data, "protein_imputed_matrix.csv"))
+  write.csv(intensity_matrix_raw, file.path(out_dirs$data, "protein_raw_matrix.csv"))
+  flog.info("Pre-imputation intensity matrix written to %s", file.path(out_dirs$data, "protein_raw_matrix.csv"))
 
   # ==========================
   # Limma design matrix + analysis loop

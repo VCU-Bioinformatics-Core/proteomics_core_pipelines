@@ -22,6 +22,14 @@ WIDTH=7                       # inches
 # --------------------
 
 IMPUTED="${RESULTS_DIR}/data/protein_imputed_matrix.csv"
+RAW="${RESULTS_DIR}/data/protein_raw_matrix.csv"
+
+# Mark imputed values when the pre-imputation matrix exists (older runs lack it)
+RAW_ARGS=()
+if [[ -f "${RAW}" ]]; then
+  RAW_ARGS=(--raw "${RAW}")
+fi
+
 if [[ -z "${LIMMA_FILES}" ]]; then
   LIMMA_FILES=$(ls "${RESULTS_DIR}"/data/de_data/*_limma.csv | paste -sd, -)
 fi
@@ -35,5 +43,6 @@ for GENE in "${GENES[@]}"; do
     --limma "${LIMMA_FILES}" \
     --samplesheet "${SAMPLESHEET}" \
     --out "${OUT_DIR}/${GENE}_strip_plot.png" \
-    --width "${WIDTH}"
+    --width "${WIDTH}" \
+    "${RAW_ARGS[@]}"
 done
