@@ -45,6 +45,7 @@ Imports:
     stringr,
     tibble,
     grid,
+    gridExtra,
     org.Hs.eg.db,
     org.Mm.eg.db,
     tidyr,
