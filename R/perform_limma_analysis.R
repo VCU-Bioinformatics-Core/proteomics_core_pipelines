@@ -99,6 +99,17 @@ perform_limma_analysis <- function(limma_params, contrast) {
   })
 }
 
+#' @title Contrast Matrix for All Comparisons
+#' @param comparisons List of comparison definitions from \code{\link{parse_comparisons}}.
+#' @param design Model matrix the contrasts refer to.
+#' @return Matrix with one row per design column and one column per comparison.
+build_contrast_matrix <- function(comparisons, design) {
+  cm <- makeContrasts(contrasts = vapply(comparisons, `[[`, character(1), "contrast"),
+                      levels = colnames(design))
+  colnames(cm) <- vapply(comparisons, `[[`, character(1), "name")
+  cm
+}
+
 #' @title Moderated F-test for Any Difference Between Groups
 #' @details Tests all group means equal (the limma analogue of a one-way ANOVA) on the
 #'   shared fit, so blocking and covariates are taken into account.

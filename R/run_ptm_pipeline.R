@@ -360,7 +360,10 @@ run_ptm_pipeline <- function(
                             color1 = group_color1, color2 = group_color2,
                             design_formula = attr(design, "formula_label"),
                             group_factors = group_factors, covariates = covariates,
-                            block = block, block_correlation = limma_params$fit$correlation)
+                            block = block, block_correlation = limma_params$fit$correlation,
+                            design = design, contrast_matrix = build_contrast_matrix(comparisons, design),
+                            design_samplesheet = samplesheet[unique(c("SampleID", "GroupID", group_factors,
+                                                                      block, covariates))])
   rds      <- list(results, comparisons, out_dirs, pca_plot, ptm_matrix_raw,
                    ptm_matrix, imputation_params, sample_info, peptide_counts,
                    analysis_params, anova_summary)

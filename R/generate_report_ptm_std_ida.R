@@ -468,6 +468,13 @@ for (i in seq_along(comparisons)) {{
 }}
 ```
   
+## Statistical Model
+
+```{{r statistical-model, results="asis"}}
+cat(describe_limma_model(analysis_params, sample_info, comparisons, feature = "PTM peptide",
+                         n_features = nrow(intensity_matrix), imputation_method = rds_data[[7]]$method))
+```
+
 ## Differential Abundance Results
 This section contains a high-level table summarizing the differential abundance results,
 followed by a subsection for each comparison that visualizes the results using a volcano
