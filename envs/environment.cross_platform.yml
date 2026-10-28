@@ -29,6 +29,13 @@ dependencies:
   - r-tidyr
   - r-glue
   - r-janitor
+  - r-tidyverse
+  - r-futile.logger
+  - r-circlize
+  - r-gridextra
+  - r-progress
+  - r-yaml
+  - r-devtools
   - bioconductor-gosemsim
   - bioconductor-affy
   - bioconductor-summarizedexperiment
@@ -45,5 +52,11 @@ dependencies:
   - bioconductor-enrichplot
   - bioconductor-clusterprofiler
   - bioconductor-dep
+  - bioconductor-limma
+  - bioconductor-s4vectors
+  - bioconductor-complexheatmap
+  - bioconductor-biomart
+  - bioconductor-org.hs.eg.db
+  - bioconductor-org.mm.eg.db
 prefix: /global/home/reynaj/.conda/envs/DAPRmd2
 
