@@ -21,6 +21,7 @@ Write the Resolved Run Configuration
 }
 \details{
 Writes \code{run_config.yaml} to \code{out_dir} with every pipeline argument
-and the comparisons expanded to explicit \code{[exp, ctrl]} pairs, so the run can be
-reproduced with \code{--config <out_dir>/run_config.yaml}.
+and the comparisons expanded to explicit \code{[exp, ctrl]} pairs (or
+\code{name}/\code{contrast} entries), so the run can be reproduced with
+\code{--config <out_dir>/run_config.yaml}.
 }

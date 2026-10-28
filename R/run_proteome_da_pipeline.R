@@ -38,17 +38,25 @@
 #'   (\code{"BP"}, \code{"MF"}, or \code{"CC"}). Default \code{"BP"}.
 #' @param skip_gsea Logical. If \code{TRUE}, skip GSEA entirely.
 #'   Default \code{FALSE}.
-#' @param skip_anova Logical. If \code{TRUE}, skip one-way ANOVA across all
-#'   groups. Default \code{FALSE}.
+#' @param skip_anova Logical. If \code{TRUE}, skip the global moderated F-test
+#'   (ANOVA analogue) across all groups. Default \code{FALSE}.
 #' @param group_color1 Character. Hex colour for the first group in plots.
 #'   Default \code{"#D55E00"}.
 #' @param group_color2 Character. Hex colour for the second group in plots.
 #'   Default \code{"#0072B2"}.
 #' @param comparisons Comparisons to run: \code{"all"}, \code{"vs_reference"}, or a list
-#'   of \code{c(exp, ctrl)} pairs. \code{NULL} (default) uses legacy 0/1 samplesheet
-#'   columns if present, otherwise \code{"all"}. See \code{\link{parse_comparisons}}.
+#'   of \code{c(exp, ctrl)} pairs and \code{list(name, contrast)} formula contrasts.
+#'   \code{NULL} (default) uses legacy 0/1 samplesheet columns if present, otherwise
+#'   \code{"all"}. See \code{\link{parse_comparisons}}.
 #' @param reference Character or \code{NULL}. Reference (control) group used by
 #'   \code{"all"} and \code{"vs_reference"}.
+#' @param group_factors Character vector or \code{NULL}. Samplesheet columns combined
+#'   into the groups (e.g. \code{c("tissue", "response")} gives \code{V_R}, \code{L_NR},
+#'   ...). \code{NULL} uses the GroupID column. See \code{\link{build_groups}}.
+#' @param block Character or \code{NULL}. Samplesheet column identifying correlated
+#'   samples (e.g. a patient ID); handled with \code{duplicateCorrelation}.
+#' @param covariates Character vector or \code{NULL}. Samplesheet columns added to the
+#'   design as categorical fixed effects (e.g. \code{"batch"}).
 #'
 #' @return Invisibly returns the path to the generated HTML report.
 #'
@@ -78,11 +86,21 @@ run_proteome_da_pipeline <- function(
   group_color1      = "#D55E00",
   group_color2      = "#0072B2",
   comparisons       = NULL,
-  reference         = NULL
+  reference         = NULL,
+  group_factors     = NULL,
+  block             = NULL,
+  covariates        = NULL
 ) {
   run_config <- as.list(environment())
   setup_logging(out_dir, run_id = run_id)
   flog.info("Pipeline started: runID=%s, genome=%s, outdir=%s", run_id, genome, out_dir)
+
+  # ==========================
+  # Read the samplesheet and define the comparisons (fail fast on config errors)
+  # ==========================
+  samplesheet <- build_groups(read.csv(samplesheet_file), group_factors)
+  check_design_columns(samplesheet, block, covariates)
+  comparisons <- parse_comparisons(samplesheet, comparisons, reference)
 
   # ==========================
   # Load annotation DB
@@ -109,12 +127,6 @@ run_proteome_da_pipeline <- function(
     flog.fatal("Invalid genome '%s'. Use 'mouse' or 'human'", genome)
     stop("Invalid genome specified. Use 'mouse' or 'human'")
   }
-
-  # ==========================
-  # Read the samplesheet and define the comparisons
-  # ==========================
-  samplesheet <- read.csv(samplesheet_file)
-  comparisons <- parse_comparisons(samplesheet, comparisons, reference)
 
   # ==========================
   # Read and prepare data
@@ -231,10 +243,10 @@ run_proteome_da_pipeline <- function(
   # Limma design matrix + analysis loop
   # ==========================
   sample_info <- data.frame(sample = samplesheet$SampleID, condition = samplesheet$GroupID)
-  design      <- model.matrix(~0 + condition, data = sample_info)
-  colnames(design) <- levels(factor(sample_info$condition))
+  design      <- build_design(samplesheet, covariates)
   limma_params <- list(E = intensity_matrix, design = design,
-                       fit = fit_limma_model(intensity_matrix, design),
+                       fit = fit_limma_model(intensity_matrix, design,
+                                             block = if (!is.null(block)) samplesheet[[block]]),
                        sample_groups = setNames(sample_info$condition, colnames(intensity_matrix)))
 
   results <- vector("list", length(comparisons))
@@ -273,26 +285,21 @@ run_proteome_da_pipeline <- function(
          width = 7, height = 5, dpi = 300)
 
   # ==========================
-  # One-Way ANOVA
+  # Global F-test (limma analogue of a one-way ANOVA)
   # ==========================
-  flog.info("Running one-way ANOVA")
+  flog.info("Running global moderated F-test across groups")
   n_anova_groups <- length(unique(sample_info$condition))
   if (skip_anova) {
-    flog.info("Skipping ANOVA (--skip-anova flag set)")
+    flog.info("Skipping global F-test (--skip-anova flag set)")
     n_anova_sig <- n_anova_total <- NULL
   } else if (n_anova_groups > 2) {
-    group       <- factor(sample_info$condition)
-    mat         <- as.matrix(intensity_matrix)
-    anova_pvals <- apply(mat, 1, function(x) {
-      tryCatch(summary(aov(x ~ group))[[1]][["Pr(>F)"]][1], error = function(e) NA_real_)
-    })
-    anova_padj    <- p.adjust(anova_pvals, method = "BH")
-    n_anova_sig   <- sum(anova_padj < 0.05, na.rm = TRUE)
-    n_anova_total <- nrow(mat)
+    ftest         <- run_group_ftest(limma_params)
+    n_anova_sig   <- sum(ftest$Adj_P_Value < 0.05, na.rm = TRUE)
+    n_anova_total <- nrow(ftest)
     anova_df <- data.frame(
-      Protein     = rownames(mat),
-      P_Value     = signif(anova_pvals, 3),
-      Adj_P_Value = signif(anova_padj, 3),
+      Protein     = ftest$id,
+      P_Value     = signif(ftest$P_Value, 3),
+      Adj_P_Value = signif(ftest$Adj_P_Value, 3),
       stringsAsFactors = FALSE
     ) %>% dplyr::arrange(Adj_P_Value)
     write.csv(anova_df, file.path(out_dirs$anova, "global_anova.csv"), row.names = FALSE)
@@ -355,7 +362,10 @@ run_proteome_da_pipeline <- function(
                             not_imputable = n_peptides_not_imputable, ensembl_mapped = n_ensembl_mapped)
   analysis_params   <- list(genome = genome, gsea_ont = gsea_ont, skip_gsea = skip_gsea,
                             heatmap_top_n = heatmap_top_n, heatmap_norm = heatmap_norm,
-                            color1 = group_color1, color2 = group_color2)
+                            color1 = group_color1, color2 = group_color2,
+                            design_formula = attr(design, "formula_label"),
+                            group_factors = group_factors, covariates = covariates,
+                            block = block, block_correlation = limma_params$fit$correlation)
   rds      <- list(results, comparisons, out_dirs, pca_plot, intensity_matrix_raw,
                    intensity_matrix, imputation_params, sample_info, protein_counts,
                    analysis_params, anova_summary)

@@ -44,6 +44,7 @@ Percentages describe about how much of the pipeline is complete
       - [Intensity Matrix](#intensity-matrix)
       - [Samplesheet](#2-samplesheet)
       - [Run Config](#3-run-config-yaml)
+      - [Advanced Designs](#4-advanced-designs)
     - [Running the Script](#running-the-script)
       - [With a Run Config](#with-a-run-config-recommended)
       - [Human Analysis](#human-analysis-flags-only)
@@ -216,7 +217,7 @@ This file assigns each sample to a group. Only two columns are needed:
 - **SampleID:** Sample identifiers that exactly match the sample column headers in the intensity matrix.
 - **GroupID:** Group identifiers for each sample (e.g., `treated`, `control`). These define the limma design (`~0 + GroupID`). They must be valid R names: letters, digits, `.` or `_`, not starting with a digit (`KO_1`, `h24`, not `KO-1`, `24h`).
 
-Which groups are compared is set in the run config (see below), not in the samplesheet. Additional columns are ignored.
+Which groups are compared is set in the run config (see below), not in the samplesheet. Additional columns are ignored unless the run config names them in `group_factors`, `block` or `covariates` (see [Advanced Designs](#4-advanced-designs)).
 
 | SampleID   | GroupID     |
 | ---------- | ----------- |
@@ -256,10 +257,47 @@ reference: control     # optional for 'all', required for 'vs_reference'
 | `all` (default) | Every pair of groups. The group listed first in the samplesheet is the control, unless `reference` is set, in which case the reference is always the control. *k* groups give *k(k−1)/2* comparisons. |
 | `vs_reference` | Every other group against `reference`. |
 | a list of pairs | Exactly these, e.g. `[[treatA, control], [treatB, control], [treatA, treatB]]`. |
+| a list mixing pairs and formulas | Pairs plus named limma contrast formulas; see [Advanced Designs](#4-advanced-designs). |
 
 In a pair `[exp, ctrl]` the first group is the numerator: **positive logFC means higher in `exp`**. Each comparison is named `<exp>_vs_<ctrl>`, which is used in the output file names. Group names such as `yes`, `no`, `on`, `off` must be quoted in YAML (`["yes", control]`), otherwise they are read as true/false.
 
 Every run writes the fully resolved settings, with the comparisons spelled out, to `<out_dir>/run_config.yaml`. Pass that file to `--config` to reproduce the run.
+
+##### 4. Advanced Designs
+The protein (`da.proteome.R`) and PTM (`da.ptm.R`) pipelines support multi-factor groups, arbitrary contrasts, patients with several samples, and batch covariates. The model is always a cell-means design, `~0 + group [+ covariates]`, fitted **once** on all samples (no voom: the inputs are already log2 intensities). Each comparison is a contrast on that fit, so all comparisons share one residual variance estimate, which gives more power than separate subset analyses.
+
+Example: ventricular (V) and lumbar (L) samples from responders (R) and non-responders (NR), where each patient contributes both a V and an L sample.
+
+| SampleID | tissue | response | PatientID | batch |
+| -------- | ------ | -------- | --------- | ----- |
+| P1_V     | V      | R        | P1        | b1    |
+| P1_L     | L      | R        | P1        | b1    |
+| P5_V     | V      | NR       | P5        | b2    |
+| ...      | ...    | ...      | ...       | ...   |
+
+```yaml
+group_factors: [tissue, response]   # groups V_R, L_R, V_NR, L_NR (columns pasted with "_")
+block: PatientID                    # patients contribute several samples -> duplicateCorrelation
+covariates: [batch]                 # categorical fixed effects
+
+comparisons:
+  - [V_R, V_NR]                     # ventricular R vs NR
+  - [L_R, L_NR]                     # lumbar R vs NR
+  - [V_R, L_R]                      # V vs L within responders
+  - [V_NR, L_NR]                    # V vs L within non-responders
+  - name: R_vs_NR                   # all responders vs all non-responders
+    contrast: "(V_R + L_R)/2 - (V_NR + L_NR)/2"
+  - name: response_x_tissue         # does the response effect differ between V and L?
+    contrast: "(V_R - V_NR) - (L_R - L_NR)"
+```
+
+- **`group_factors`**: samplesheet columns combined into the groups (the `GroupID` column is then not needed). Without it, `GroupID` defines the groups.
+- **Formula contrasts** need a `name` (used in file names) and a `contrast` written with the group names. `(V_R + L_R)/2 - (V_NR + L_NR)/2` weights the two tissues equally regardless of group sizes. Groups with positive coefficients are treated as the "experimental" side and negative ones as the "control" side in the volcano, MA and heatmap figures.
+- **`block`**: use it when the same patient (or animal, or pool) contributes several samples. The within-patient correlation is estimated with `duplicateCorrelation` and used in the fit; the estimate is logged and shown in the report. Without it, p-values for comparisons that cut across patients (here `R_vs_NR`, the within-responder V vs L, and the interaction) are anti-conservative. A response that is a patient-level trait is fully confounded with a patient fixed effect, which is why blocking is used rather than adding the patient as a covariate.
+- **`covariates`**: categorical fixed effects (numeric codes such as batch `1`/`2` are treated as levels, not as a trend). The contrasts don't change. The run stops if a covariate is confounded with the groups (e.g. every batch holds a single group).
+- Every group referenced by a contrast needs samples; a group with a single sample is allowed (its variance is pooled with the other groups) but logged as a warning.
+- With more than two groups, the global F-test (`global_anova.csv`) tests whether any group differs, using the same fit, so it also accounts for `block` and `covariates`.
+- The PTM-IDA pipeline (`ida.ptm.R`) tests each comparison with per-site t-tests, so it accepts `group_factors` and `[exp, ctrl]` pairs only; `block`, `covariates` and formula contrasts stop the run with an error.
 
 
 
@@ -315,7 +353,7 @@ Each flag has a config key (in brackets). Mandatory settings can come from eithe
 - `-s, --samplesheet`: Path to the sample sheet file [`samplesheet_file`] **(Mandatory)**
 - `-o, --outdir`: Output directory [`out_dir`] (default: `./output`)
 - `-r, --runid`: Unique identifier for the analysis run [`run_id`] **(Mandatory)**
-- Config only: `comparisons` (default: `all`) and `reference` (see [Run Config](#3-run-config-yaml))
+- Config only: `comparisons` (default: `all`) and `reference` (see [Run Config](#3-run-config-yaml)); `group_factors`, `block` and `covariates` (see [Advanced Designs](#4-advanced-designs))
 - `-a, --annotation`: Genome to use for annotation: `mouse` or `human` [`genome`] (default: `mouse`)
 - `-i, --imputation`: Imputation method [`imputation_method`] (default: `DEP-MinProb`). DEP methods: `DEP-MinProb`, `DEP-knn`, `DEP-bpca`, `DEP-QRILC`, `DEP-man`. Custom methods defined in `R/custom_imputation.R` (e.g. `3by3`). Use `none` to skip.
 - `-q, --imputation-q`: Quantile cutoff for the left-censored distribution used by `DEP-MinProb` and `DEP-QRILC` [`imputation_q`] (default: `0.01`)
@@ -324,7 +362,7 @@ Each flag has a config key (in brackets). Mandatory settings can come from eithe
 - `--heatmap-top-n`: Number of top proteins by CV to show in the global heatmap [`heatmap_top_n`] (default: `1000`)
 - `--gsea-ont`: Gene Ontology category for GSEA: `BP`, `MF`, `CC`, or `ALL` [`gsea_ont`] (default: `BP`)
 - `--skip-gsea`: Skip GSEA analysis for faster runs (flag, no value needed) [`skip_gsea: true`]
-- `--skip-anova`: Skip one-way ANOVA for faster runs (flag, no value needed) [`skip_anova: true`]
+- `--skip-anova`: Skip the global F-test (one-way ANOVA for PTM-IDA) for faster runs (flag, no value needed) [`skip_anova: true`]
 - `--group-color1`: Hex color for the up-regulated group in plots [`group_color1`] (default: `#D55E00`)
 - `--group-color2`: Hex color for the down-regulated group in plots [`group_color2`] (default: `#0072B2`)
 
@@ -400,13 +438,16 @@ The pipeline generates an output directory (specified by `--outdir`) with the fo
 **Key output files:**
 - `[comparison]_limma.csv` — full limma results (logFC, pvalue, padj, imputation_category per protein)
 - `[comparison]_go_analysis_.csv` — GSEA Gene Ontology results (NES, pvalue, p.adjust, leading edge)
-- `global_anova.csv` — one-way ANOVA results across all groups (generated when >2 groups)
+- `global_anova.csv` — global limma moderated F-test across all groups, the limma analogue of a one-way ANOVA that respects `block` and `covariates` (generated when >2 groups; the PTM-IDA pipeline uses a classic one-way ANOVA)
+- `run_config.yaml` — the fully resolved run settings, reusable with `--config`
 - `global_pca_plot.png` — PCA of all samples colored by group
 - `global_heatmap.png` — top proteins by coefficient of variation across all samples
 - `global_imputation_*.png` — four diagnostic plots for the imputation step
 
 ### Limitations
-- This pipeline currently supports only pairwise comparisons. Support for more complex designs with multiple comparisons with covariates and contrast matrices will be added in future versions. This is a limitation for experiments with more than two conditions.
+- Covariates are categorical only; continuous covariates (e.g. age) are not supported yet.
+- Only one blocking factor can be used (`duplicateCorrelation` estimates a single within-block correlation).
+- The PTM-IDA pipeline supports pairwise `[exp, ctrl]` comparisons only (no blocking, covariates or formula contrasts).
 
 ### Utilizing IPA
 
@@ -569,9 +610,11 @@ Overall execution flow
 
 The limma setup is intentionally minimal:
 
-- A no-intercept design (~0 + condition) is used
+- A no-intercept cell-means design (`~0 + group`, plus categorical `covariates`) is built by `build_design()`, which stops if the design is not full rank
 
-- The model is fitted once per run (`fit_limma_model()`); each comparison applies its contrast to that shared fit (`perform_limma_analysis()`)
+- The model is fitted once per run (`fit_limma_model()`), with `duplicateCorrelation` blocking when `block` is set; each comparison applies its contrast to that shared fit (`perform_limma_analysis()`)
+
+- The global F-test (`run_group_ftest()`) tests all group differences on the same fit
 
 - One contrast is evaluated per comparison
 

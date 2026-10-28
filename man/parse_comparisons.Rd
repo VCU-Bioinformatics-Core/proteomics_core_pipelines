@@ -28,7 +28,10 @@ Supported values of \code{comparisons}:
 samplesheet is the control, unless \code{reference} is set, in which case the
 reference is always the control.}
 \item{\code{"vs_reference"}}{Every other group against \code{reference}.}
-\item{List of \code{c(exp, ctrl)} pairs}{Exactly these comparisons. The first
-group is the numerator, so positive logFC means higher in \code{exp}.}
+\item{List of entries}{Exactly these comparisons. Each entry is either a
+\code{c(exp, ctrl)} pair (the first group is the numerator, so positive logFC
+means higher in \code{exp}) or a \code{list(name, contrast)} with a limma
+contrast formula over the group names, e.g.
+\code{"(V_R + L_R)/2 - (V_NR + L_NR)/2"} (see \code{\link{contrast_comparison}}).}
 }
 }

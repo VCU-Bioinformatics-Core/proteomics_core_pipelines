@@ -4,15 +4,18 @@
 \alias{fit_limma_model}
 \title{Fit the limma Linear Model Once per Run}
 \usage{
-fit_limma_model(E, design)
+fit_limma_model(E, design, block = NULL)
 }
 \arguments{
 \item{E}{Numeric matrix or data frame of log2 intensities (features x samples).}
 
-\item{design}{Model matrix as produced by \code{model.matrix}.}
+\item{design}{Model matrix as produced by \code{\link{build_design}}.}
+
+\item{block}{Vector (one value per sample, in column order of \code{E}) or \code{NULL}.}
 }
 \value{
-An \code{MArrayLM} object from \code{lmFit}.
+An \code{MArrayLM} object from \code{lmFit}. With \code{block}, its
+\code{correlation} element holds the consensus within-block correlation.
 }
 \description{
 Fit the limma Linear Model Once per Run
@@ -20,5 +23,7 @@ Fit the limma Linear Model Once per Run
 \details{
 The model is fitted once on all samples; every comparison is then a contrast
 on this fit (see \code{\link{perform_limma_analysis}}), so all comparisons share the
-same residual variance estimates.
+same residual variance estimates. With \code{block} (e.g. a patient ID when patients
+contribute several samples), the within-block correlation is estimated with
+\code{duplicateCorrelation} and used in the fit.
 }

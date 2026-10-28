@@ -3,6 +3,7 @@
 # ==========================
 # resolve_run_config()  — merge pipeline defaults < YAML config < CLI flags
 # common_cli_options()  — optparse options shared by the inst/scripts/ wrappers
+# build_groups()        — derive GroupID from one or more samplesheet factor columns
 # parse_comparisons()   — turn the `comparisons` setting into contrast definitions
 # write_run_config()    — save the fully resolved configuration to the output dir
 
@@ -159,6 +160,61 @@ resolve_run_config <- function(pipeline, config_file = NULL, cli_args = list()) 
   cfg
 }
 
+#' @title Derive Sample Groups from Samplesheet Factor Columns
+#' @details With \code{group_factors = c("tissue", "response")}, each sample's GroupID
+#'   becomes \code{"<tissue>_<response>"} (e.g. \code{V_R}), giving one limma
+#'   coefficient per cell of the factorial design. With \code{NULL}, the samplesheet's
+#'   own \code{GroupID} column is used unchanged.
+#' @param samplesheet Data frame read from the samplesheet CSV.
+#' @param group_factors Character vector of samplesheet columns, or \code{NULL}.
+#' @return \code{samplesheet} with its \code{GroupID} column set.
+build_groups <- function(samplesheet, group_factors = NULL) {
+  if (is.null(group_factors) || identical(group_factors, "GroupID")) {
+    if (!"GroupID" %in% colnames(samplesheet))
+      stop("The samplesheet needs a GroupID column (or set `group_factors` to the columns that define the groups)")
+    return(samplesheet)
+  }
+  missing <- setdiff(group_factors, colnames(samplesheet))
+  if (length(missing) > 0)
+    stop(sprintf("group_factors column(s) not in the samplesheet: %s", paste(missing, collapse = ", ")))
+  for (col in group_factors) {
+    if (any(is.na(samplesheet[[col]]) | samplesheet[[col]] == ""))
+      stop(sprintf("group_factors column '%s' has empty values", col))
+  }
+  if ("GroupID" %in% colnames(samplesheet))
+    flog.warn("Samplesheet GroupID column replaced by groups built from: %s", paste(group_factors, collapse = ", "))
+
+  samplesheet$GroupID <- do.call(paste, c(lapply(samplesheet[group_factors], as.character), sep = "_"))
+  cell_counts <- table(factor(samplesheet$GroupID, levels = unique(samplesheet$GroupID)))
+  flog.info("Groups built from %s:\n%s", paste(group_factors, collapse = " x "),
+            paste0("  ", names(cell_counts), ": ", cell_counts, " sample(s)", collapse = "\n"))
+  samplesheet
+}
+
+#' @title Check the Samplesheet Columns Used by the limma Design
+#' @param samplesheet Data frame read from the samplesheet CSV.
+#' @param block Character or \code{NULL}. Column whose levels group correlated samples
+#'   (e.g. a patient ID).
+#' @param covariates Character vector or \code{NULL}. Columns added as categorical fixed
+#'   effects.
+#' @return \code{TRUE} invisibly; stops on missing columns or empty values.
+check_design_columns <- function(samplesheet, block = NULL, covariates = NULL) {
+  if (length(block) > 1) stop("`block` must be a single samplesheet column")
+  cols <- c(block, covariates)
+  missing <- setdiff(cols, colnames(samplesheet))
+  if (length(missing) > 0)
+    stop(sprintf("block/covariates column(s) not in the samplesheet: %s", paste(missing, collapse = ", ")))
+  for (col in cols) {
+    if (any(is.na(samplesheet[[col]]) | samplesheet[[col]] == ""))
+      stop(sprintf("Samplesheet column '%s' has empty values", col))
+  }
+  if (!is.null(block) && block %in% covariates)
+    stop(sprintf("'%s' cannot be both the block and a covariate", block))
+  if (any(c(block, covariates) %in% c("SampleID", "GroupID")))
+    stop("block/covariates cannot be SampleID or GroupID")
+  invisible(TRUE)
+}
+
 #' @title Find Legacy 0/1 Comparison Columns in a Samplesheet
 #' @param samplesheet Data frame read from the samplesheet CSV.
 #' @param exclude Character vector of column names that are never comparison columns.
@@ -196,6 +252,49 @@ make_comparison <- function(exp_groups, ctrl_groups, name = NULL) {
   )
 }
 
+#' @title Build a Comparison from a limma Contrast Formula
+#' @details Groups with positive coefficients are the experimental side and groups with
+#'   negative coefficients the control side; their samples are shown in the
+#'   per-comparison plots.
+#' @param entry List with \code{name} and \code{contrast}, e.g.
+#'   \code{list(name = "R_vs_NR", contrast = "(V_R + L_R)/2 - (V_NR + L_NR)/2")}.
+#' @param groups Character vector of all group names.
+#' @return Comparison definition (see \code{\link{make_comparison}}).
+contrast_comparison <- function(entry, groups) {
+  unknown_fields <- setdiff(names(entry), c("name", "contrast"))
+  if (length(unknown_fields) > 0)
+    stop(sprintf("Unknown field(s) in a contrast entry: %s (use `name` and `contrast`)",
+                 paste(unknown_fields, collapse = ", ")))
+  contrast <- entry$contrast
+  name <- entry$name
+  if (!is.character(contrast) || length(contrast) != 1)
+    stop("A contrast entry's `contrast` must be a single formula string")
+  if (!is.character(name) || length(name) != 1 || !grepl("^[A-Za-z0-9._-]+$", name))
+    stop(sprintf("Contrast '%s' needs a `name` made of letters, digits, '.', '_' or '-' (it is used in file names)",
+                 contrast))
+
+  coefs <- tryCatch(
+    makeContrasts(contrasts = contrast, levels = groups)[, 1],
+    error = function(e) stop(sprintf("Invalid contrast '%s' (%s): %s. Groups: %s", name, contrast,
+                                     conditionMessage(e), paste(groups, collapse = ", ")), call. = FALSE)
+  )
+  exp_groups  <- names(coefs)[coefs > 0]
+  ctrl_groups <- names(coefs)[coefs < 0]
+  if (length(exp_groups) == 0 || length(ctrl_groups) == 0)
+    stop(sprintf("Contrast '%s' (%s) needs groups with both positive and negative coefficients", name, contrast))
+  if (abs(sum(coefs)) > 1e-8)
+    flog.warn("Contrast '%s' coefficients sum to %g, not 0, so it is not a difference between group means",
+              name, sum(coefs))
+  list(
+    name        = name,
+    contrast    = contrast,
+    exp         = paste(exp_groups, collapse = "+"),
+    ctrl        = paste(ctrl_groups, collapse = "+"),
+    exp_groups  = exp_groups,
+    ctrl_groups = ctrl_groups
+  )
+}
+
 #' @title Define the Comparisons for a Run
 #' @details Supported values of \code{comparisons}:
 #'   \describe{
@@ -205,8 +304,11 @@ make_comparison <- function(exp_groups, ctrl_groups, name = NULL) {
 #'       samplesheet is the control, unless \code{reference} is set, in which case the
 #'       reference is always the control.}
 #'     \item{\code{"vs_reference"}}{Every other group against \code{reference}.}
-#'     \item{List of \code{c(exp, ctrl)} pairs}{Exactly these comparisons. The first
-#'       group is the numerator, so positive logFC means higher in \code{exp}.}
+#'     \item{List of entries}{Exactly these comparisons. Each entry is either a
+#'       \code{c(exp, ctrl)} pair (the first group is the numerator, so positive logFC
+#'       means higher in \code{exp}) or a \code{list(name, contrast)} with a limma
+#'       contrast formula over the group names, e.g.
+#'       \code{"(V_R + L_R)/2 - (V_NR + L_NR)/2"} (see \code{\link{contrast_comparison}}).}
 #'   }
 #' @param samplesheet Data frame with \code{SampleID} and \code{GroupID} columns.
 #' @param comparisons See Details.
@@ -267,11 +369,13 @@ parse_comparisons <- function(samplesheet, comparisons = NULL, reference = NULL)
   }
 
   if (is.character(comparisons) && length(comparisons) == 2) comparisons <- list(comparisons)
+  if (is.list(comparisons) && !is.null(comparisons$contrast)) comparisons <- list(comparisons)
   if (!is.list(comparisons))
-    stop("`comparisons` must be 'all', 'vs_reference', or a list of [exp, ctrl] pairs")
+    stop("`comparisons` must be 'all', 'vs_reference', or a list of [exp, ctrl] pairs and {name, contrast} entries")
 
-  result <- lapply(comparisons, function(pair) {
-    pair <- unlist(pair)
+  result <- lapply(comparisons, function(entry) {
+    if (is.list(entry) && !is.null(names(entry))) return(contrast_comparison(entry, groups))
+    pair <- unlist(entry)
     if (!is.character(pair) || length(pair) != 2)
       stop(sprintf("Each comparison must be a pair [exp, ctrl]; got: %s",
                    paste(as.character(pair), collapse = ", ")))
@@ -300,10 +404,30 @@ finalize_comparisons <- function(comparisons) {
   comparisons
 }
 
+#' @title Stop Unless Every Comparison Is a Simple Two-Group Pair
+#' @details Used by pipelines that test each comparison with per-feature t-tests rather
+#'   than a limma contrast (PTM-IDA), where pooled groups and weighted contrasts have no
+#'   equivalent.
+#' @param comparisons List of comparison definitions.
+#' @param pipeline_label Character. Pipeline name for the error message.
+#' @return \code{TRUE} invisibly.
+check_simple_comparisons <- function(comparisons, pipeline_label) {
+  is_simple <- vapply(comparisons, function(cmp) {
+    length(cmp$exp_groups) == 1 && length(cmp$ctrl_groups) == 1 &&
+      cmp$contrast == paste(cmp$exp_groups, "-", cmp$ctrl_groups)
+  }, logical(1))
+  if (!all(is_simple))
+    stop(sprintf("%s supports only [exp, ctrl] pair comparisons. Not supported: %s", pipeline_label,
+                 paste(vapply(comparisons[!is_simple], function(cmp) sprintf("%s (%s)", cmp$name, cmp$contrast),
+                              character(1)), collapse = "; ")))
+  invisible(TRUE)
+}
+
 #' @title Write the Resolved Run Configuration
 #' @details Writes \code{run_config.yaml} to \code{out_dir} with every pipeline argument
-#'   and the comparisons expanded to explicit \code{[exp, ctrl]} pairs, so the run can be
-#'   reproduced with \code{--config <out_dir>/run_config.yaml}.
+#'   and the comparisons expanded to explicit \code{[exp, ctrl]} pairs (or
+#'   \code{name}/\code{contrast} entries), so the run can be reproduced with
+#'   \code{--config <out_dir>/run_config.yaml}.
 #' @param run_config Named list of the pipeline arguments.
 #' @param comparisons List of comparison definitions from \code{\link{parse_comparisons}}.
 #' @param out_dir Character. Output directory.

@@ -23,7 +23,10 @@ run_ptm_ida_pipeline(
   group_color1 = "#D55E00",
   group_color2 = "#0072B2",
   comparisons = NULL,
-  reference = NULL
+  reference = NULL,
+  group_factors = NULL,
+  block = NULL,
+  covariates = NULL
 )
 }
 \arguments{
@@ -82,6 +85,12 @@ columns if present, otherwise \code{"all"}. See \code{\link{parse_comparisons}}.
 
 \item{reference}{Character or \code{NULL}. Reference (control) group used by
 \code{"all"} and \code{"vs_reference"}.}
+
+\item{group_factors}{Character vector or \code{NULL}. Samplesheet columns combined
+into the groups. \code{NULL} uses the GroupID column. See \code{\link{build_groups}}.}
+
+\item{block, covariates}{Not supported: this pipeline tests each comparison with
+per-site t-tests rather than a limma model. Setting either stops the run.}
 
 \item{ptm_input_file}{Character. Path to the PTM-level intensity matrix
 (tab-separated, rows = PTM sites, cols = samples).}

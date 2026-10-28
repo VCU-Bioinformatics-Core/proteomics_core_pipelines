@@ -168,7 +168,7 @@ As part of this pipeline we produce the following files for your downstream use:
 ```{{r run-summary}}
 analyses <- data.frame(
   Level = c("Global", "Per-Comparison", "Per-Comparison"),
-  Analysis = c("One-Way ANOVA", "Differential Abundance (Limma)", "GSEA"),
+  Analysis = c("Global F-test (limma)", "Differential Abundance (Limma)", "GSEA"),
   Status = c(
     ifelse(isTRUE(anova_summary$skipped), "\U1F6AB",
            ifelse(anova_summary$n_groups > 2, "\u2705", "N/A")),
@@ -212,6 +212,20 @@ if (!is.null(analysis_params)) {{
     ),
     stringsAsFactors = FALSE
   )
+  if (!is.null(analysis_params$design_formula)) {{
+    params_df <- rbind(params_df, data.frame(Parameter = "limma Design",
+                                             Value = analysis_params$design_formula))
+  }}
+  if (!is.null(analysis_params$group_factors)) {{
+    params_df <- rbind(params_df, data.frame(Parameter = "Groups Built From",
+                                             Value = paste(analysis_params$group_factors, collapse = " x ")))
+  }}
+  if (!is.null(analysis_params$block)) {{
+    params_df <- rbind(params_df, data.frame(
+      Parameter = "Blocking (duplicateCorrelation)",
+      Value = sprintf("%s (consensus within-block correlation %.3f)",
+                      analysis_params$block, analysis_params$block_correlation)))
+  }}
   knitr::kable(params_df)
 }}
 ```
@@ -366,23 +380,24 @@ pca_plot
 
 ```{{r anova-analysis, results="asis"}}
 if (!isTRUE(anova_summary$skipped)) {{
-  cat("### One-Way ANOVA\n\n")
+  cat("### Global F-test\n\n")
   if (anova_summary$n_groups > 2) {{
     anova_path <- file.path(out_dirs$anova, "global_anova.csv")
     if (file.exists(anova_path)) {{
       anova_df <- read.csv(anova_path)
-      cat("A one-way ANOVA was performed across all", anova_summary$n_groups, "groups to identify",
-          "proteins that vary significantly beyond any single pairwise comparison.",
-          "P-values were adjusted using the Benjamini-Hochberg (BH) method.\n\n")
+      cat("A limma moderated F-test (the limma analogue of a one-way ANOVA) was performed across all",
+          anova_summary$n_groups, "groups to identify proteins that vary significantly beyond any",
+          "single pairwise comparison. It uses the same model as the pairwise comparisons, including",
+          "any covariates and blocking. P-values were adjusted using the Benjamini-Hochberg (BH) method.\n\n")
       cat(paste0("**", anova_summary$n_sig, "** out of **", anova_summary$n_total,
                  "** proteins are significantly variable across groups",
-                 " (ANOVA FDR < 0.05).\n\n"))
+                 " (F-test FDR < 0.05).\n\n"))
       print(knitr::kable(head(anova_df, 20),
-        caption = "Top 20 proteins by one-way ANOVA (sorted by adjusted p-value)",
+        caption = "Top 20 proteins by the global F-test (sorted by adjusted p-value)",
         row.names = FALSE))
     }}
   }} else {{
-    cat("*One-way ANOVA is only reported when more than two groups are present.*\n\n")
+    cat("*The global F-test is only reported when more than two groups are present.*\n\n")
   }}
 }}
 ```
@@ -532,7 +547,8 @@ DT::datatable(query_df,
     name = comparisons[[i]]$name
     exp = comparisons[[i]]$exp
     ctrl = comparisons[[i]]$ctrl
-    
+    contrast = comparisons[[i]]$contrast %||% paste(exp, "-", ctrl)
+
     comparison_section <- glue('\n
 ### {name}
 
@@ -540,6 +556,7 @@ DT::datatable(query_df,
 
 - **Experimental group**: {exp}
 - **Control group**: {ctrl}
+- **limma contrast**: `{contrast}`
 
 
 **Volcano Plot**

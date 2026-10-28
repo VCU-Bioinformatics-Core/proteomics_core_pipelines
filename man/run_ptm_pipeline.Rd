@@ -22,7 +22,10 @@ run_ptm_pipeline(
   group_color1 = "#D55E00",
   group_color2 = "#0072B2",
   comparisons = NULL,
-  reference = NULL
+  reference = NULL,
+  group_factors = NULL,
+  block = NULL,
+  covariates = NULL
 )
 }
 \arguments{
@@ -63,8 +66,8 @@ in the global heatmap. Default \code{1000}.}
 \item{skip_gsea}{Logical. If \code{TRUE}, skip GSEA entirely.
 Default \code{FALSE}.}
 
-\item{skip_anova}{Logical. If \code{TRUE}, skip one-way ANOVA across all
-groups. Default \code{FALSE}.}
+\item{skip_anova}{Logical. If \code{TRUE}, skip the global moderated F-test
+(ANOVA analogue) across all groups. Default \code{FALSE}.}
 
 \item{group_color1}{Character. Hex colour for the first group in plots.
 Default \code{"#D55E00"}.}
@@ -73,11 +76,22 @@ Default \code{"#D55E00"}.}
 Default \code{"#0072B2"}.}
 
 \item{comparisons}{Comparisons to run: \code{"all"}, \code{"vs_reference"}, or a list
-of \code{c(exp, ctrl)} pairs. \code{NULL} (default) uses legacy 0/1 samplesheet
-columns if present, otherwise \code{"all"}. See \code{\link{parse_comparisons}}.}
+of \code{c(exp, ctrl)} pairs and \code{list(name, contrast)} formula contrasts.
+\code{NULL} (default) uses legacy 0/1 samplesheet columns if present, otherwise
+\code{"all"}. See \code{\link{parse_comparisons}}.}
 
 \item{reference}{Character or \code{NULL}. Reference (control) group used by
 \code{"all"} and \code{"vs_reference"}.}
+
+\item{group_factors}{Character vector or \code{NULL}. Samplesheet columns combined
+into the groups (e.g. \code{c("tissue", "response")} gives \code{V_R}, \code{L_NR},
+...). \code{NULL} uses the GroupID column. See \code{\link{build_groups}}.}
+
+\item{block}{Character or \code{NULL}. Samplesheet column identifying correlated
+samples (e.g. a patient ID); handled with \code{duplicateCorrelation}.}
+
+\item{covariates}{Character vector or \code{NULL}. Samplesheet columns added to the
+design as categorical fixed effects (e.g. \code{"batch"}).}
 
 \item{ptm_input_file}{Character. Path to the PTM-level intensity matrix
 (tab-separated, rows = PTM sites, cols = samples).}

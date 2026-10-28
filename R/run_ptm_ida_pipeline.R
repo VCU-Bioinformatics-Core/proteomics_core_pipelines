@@ -53,6 +53,10 @@
 #'   columns if present, otherwise \code{"all"}. See \code{\link{parse_comparisons}}.
 #' @param reference Character or \code{NULL}. Reference (control) group used by
 #'   \code{"all"} and \code{"vs_reference"}.
+#' @param group_factors Character vector or \code{NULL}. Samplesheet columns combined
+#'   into the groups. \code{NULL} uses the GroupID column. See \code{\link{build_groups}}.
+#' @param block,covariates Not supported: this pipeline tests each comparison with
+#'   per-site t-tests rather than a limma model. Setting either stops the run.
 #'
 #' @return Invisibly returns the path to the generated HTML report.
 #'
@@ -85,13 +89,23 @@ run_ptm_ida_pipeline <- function(
   group_color1      = "#D55E00",
   group_color2      = "#0072B2",
   comparisons       = NULL,
-  reference         = NULL
+  reference         = NULL,
+  group_factors     = NULL,
+  block             = NULL,
+  covariates        = NULL
 ) {
   run_config <- as.list(environment())
   setup_logging(out_dir, run_id = run_id)
   flog.info("PTM pipeline started: runID=%s, genome=%s, outdir=%s", run_id, genome, out_dir)
 
-
+  # ===============================================
+  # Read the samplesheet and define the comparisons (fail fast on config errors)
+  # ===============================================
+  if (!is.null(block) || length(covariates) > 0)
+    stop("The PTM-IDA pipeline does not support `block` or `covariates` (it uses per-site t-tests, not a limma model)")
+  samplesheet <- build_groups(read.csv(samplesheet_file), group_factors)
+  comparisons <- parse_comparisons(samplesheet, comparisons, reference)
+  check_simple_comparisons(comparisons, "The PTM-IDA pipeline")
 
   # ==========================
   # Load annotation DB
@@ -118,12 +132,6 @@ run_ptm_ida_pipeline <- function(
     flog.fatal("Invalid genome '%s'. Use 'mouse' or 'human'", genome)
     stop("Invalid genome specified. Use 'mouse' or 'human'")
   }
-
-  # ===============================================
-  # Read the samplesheet and define the comparisons
-  # ===============================================
-  samplesheet <- read.csv(samplesheet_file)
-  comparisons <- parse_comparisons(samplesheet, comparisons, reference)
 
   # ================================
   # Read and prepare PTM data matrix
