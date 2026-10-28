@@ -224,128 +224,341 @@ Rscript -e "library(DAPRmd); packageVersion('DAPRmd')"
 
 ---
 
-## Preparing Your Data
+## Running an Analysis in 4 Steps
 
-Two input files are required in specific formats: the **Intensity Matrix** and the **Samplesheet**.
+| Step | What you do | Section |
+|---|---|---|
+| 1 | Export the **intensity matrix** | [Intensity Matrix](#1-intensity-matrix) |
+| 2 | Write a two-column **samplesheet** (sample → group) | [Samplesheet](#2-samplesheet) |
+| 3 | Write a **run config** (YAML) that says which groups to compare | [Run Config](#3-run-config) |
+| 4 | Run one command | [Running the Pipeline](#running-the-pipeline) |
+
+Most analyses only need the basics. If your samples have **more than one factor** (e.g. tissue × response), **several samples per patient**, or **batches**, see [Advanced Designs](#advanced-designs).
+
+---
+
+## Preparing Your Data
 
 ### 1. Intensity Matrix
 
-**Required format:** Tab-Separated Values (`.tsv`)
+**Required format:** Comma-Separated Values (`.csv`)
 
 This file contains the protein IDs and raw merged protein levels. The columns must be organized as follows:
 
-- **PG.ProteinGroups:** The first column must contain protein identifiers in the form of UniProt/SwissProt IDs.
+- **PG.ProteinAccessions:** The first column must contain protein identifiers in the form of UniProt/SwissProt IDs.
 - **PG.Genes:** The second column must contain protein identifiers in the form of gene symbols.
 - **Subsequent columns:** All remaining columns should contain raw intensity data for each sample. Column headers must exactly match the `SampleID` values in the samplesheet. Remove any additional columns (e.g. annotations, statistics) before running the pipeline.
 
-| PG.ProteinGroups | PG.Genes | sample1_r1 | sample1_r2 | sample1_r3 | sample2_r1 | sample2_r2 | sample2_r3 | sample3_r1 | sample3_r2 | sample3_r3 | sample4_r1 | sample4_r2 | sample4_r3 |
-| ---------------- | -------- | ---------: | ---------: | ---------: | ---------: | ---------: | ---------: | ---------: | ---------: | ---------: | ---------: | ---------: | ---------: |
-| A0A087WV53       | SPEGNB   |    1243.58 |    2310.42 |    3428.67 |    4592.11 |    5635.74 |    6772.45 |    2384.91 |    3499.26 |    4621.08 |    5790.34 |    3435.89 |    4522.73 |
-| A0A0B4J2D5       | P0DPI2   |    1189.24 |    2285.33 |    3375.19 |    4478.62 |    5592.47 |    6721.53 |    2290.16 |    3420.58 |    4518.47 |    5659.82 |    3392.41 |    4461.05 |
-| A0A0B4J2F0       | PIGBOS1  |    1322.88 |    2399.75 |    3541.62 |    4684.91 |    5743.56 |    6833.10 |    2415.77 |    3556.28 |    4652.94 |    5734.62 |    3522.84 |    4613.25 |
-| A0A0C4DH30       | IGHV3-16 |    1278.52 |    2366.42 |    3478.13 |    4555.08 |    5692.75 |    6811.44 |    2362.27 |    3518.32 |    4588.69 |    5688.11 |    3451.95 |    4582.63 |
-| A0A0U1RRE5       | NBDY     |    1210.67 |    2333.91 |    3411.27 |    4518.45 |    5623.83 |    6745.92 |    2321.34 |    3465.28 |    4549.71 |    5679.53 |    3408.72 |    4528.84 |
+| PG.ProteinAccessions | PG.Genes | sample1_r1 | sample1_r2 | sample1_r3 | sample2_r1 | sample2_r2 | sample2_r3 | sample3_r1 | sample3_r2 | sample3_r3 |
+| -------------------- | -------- | ---------: | ---------: | ---------: | ---------: | ---------: | ---------: | ---------: | ---------: | ---------: |
+| A0A087WV53           | SPEGNB   |    1243.58 |    2310.42 |    3428.67 |    4592.11 |    5635.74 |    6772.45 |    2384.91 |    3499.26 |    4621.08 |
+| A0A0B4J2D5           | P0DPI2   |    1189.24 |    2285.33 |    3375.19 |    4478.62 |    5592.47 |    6721.53 |    2290.16 |    3420.58 |    4518.47 |
+| A0A0B4J2F0           | PIGBOS1  |    1322.88 |    2399.75 |    3541.62 |    4684.91 |    5743.56 |    6833.10 |    2415.77 |    3556.28 |    4652.94 |
 
 ### 2. Samplesheet
 
 **Required format:** Comma-Separated Values (`.csv`)
 
-This file contains metadata for each sample, including group identifiers and binary indicators for specific comparisons. The columns must be organized as follows:
+The samplesheet only says **which group each sample belongs to**. It needs two columns:
 
 - **SampleID:** Sample identifiers that exactly match the sample column headers in the intensity matrix.
-- **GroupID:** Group identifiers for each sample (e.g., `experiment1`, `control1`). Used to define the experimental design in limma.
-- **[comparison]:** Subsequent columns define pairwise comparisons. Column names follow the format `experiment_vs_control`. Use `1` for the experimental group, `0` for control, and leave blank to exclude a sample from that comparison.
+- **GroupID:** The group of each sample (e.g. `treated`, `control`).
 
-| SampleID    | GroupID     | experiment1_vs_control1 | experiment2_vs_control2 |
-| ----------- | ----------- | ----------------------- | ----------------------- |
-| sample1_r1  | experiment1 | 1                       |                         |
-| sample1_r2  | experiment1 | 1                       |                         |
-| sample1_r3  | experiment1 | 1                       |                         |
-| sample2_r1  | control1    | 0                       |                         |
-| sample2_r2  | control1    | 0                       |                         |
-| sample2_r3  | control1    | 0                       |                         |
-| sample3_r1  | experiment2 |                         | 1                       |
-| sample3_r2  | experiment2 |                         | 1                       |
-| sample3_r3  | experiment2 |                         | 1                       |
-| sample4_r1  | control2    |                         | 0                       |
-| sample4_r2  | control2    |                         | 0                       |
-| sample4_r3  | control2    |                         | 0                       |
+| SampleID   | GroupID |
+| ---------- | ------- |
+| sample1_r1 | drugA   |
+| sample1_r2 | drugA   |
+| sample1_r3 | drugA   |
+| sample2_r1 | drugB   |
+| sample2_r2 | drugB   |
+| sample2_r3 | drugB   |
+| sample3_r1 | control |
+| sample3_r2 | control |
+| sample3_r3 | control |
+
+**Group names** must use only letters, digits, `.` or `_`, and must not start with a digit: `KO_1` and `h24` work; `KO-1` and `24h` do not. The pipeline stops with a clear message if a name is not allowed.
+
+Extra columns (e.g. `PatientID`, `batch`) are fine. They are ignored unless the run config uses them (see [Advanced Designs](#advanced-designs)).
+
+> **Old samplesheets** with `0`/`1` comparison columns still work if the run config does not set `comparisons`, but a deprecation warning is logged. To update one, keep only `SampleID` and `GroupID` and list the comparisons in the run config instead.
+
+### 3. Run Config
+
+**Required format:** YAML (`.yaml`)
+
+One small text file per analysis holds every setting, so the whole analysis is described in one place and can be re-run exactly. Copy this template and edit it:
+
+```yaml
+# ---- inputs and outputs ----
+run_id: my_experiment
+protein_matrix_file: data/protein_intensities.csv
+samplesheet_file: data/samplesheet.csv
+out_dir: results/my_experiment
+
+# ---- analysis settings (delete any line to use the default) ----
+genome: human                     # human or mouse
+imputation_method: DEP-MinProb    # see the settings table below
+skip_gsea: false
+
+# ---- which groups to compare ----
+comparisons: all                  # all | vs_reference | a list (see below)
+reference: control                # the control group
+```
+
+Relative paths are resolved from the folder you run the command in. All available settings are listed in the [Settings Reference](#settings-reference).
+
+#### Choosing the comparisons
+
+With three groups (`drugA`, `drugB`, `control`):
+
+| You write | Comparisons run |
+|---|---|
+| `comparisons: all` + `reference: control` | `drugA_vs_control`, `drugB_vs_control`, `drugB_vs_drugA` |
+| `comparisons: vs_reference` + `reference: control` | `drugA_vs_control`, `drugB_vs_control` |
+| a list of pairs (below) | exactly the pairs you list |
+
+```yaml
+comparisons:
+  - [drugA, control]    # [experimental, control]
+  - [drugB, control]
+  - [drugA, drugB]
+```
+
+- **Direction:** in `[drugA, control]`, **positive logFC means higher in `drugA`**. Each comparison is named `<first>_vs_<second>`, and that name is used in the output file names.
+- **`all` without `reference`:** the group that appears first in the samplesheet is used as the control.
+- **`all` grows quickly:** *k* groups give *k(k−1)/2* comparisons (6 groups → 15), each with its own figures and GSEA. List the pairs you need when there are many groups.
+- If `comparisons` is left out entirely, `all` is used.
 
 ---
 
 ## Running the Pipeline
 
-### Human Analysis
+### Try the example first (Ovarian Cancer Dataset from MSstats)
+
+The package includes a small example dataset derived from the MSstats ovarian cancer SRM dataset (14 proteins, 10 control samples, 6 tumor samples) and a ready-made config, [`inst/extdata/ovarian_config.yaml`](../inst/extdata/ovarian_config.yaml). From the root of the repo:
 
 ```bash
-Rscript inst/scripts/de.regular.R \
-  --counts human_counts.tsv \
-  --samplesheet samplesheet.csv \
-  --outdir human_results \
-  --runid human_experiment \
-  --annotation human
+Rscript inst/scripts/da.proteome.R --config inst/extdata/ovarian_config.yaml
 ```
 
-### Mouse Analysis
+The results are written to `test/ovarian_results/`. The config compares `tumor` against `control` and uses `skip_gsea: true` because 14 proteins are too few for meaningful Gene Ontology enrichment analysis.
+
+### Run your own analysis
+
+Keep the samplesheet and config in your project folder, then run the script for your data type:
 
 ```bash
-Rscript inst/scripts/de.regular.R \
-  --counts mouse_counts.tsv \
+cd <your-project-dir>
+
+# protein-level differential abundance
+Rscript <path-to-repo>/inst/scripts/da.proteome.R --config analysis.yaml
+
+# PTM peptide-level differential abundance
+Rscript <path-to-repo>/inst/scripts/da.ptm.R --config analysis.yaml
+
+# PTM peptides adjusted for protein abundance (IDA)
+Rscript <path-to-repo>/inst/scripts/ida.ptm.R --config analysis.yaml
+```
+
+For the PTM scripts, use `ptm_matrix_file` in the config instead of `protein_matrix_file`. `ida.ptm.R` needs both: `ptm_matrix_file` and `protein_matrix_file` (the imputed protein matrix).
+
+### Changing a setting for one run
+
+Any setting can be overridden on the command line without editing the config, e.g. a quick run without GSEA in a separate folder:
+
+```bash
+Rscript inst/scripts/da.proteome.R --config analysis.yaml --skip-gsea --outdir results_quick
+```
+
+You can also skip the config and pass everything as flags. Without a config, `comparisons` defaults to `all`:
+
+```bash
+Rscript inst/scripts/da.proteome.R \
+  --counts mouse_counts.csv \
   --samplesheet samplesheet.csv \
   --outdir mouse_results \
   --runid mouse_experiment \
   --annotation mouse
 ```
 
-### Example Run (Ovarian Cancer Dataset from MSstats)
+### Re-running an analysis
 
-The package includes a small example dataset derived from the MSstats ovarian cancer SRM dataset (14 proteins, 10 control samples, 6 tumor samples).
+Every run saves the settings it actually used, with the comparisons spelled out, to `<out_dir>/run_config.yaml`. To reproduce the run, pass that file back:
 
 ```bash
-Rscript inst/scripts/de.regular.R \
-  --counts inst/scripts/extdata/ovarian_intensity_matrix.csv \
-  --samplesheet inst/extdata/ovarian_samplesheet.csv \
-  --outdir ovarian_results \
-  --runid ovarian_example \
-  --annotation human \
-  --imputation none \
-  --skip-gsea
+Rscript inst/scripts/da.proteome.R --config results/my_experiment/run_config.yaml
 ```
 
-> `--skip-gsea` is used here because the dataset only contains 14 proteins, which is too few for meaningful Gene Ontology enrichment analysis.
+---
 
-### Arguments
+## Advanced Designs
 
-| Flag | Default | Description |
+The protein (`da.proteome.R`) and PTM (`da.ptm.R`) pipelines can also handle more complex studies. All samples are always analyzed together in one limma model, and each comparison is a question asked of that model. Sharing one model gives more statistical power than analyzing subsets separately.
+
+| Your study has... | Add to the config | Section |
 |---|---|---|
-| `-c, --counts` | — | Path to the intensity matrix **(Mandatory)** |
-| `-s, --samplesheet` | — | Path to the samplesheet **(Mandatory)** |
-| `-r, --runid` | — | Unique identifier for the run **(Mandatory)** |
-| `-o, --outdir` | `./output` | Output directory |
-| `-a, --annotation` | `mouse` | Genome annotation: `mouse` or `human` |
-| `-i, --imputation` | `DEP-MinProb` | Imputation method: `DEP-MinProb`, `DEP-knn`, `DEP-bpca`, `DEP-QRILC`, `DEP-man`, custom (see `R/custom_imputation.R`), or `none` |
-| `-q, --imputation-q` | `0.01` | Quantile cutoff for `DEP-MinProb` and `DEP-QRILC` |
-| `--seed` | `42` | Random seed for stochastic imputation methods |
-| `--heatmap-norm` | `zscore` | Heatmap row normalization: `zscore` or `none` |
-| `--heatmap-top-n` | `1000` | Number of top proteins by CV in the global heatmap |
-| `--gsea-ont` | `BP` | Gene Ontology category for GSEA: `BP`, `MF`, `CC`, or `ALL` |
-| `--skip-gsea` | — | Skip GSEA analysis (flag) |
-| `--skip-anova` | — | Skip one-way ANOVA (flag) |
-| `--group-color1` | `#D55E00` | Hex color for the up-regulated group |
-| `--group-color2` | `#0072B2` | Hex color for the down-regulated group |
+| more than one factor (e.g. tissue × response) | `group_factors` | [Groups from several columns](#groups-from-several-columns) |
+| comparisons that pool or combine groups | formula comparisons | [Formula comparisons](#formula-comparisons) |
+| several samples from the same patient | `block` | [Several samples per patient](#several-samples-per-patient) |
+| batches or other nuisance factors | `covariates` | [Batches and other covariates](#batches-and-other-covariates) |
+
+### Worked example
+
+Ventricular (`V`) and lumbar (`L`) samples from responders (`R`) and non-responders (`NR`). Each patient gave both a V and an L sample, and samples were run in two batches.
+
+**Samplesheet** (no `GroupID` column needed here):
+
+| SampleID | tissue | response | PatientID | batch |
+| -------- | ------ | -------- | --------- | ----- |
+| P1_V     | V      | R        | P1        | b1    |
+| P1_L     | L      | R        | P1        | b1    |
+| P2_V     | V      | R        | P2        | b2    |
+| P2_L     | L      | R        | P2        | b2    |
+| P5_V     | V      | NR       | P5        | b1    |
+| P5_L     | L      | NR       | P5        | b1    |
+| ...      | ...    | ...      | ...       | ...   |
+
+**Run config:**
+
+```yaml
+run_id: csf_response
+protein_matrix_file: data/protein_intensities.csv
+samplesheet_file: data/samplesheet.csv
+out_dir: results/csf_response
+genome: human
+
+group_factors: [tissue, response]   # groups become V_R, L_R, V_NR, L_NR
+block: PatientID                    # each patient gave several samples
+covariates: [batch]                 # adjust for batch
+
+comparisons:
+  - [V_R, V_NR]                     # ventricular: responders vs non-responders
+  - [L_R, L_NR]                     # lumbar: responders vs non-responders
+  - [V_R, L_R]                      # responders: ventricular vs lumbar
+  - [V_NR, L_NR]                    # non-responders: ventricular vs lumbar
+  - name: R_vs_NR                   # all responders vs all non-responders
+    contrast: "(V_R + L_R)/2 - (V_NR + L_NR)/2"
+  - name: response_x_tissue         # is the response effect different in V and L?
+    contrast: "(V_R - V_NR) - (L_R - L_NR)"
+```
+
+### Groups from several columns
+
+`group_factors: [tissue, response]` combines those samplesheet columns into one group per combination, joined with `_`: `V_R`, `L_R`, `V_NR`, `L_NR`. Use these combined names in `comparisons`. The log lists every group with its number of samples.
+
+Without `group_factors`, the `GroupID` column defines the groups, as in the basic setup.
+
+### Formula comparisons
+
+When a simple `[A, B]` pair is not enough, write a **formula** with the group names and give it a `name` (used in file names: letters, digits, `.`, `_`, `-`):
+
+| Question | `contrast` |
+|---|---|
+| A vs B (same as the pair `[A, B]`) | `"A - B"` |
+| the average of A and B vs C | `"(A + B)/2 - C"` |
+| all responders vs all non-responders, each tissue counted equally | `"(V_R + L_R)/2 - (V_NR + L_NR)/2"` |
+| does the R-vs-NR difference change between V and L? (interaction) | `"(V_R - V_NR) - (L_R - L_NR)"` |
+
+- The groups with a `+` sign are the "experimental" side and the groups with a `-` sign are the "control" side. Positive logFC means higher on the `+` side, and the volcano, MA and heatmap figures use those samples.
+- Use `/2`, `/3`, ... so each side is an **average**; otherwise the result is not a difference between groups (the pipeline warns about this).
+- Typos in group names stop the run with a message listing the valid groups.
+
+### Several samples per patient
+
+If one patient (or animal, or pool) contributed more than one sample, set `block` to the samplesheet column that identifies them:
+
+```yaml
+block: PatientID
+```
+
+Samples from the same patient tend to look alike. Without `block`, the pipeline would treat them as independent, and p-values for comparisons across patients (e.g. `R_vs_NR`) would be too small. With `block`, limma estimates how strongly samples from the same patient are correlated (`duplicateCorrelation`) and accounts for it. The estimate is printed in the log and in the report; a value near 0 means blocking makes little difference.
+
+Only one `block` column can be used.
+
+### Batches and other covariates
+
+```yaml
+covariates: [batch]
+```
+
+Covariates adjust every comparison for nuisance factors such as batch or run date; the comparisons are written the same way. Covariates are treated as **categories** (batch `1`, `2`, `3` are three batches, not a number). Continuous covariates such as age are not supported yet.
+
+If a covariate is mixed up with the groups (e.g. every responder was run in batch 1 and every non-responder in batch 2), the effects cannot be separated, and the pipeline stops and names the covariate. Remove it from `covariates` in that case.
+
+### What changes in the output
+
+- The report's **Analysis Parameters** table shows the limma design, the group factors and the blocking correlation, and each comparison section shows its limma contrast.
+- The report's **Statistical Model** section (after the sample QC) writes out the model as an equation, defines every term for your study, shows the design matrix, each comparison as a formula and a contrast matrix, and the equivalent limma code.
+- With more than two groups, the **global F-test** (`global_anova.csv`) lists proteins that differ between any of the groups. It uses the same model, so it also accounts for `block` and `covariates`.
+
+### PTM-IDA limitations
+
+`ida.ptm.R` uses a different statistical test (per-site t-tests), so it accepts `group_factors` and `[A, B]` pairs only. `block`, `covariates` and formula comparisons stop the run with an error.
+
+---
+
+## Settings Reference
+
+Each setting can go in the run config or be passed as a command-line flag. Command-line flags win.
+
+| Config key | Flag | Default | Description |
+|---|---|---|---|
+| `run_id` | `-r, --runid` | — | Unique name for the run **(required)** |
+| `protein_matrix_file` | `-c, --counts` | — | Protein intensity matrix **(required for `da.proteome.R`)**. For `ida.ptm.R`: the imputed protein matrix, flag `--protein-counts` |
+| `ptm_matrix_file` | `-c, --counts` | — | PTM peptide intensity matrix **(required for `da.ptm.R` and `ida.ptm.R`)** |
+| `samplesheet_file` | `-s, --samplesheet` | — | Samplesheet **(required)** |
+| `out_dir` | `-o, --outdir` | `./output` | Output directory |
+| `genome` | `-a, --annotation` | `mouse` | Genome annotation: `mouse` or `human` |
+| `imputation_method` | `-i, --imputation` | `DEP-MinProb` | `DEP-MinProb`, `DEP-knn`, `DEP-bpca`, `DEP-QRILC`, `DEP-man`, custom (see `R/custom_imputation.R`), or `none` |
+| `imputation_q` | `-q, --imputation-q` | `0.01` | Quantile cutoff for `DEP-MinProb` and `DEP-QRILC` |
+| `imputation_seed` | `--seed` | `42` | Random seed for stochastic imputation methods |
+| `heatmap_norm` | `--heatmap-norm` | `zscore` | Heatmap row normalization: `zscore` or `none` |
+| `heatmap_top_n` | `--heatmap-top-n` | `1000` | Number of top proteins by CV in the global heatmap |
+| `gsea_ont` | `--gsea-ont` | `BP` | Gene Ontology category for GSEA: `BP`, `MF`, `CC`, or `ALL` |
+| `skip_gsea` | `--skip-gsea` | `false` | Skip GSEA analysis |
+| `skip_anova` | `--skip-anova` | `false` | Skip the global F-test |
+| `group_color1` | `--group-color1` | `#D55E00` | Hex color for the up-regulated group |
+| `group_color2` | `--group-color2` | `#0072B2` | Hex color for the down-regulated group |
+| `ptm_marker` | `--ptm-marker` | `Phospho \(STY\)` | PTM scripts only: pattern selecting PTM peptides |
+| `comparisons` | — | `all` | Which groups to compare ([details](#choosing-the-comparisons)) |
+| `reference` | — | — | The control group for `all` / `vs_reference` |
+| `group_factors` | — | `GroupID` | Samplesheet columns combined into groups ([details](#groups-from-several-columns)) |
+| `block` | — | — | Column identifying samples from the same patient ([details](#several-samples-per-patient)) |
+| `covariates` | — | — | Columns to adjust for, e.g. batch ([details](#batches-and-other-covariates)) |
+| — | `--config` | — | Path to the run config |
+
+---
+
+## Common Errors
+
+The pipeline checks the samplesheet and config before the analysis starts, so most mistakes fail within seconds.
+
+| Message starts with | What to do |
+|---|---|
+| `GroupID values must be valid R names` | Rename the groups, e.g. `24h` → `h24`, `KO-1` → `KO_1` |
+| `Unknown key(s) in ...` | A config key is misspelled; the message lists the valid keys |
+| `Missing required setting(s)` | Add the listed settings to the config or as flags |
+| `Comparison [...] uses unknown group(s)` | Group names in `comparisons` must match the samplesheet groups exactly (or the combined `group_factors` names) |
+| `Invalid contrast` | The formula uses a name that is not a group; the message lists the valid groups |
+| `Samplesheet SampleIDs and matrix columns do not match` | Make the `SampleID` values match the intensity matrix column headers |
+| `The design matrix is not full rank` | A covariate is mixed up with the groups; remove it from `covariates` |
+| `The PTM-IDA pipeline does not support ...` | Remove `block`, `covariates` and formula comparisons for `ida.ptm.R` |
+| Group names like `yes`, `no`, `on`, `off` behave oddly | YAML reads them as true/false; put them in quotes: `["yes", control]` |
 
 ---
 
 ## Pipeline Output
 
-The pipeline generates an output directory (specified by `--outdir`) with the following structure:
+The pipeline generates an output directory (specified by `out_dir` / `--outdir`) with the following structure:
 
 ```
 [outDir]/
-├── proteomics_analysis.html        ← final HTML report
+├── proteomics_analysis.html        ← final HTML report (QC, statistical model, results per comparison)
+├── run_config.yaml                 ← settings used for this run (re-run with --config)
 ├── data/
 │   ├── de_data/
-│   │   └── [comparison]_limma.csv
+│   │   ├── [comparison]_limma.csv
+│   │   └── master_query_table.csv
 │   ├── gsea_data/
 │   │   └── [comparison]_go_analysis_.csv
 │   └── anova/
@@ -371,9 +584,11 @@ The pipeline generates an output directory (specified by `--outdir`) with the fo
 
 **Key output files:**
 
-- `[comparison]_limma.csv` — full limma results (logFC, pvalue, padj, imputation_category per protein)
+- `[comparison]_limma.csv` — full limma results (logFC, pvalue, padj, imputation_category per protein). Positive logFC = higher in the first group of the comparison.
+- `master_query_table.csv` — for each protein, the comparisons in which it is significant
 - `[comparison]_go_analysis_.csv` — GSEA Gene Ontology results (NES, pvalue, p.adjust, leading edge)
-- `global_anova.csv` — one-way ANOVA results across all groups (generated when >2 groups)
+- `global_anova.csv` — global F-test across all groups, the limma version of a one-way ANOVA (generated when there are more than 2 groups)
+- `run_config.yaml` — the settings used for this run
 - `global_pca_plot.png` — PCA of all samples colored by group
 - `global_heatmap.png` — top proteins by coefficient of variation across all samples
 - `global_imputation_*.png` — four diagnostic plots for the imputation step
