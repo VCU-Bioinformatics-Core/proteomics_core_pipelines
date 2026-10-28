@@ -229,8 +229,8 @@ Rscript -e "library(DAPRmd); packageVersion('DAPRmd')"
 | Step | What you do | Section |
 |---|---|---|
 | 1 | Export the **intensity matrix** | [Intensity Matrix](#1-intensity-matrix) |
-| 2 | Write a two-column **samplesheet** (sample → group) | [Samplesheet](#2-samplesheet) |
-| 3 | Write a **run config** (YAML) that says which groups to compare | [Run Config](#3-run-config) |
+| 2 | Write a **samplesheet** (one row per sample: its ID and its variables) | [Samplesheet](#2-samplesheet) |
+| 3 | Write a **run config** (YAML) that says which variables to compare and which groups to compare | [Run Config](#3-run-config) |
 | 4 | Run one command | [Running the Pipeline](#running-the-pipeline) |
 
 Most analyses only need the basics. If your samples have **more than one factor** (e.g. tissue × response), **several samples per patient**, or **batches**, see [Advanced Designs](#advanced-designs).
@@ -247,7 +247,7 @@ This file contains the protein IDs and raw merged protein levels. The columns mu
 
 - **PG.ProteinAccessions:** The first column must contain protein identifiers in the form of UniProt/SwissProt IDs.
 - **PG.Genes:** The second column must contain protein identifiers in the form of gene symbols.
-- **Subsequent columns:** All remaining columns should contain raw intensity data for each sample. Column headers must exactly match the `SampleID` values in the samplesheet. Remove any additional columns (e.g. annotations, statistics) before running the pipeline.
+- **Subsequent columns:** All remaining columns should contain raw intensity data for each sample. Column headers must exactly match the sample IDs in the samplesheet. Remove any additional columns (e.g. annotations, statistics) before running the pipeline.
 
 | PG.ProteinAccessions | PG.Genes | sample1_r1 | sample1_r2 | sample1_r3 | sample2_r1 | sample2_r2 | sample2_r3 | sample3_r1 | sample3_r2 | sample3_r3 |
 | -------------------- | -------- | ---------: | ---------: | ---------: | ---------: | ---------: | ---------: | ---------: | ---------: | ---------: |
@@ -259,28 +259,37 @@ This file contains the protein IDs and raw merged protein levels. The columns mu
 
 **Required format:** Comma-Separated Values (`.csv`)
 
-The samplesheet only says **which group each sample belongs to**. It needs two columns:
+The samplesheet describes **each sample**: one column of sample IDs, then one column per variable you know about the samples (treatment, tissue, patient, batch, ...).
 
-- **SampleID:** Sample identifiers that exactly match the sample column headers in the intensity matrix.
-- **GroupID:** The group of each sample (e.g. `treated`, `control`).
+- **Sample ID column** (e.g. `SampleID`): identifiers that exactly match the sample column headers in the intensity matrix.
+- **Variable columns** (any names): e.g. `treatment`, `batch`.
 
-| SampleID   | GroupID |
-| ---------- | ------- |
-| sample1_r1 | drugA   |
-| sample1_r2 | drugA   |
-| sample1_r3 | drugA   |
-| sample2_r1 | drugB   |
-| sample2_r2 | drugB   |
-| sample2_r3 | drugB   |
-| sample3_r1 | control |
-| sample3_r2 | control |
-| sample3_r3 | control |
+| SampleID   | treatment | batch |
+| ---------- | --------- | ----- |
+| sample1_r1 | drugA     | b1    |
+| sample1_r2 | drugA     | b2    |
+| sample1_r3 | drugA     | b1    |
+| sample2_r1 | drugB     | b2    |
+| sample2_r2 | drugB     | b1    |
+| sample2_r3 | drugB     | b2    |
+| sample3_r1 | control   | b1    |
+| sample3_r2 | control   | b2    |
+| sample3_r3 | control   | b1    |
 
-**Group names** must use only letters, digits, `.` or `_`, and must not start with a digit: `KO_1` and `h24` work; `KO-1` and `24h` do not. The pipeline stops with a clear message if a name is not allowed.
+The samplesheet itself does not say what each column is for. The [run config](#3-run-config) does:
 
-Extra columns (e.g. `PatientID`, `batch`) are fine. They are ignored unless the run config uses them (see [Advanced Designs](#advanced-designs)).
+| Config key | What it is | Example |
+|---|---|---|
+| `sample_id` | the sample ID column | `SampleID` (the default) |
+| `primary_variables` | the variable(s) you are comparing; their values are the **groups** | `[treatment]` → groups `drugA`, `drugB`, `control` |
+| `covariates` | nuisance variables to adjust for (optional) | `[batch]` |
+| `blocking_variable` | one variable whose samples are correlated, e.g. a patient ID (optional) | `PatientID` |
 
-> **Old samplesheets** with `0`/`1` comparison columns still work if the run config does not set `comparisons`, but a deprecation warning is logged. To update one, keep only `SampleID` and `GroupID` and list the comparisons in the run config instead.
+Columns not named in the config are ignored.
+
+**Group names** (the values of the primary variables) must use only letters, digits, `.` or `_`, and must not start with a digit: `KO_1` and `h24` work; `KO-1` and `24h` do not. The pipeline stops with a clear message if a name is not allowed.
+
+> **Older samplesheets** with a `GroupID` column still work: if `primary_variables` is not set, the `GroupID` column is used. Old `0`/`1` comparison columns in such samplesheets also still work when `comparisons` is not set, with a deprecation warning.
 
 ### 3. Run Config
 
@@ -294,6 +303,12 @@ run_id: my_experiment
 protein_matrix_file: data/protein_intensities.csv
 samplesheet_file: data/samplesheet.csv
 out_dir: results/my_experiment
+
+# ---- samplesheet columns ----
+sample_id: SampleID               # column with the sample IDs
+primary_variables: [treatment]    # what you are comparing; its values are the groups
+covariates: [batch]               # optional: adjust for batch
+# blocking_variable: PatientID    # optional: samples from the same patient
 
 # ---- analysis settings (delete any line to use the default) ----
 genome: human                     # human or mouse
@@ -309,7 +324,7 @@ Relative paths are resolved from the folder you run the command in. All availabl
 
 #### Choosing the comparisons
 
-With three groups (`drugA`, `drugB`, `control`):
+With `primary_variables: [treatment]` there are three groups (`drugA`, `drugB`, `control`):
 
 | You write | Comparisons run |
 |---|---|
@@ -341,7 +356,7 @@ The package includes a small example dataset derived from the MSstats ovarian ca
 Rscript inst/scripts/da.proteome.R --config inst/extdata/ovarian_config.yaml
 ```
 
-The results are written to `test/ovarian_results/`. The config compares `tumor` against `control` and uses `skip_gsea: true` because 14 proteins are too few for meaningful Gene Ontology enrichment analysis.
+The results are written to `test/ovarian_results/`. Its samplesheet has the columns `SampleID` and `condition`; the config sets `primary_variables: [condition]` and compares `tumor` against `control` and uses `skip_gsea: true` because 14 proteins are too few for meaningful Gene Ontology enrichment analysis.
 
 ### Run your own analysis
 
@@ -370,7 +385,7 @@ Any setting can be overridden on the command line without editing the config, e.
 Rscript inst/scripts/da.proteome.R --config analysis.yaml --skip-gsea --outdir results_quick
 ```
 
-You can also skip the config and pass everything as flags. Without a config, `comparisons` defaults to `all`:
+You can also skip the config and pass everything as flags. Without a config, `comparisons` defaults to `all`, and the samplesheet needs `SampleID` and `GroupID` columns (`sample_id`, `primary_variables`, `covariates` and `blocking_variable` can only be set in a config):
 
 ```bash
 Rscript inst/scripts/da.proteome.R \
@@ -397,16 +412,16 @@ The protein (`da.proteome.R`) and PTM (`da.ptm.R`) pipelines can also handle mor
 
 | Your study has... | Add to the config | Section |
 |---|---|---|
-| more than one factor (e.g. tissue × response) | `group_factors` | [Groups from several columns](#groups-from-several-columns) |
+| more than one primary variable (e.g. tissue × response) | `primary_variables` | [Several primary variables](#several-primary-variables) |
 | comparisons that pool or combine groups | formula comparisons | [Formula comparisons](#formula-comparisons) |
-| several samples from the same patient | `block` | [Several samples per patient](#several-samples-per-patient) |
+| several samples from the same patient | `blocking_variable` | [Several samples per patient](#several-samples-per-patient) |
 | batches or other nuisance factors | `covariates` | [Batches and other covariates](#batches-and-other-covariates) |
 
 ### Worked example
 
 Ventricular (`V`) and lumbar (`L`) samples from responders (`R`) and non-responders (`NR`). Each patient gave both a V and an L sample, and samples were run in two batches.
 
-**Samplesheet** (no `GroupID` column needed here):
+**Samplesheet:**
 
 | SampleID | tissue | response | PatientID | batch |
 | -------- | ------ | -------- | --------- | ----- |
@@ -427,9 +442,10 @@ samplesheet_file: data/samplesheet.csv
 out_dir: results/csf_response
 genome: human
 
-group_factors: [tissue, response]   # groups become V_R, L_R, V_NR, L_NR
-block: PatientID                    # each patient gave several samples
-covariates: [batch]                 # adjust for batch
+sample_id: SampleID
+primary_variables: [tissue, response]   # groups become V_R, L_R, V_NR, L_NR
+covariates: [batch]                     # adjust for batch
+blocking_variable: PatientID            # each patient gave several samples
 
 comparisons:
   - [V_R, V_NR]                     # ventricular: responders vs non-responders
@@ -442,11 +458,9 @@ comparisons:
     contrast: "(V_R - V_NR) - (L_R - L_NR)"
 ```
 
-### Groups from several columns
+### Several primary variables
 
-`group_factors: [tissue, response]` combines those samplesheet columns into one group per combination, joined with `_`: `V_R`, `L_R`, `V_NR`, `L_NR`. Use these combined names in `comparisons`. The log lists every group with its number of samples.
-
-Without `group_factors`, the `GroupID` column defines the groups, as in the basic setup.
+With one primary variable, its values are the groups. With several, `primary_variables: [tissue, response]` makes one group per combination, joined with `_`: `V_R`, `L_R`, `V_NR`, `L_NR`. Use these combined names in `comparisons`. The log lists every group with its number of samples.
 
 ### Formula comparisons
 
@@ -465,15 +479,15 @@ When a simple `[A, B]` pair is not enough, write a **formula** with the group na
 
 ### Several samples per patient
 
-If one patient (or animal, or pool) contributed more than one sample, set `block` to the samplesheet column that identifies them:
+If one patient (or animal, or pool) contributed more than one sample, set `blocking_variable` to the samplesheet column that identifies them:
 
 ```yaml
-block: PatientID
+blocking_variable: PatientID
 ```
 
-Samples from the same patient tend to look alike. Without `block`, the pipeline would treat them as independent, and p-values for comparisons across patients (e.g. `R_vs_NR`) would be too small. With `block`, limma estimates how strongly samples from the same patient are correlated (`duplicateCorrelation`) and accounts for it. The estimate is printed in the log and in the report; a value near 0 means blocking makes little difference.
+Samples from the same patient tend to look alike. Without `blocking_variable`, the pipeline would treat them as independent, and p-values for comparisons across patients (e.g. `R_vs_NR`) would be too small. With `blocking_variable`, limma estimates how strongly samples from the same patient are correlated (`duplicateCorrelation`) and accounts for it. The estimate is printed in the log and in the report; a value near 0 means blocking makes little difference.
 
-Only one `block` column can be used.
+Only one `blocking_variable` can be used.
 
 ### Batches and other covariates
 
@@ -487,13 +501,13 @@ If a covariate is mixed up with the groups (e.g. every responder was run in batc
 
 ### What changes in the output
 
-- The report's **Analysis Parameters** table shows the limma design, the group factors and the blocking correlation, and each comparison section shows its limma contrast.
+- The report's **Analysis Parameters** table shows the limma design, the primary variables, the covariates and the blocking correlation, and each comparison section shows its limma contrast.
 - The report's **Statistical Model** section (after the sample QC) writes out the model as an equation, defines every term for your study, shows the design matrix, each comparison as a formula and a contrast matrix, and the equivalent limma code.
-- With more than two groups, the **global F-test** (`global_anova.csv`) lists proteins that differ between any of the groups. It uses the same model, so it also accounts for `block` and `covariates`.
+- With more than two groups, the **global F-test** (`global_anova.csv`) lists proteins that differ between any of the groups. It uses the same model, so it also accounts for `covariates` and `blocking_variable`.
 
 ### PTM-IDA limitations
 
-`ida.ptm.R` uses a different statistical test (per-site t-tests), so it accepts `group_factors` and `[A, B]` pairs only. `block`, `covariates` and formula comparisons stop the run with an error.
+`ida.ptm.R` uses a different statistical test (per-site t-tests), so it accepts `primary_variables` and `[A, B]` pairs only. `covariates`, `blocking_variable` and formula comparisons stop the run with an error.
 
 ---
 
@@ -522,9 +536,10 @@ Each setting can go in the run config or be passed as a command-line flag. Comma
 | `ptm_marker` | `--ptm-marker` | `Phospho \(STY\)` | PTM scripts only: pattern selecting PTM peptides |
 | `comparisons` | — | `all` | Which groups to compare ([details](#choosing-the-comparisons)) |
 | `reference` | — | — | The control group for `all` / `vs_reference` |
-| `group_factors` | — | `GroupID` | Samplesheet columns combined into groups ([details](#groups-from-several-columns)) |
-| `block` | — | — | Column identifying samples from the same patient ([details](#several-samples-per-patient)) |
+| `sample_id` | — | `SampleID` | Samplesheet column with the sample IDs |
+| `primary_variables` | — | `GroupID` | Samplesheet column(s) being compared; their values are the groups ([details](#several-primary-variables)) |
 | `covariates` | — | — | Columns to adjust for, e.g. batch ([details](#batches-and-other-covariates)) |
+| `blocking_variable` | — | — | Column identifying samples from the same patient ([details](#several-samples-per-patient)) |
 | — | `--config` | — | Path to the run config |
 
 ---
@@ -535,14 +550,16 @@ The pipeline checks the samplesheet and config before the analysis starts, so mo
 
 | Message starts with | What to do |
 |---|---|
-| `GroupID values must be valid R names` | Rename the groups, e.g. `24h` → `h24`, `KO-1` → `KO_1` |
+| `Group names (from primary_variables) must be valid R names` | Rename the groups, e.g. `24h` → `h24`, `KO-1` → `KO_1` |
 | `Unknown key(s) in ...` | A config key is misspelled; the message lists the valid keys |
 | `Missing required setting(s)` | Add the listed settings to the config or as flags |
-| `Comparison [...] uses unknown group(s)` | Group names in `comparisons` must match the samplesheet groups exactly (or the combined `group_factors` names) |
+| `Comparison [...] uses unknown group(s)` | Group names in `comparisons` must match the samplesheet groups exactly (or the combined names, with several `primary_variables`) |
 | `Invalid contrast` | The formula uses a name that is not a group; the message lists the valid groups |
-| `Samplesheet SampleIDs and matrix columns do not match` | Make the `SampleID` values match the intensity matrix column headers |
+| `Column(s) not in the samplesheet` | A `sample_id`, `primary_variables`, `covariates` or `blocking_variable` name is misspelled; the message lists the samplesheet columns |
+| `Column(s) assigned to more than one of ...` | A column can have only one role, e.g. not both a primary variable and a covariate |
+| `Samplesheet SampleIDs and matrix columns do not match` | Make the sample IDs match the intensity matrix column headers |
 | `The design matrix is not full rank` | A covariate is mixed up with the groups; remove it from `covariates` |
-| `The PTM-IDA pipeline does not support ...` | Remove `block`, `covariates` and formula comparisons for `ida.ptm.R` |
+| `The PTM-IDA pipeline does not support ...` | Remove `covariates`, `blocking_variable` and formula comparisons for `ida.ptm.R` |
 | Group names like `yes`, `no`, `on`, `off` behave oddly | YAML reads them as true/false; put them in quotes: `["yes", control]` |
 
 ---

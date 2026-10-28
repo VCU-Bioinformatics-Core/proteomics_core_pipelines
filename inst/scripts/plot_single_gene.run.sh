@@ -5,7 +5,8 @@
 # Copy this file, edit the variables below, then run:
 #   bash plot_single_gene.run.sh
 #
-# RESULTS_DIR is the --outdir of a finished da.proteome.R run.
+# RESULTS_DIR is the --outdir of a finished da.proteome.R run. The samplesheet
+# settings are read from its run_config.yaml.
 # By default every <comparison>_limma.csv in RESULTS_DIR/data/de_data is used;
 # set LIMMA_FILES to a comma-separated list to restrict the comparisons shown.
 
@@ -14,7 +15,6 @@ set -euo pipefail
 # ---- Edit these ----
 PIPELINE_DIR="/path/to/proteomics_core_pipelines"
 RESULTS_DIR="/path/to/results"
-SAMPLESHEET="/path/to/samplesheet.csv"
 GENES=("CD59")                # one or more gene symbols or UniProt accessions
 OUT_DIR="${RESULTS_DIR}/figures/single_gene"
 LIMMA_FILES=""                # leave empty to use all comparisons
@@ -41,7 +41,7 @@ for GENE in "${GENES[@]}"; do
     --gene "${GENE}" \
     --imputed "${IMPUTED}" \
     --limma "${LIMMA_FILES}" \
-    --samplesheet "${SAMPLESHEET}" \
+    --config "${RESULTS_DIR}/run_config.yaml" \
     --out "${OUT_DIR}/${GENE}_strip_plot.png" \
     --width "${WIDTH}" \
     "${RAW_ARGS[@]}"

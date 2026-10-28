@@ -10,8 +10,12 @@
 #   Rscript inst/scripts/plot_single_gene.R --gene CD59 \
 #     --imputed <outdir>/data/protein_imputed_matrix.csv \
 #     --limma <outdir>/data/de_data/compA_limma.csv,<outdir>/data/de_data/compB_limma.csv \
-#     --samplesheet <samplesheet.csv> --out CD59_strip_plot.png \
+#     --config <outdir>/run_config.yaml --out CD59_strip_plot.png \
 #     --raw <outdir>/data/protein_raw_matrix.csv   # optional: mark imputed values
+#
+# --config takes the samplesheet, sample_id and primary_variables from the run's
+# saved config. Without it, give --samplesheet (and --sample-id / --primary-variables
+# unless the samplesheet has SampleID and GroupID columns).
 
 library(devtools)
 # Resolve the package root from this script's own path, regardless of
@@ -32,8 +36,14 @@ option_list <- list(
               help = "Required. Path to imputed matrix CSV (<outdir>/data/protein_imputed_matrix.csv)"),
   make_option(c("-l", "--limma"), type = "character", default = NULL,
               help = "Required. Comma-separated path(s) to <comparison>_limma.csv file(s) (<outdir>/data/de_data/)"),
+  make_option(c("--config"), type = "character", default = NULL,
+              help = "Path to the run's <outdir>/run_config.yaml (supplies the samplesheet settings)"),
   make_option(c("-s", "--samplesheet"), type = "character", default = NULL,
-              help = "Required. Path to samplesheet.csv file used for the pipeline run"),
+              help = "Path to samplesheet.csv used for the pipeline run (overrides --config)"),
+  make_option(c("--sample-id"), type = "character", default = NULL,
+              help = "Samplesheet column with the sample IDs [default: SampleID]"),
+  make_option(c("--primary-variables"), type = "character", default = NULL,
+              help = "Comma-separated samplesheet column(s) that define the groups [default: GroupID]"),
   make_option(c("-w", "--raw"), type = "character", default = NULL,
               help = "Optional. Path to <outdir>/data/protein_raw_matrix.csv; imputed values are drawn as asterisks"),
   make_option(c("-o", "--out"), type = "character", default = NULL,
@@ -47,15 +57,22 @@ option_list <- list(
 opt_parser <- OptionParser(option_list = option_list)
 opt        <- parse_args(opt_parser)
 
-if (is.null(opt$gene) || is.null(opt$imputed) || is.null(opt$limma) || is.null(opt$samplesheet)) {
+run_cfg <- if (is.null(opt$config)) list() else yaml::read_yaml(opt$config)
+samplesheet_file  <- opt$samplesheet %||% run_cfg$samplesheet_file
+sample_id         <- opt$`sample-id` %||% run_cfg$sample_id %||% "SampleID"
+primary_variables <- if (!is.null(opt$`primary-variables`)) {
+  trimws(strsplit(opt$`primary-variables`, ",")[[1]])
+} else run_cfg$primary_variables
+
+if (is.null(opt$gene) || is.null(opt$imputed) || is.null(opt$limma) || is.null(samplesheet_file)) {
   print_help(opt_parser)
-  stop("--gene, --imputed, --limma, and --samplesheet are required.")
+  stop("--gene, --imputed, --limma, and --config or --samplesheet are required.")
 }
 
 limma_files    <- trimws(strsplit(opt$limma, ",")[[1]])
 limma_df       <- read_limma_results(limma_files)
 imputed_matrix <- read.csv(opt$imputed, row.names = 1, check.names = TRUE)
-samplesheet    <- read.csv(opt$samplesheet)
+samplesheet    <- prepare_samplesheet(read.csv(samplesheet_file), sample_id, primary_variables)
 raw_matrix     <- if (is.null(opt$raw)) NULL else read.csv(opt$raw, row.names = 1, check.names = TRUE)
 
 plots <- plot_single_gene(opt$gene, imputed_matrix, limma_df, samplesheet, raw_matrix = raw_matrix)

@@ -16,7 +16,8 @@ describe_limma_model(
 \arguments{
 \item{analysis_params}{Named list saved by the pipeline (uses \code{design},
 \code{contrast_matrix}, \code{design_samplesheet}, \code{design_formula},
-\code{group_factors}, \code{covariates}, \code{block}, \code{block_correlation}).}
+\code{sample_id}, \code{primary_variables}, \code{covariates}, \code{blocking_variable},
+\code{block_correlation}).}
 
 \item{sample_info}{Data frame with columns \code{sample} and \code{condition}.}
 
@@ -38,7 +39,7 @@ Describe the limma Model for the Report
 \details{
 Builds the "Statistical Model" report section: the model equation and its
 matrix form, a definition of every term, the sample correlation structure (when
-\code{block} is used), the design matrix, each comparison as a contrast, the
+\code{blocking_variable} is used), the design matrix, each comparison as a contrast, the
 moderated t-statistic, and the equivalent limma code. Output is Markdown with LaTeX
 math (rendered by MathJax in the HTML report), meant for a \code{results="asis"}
 chunk. Works with results saved before the design was stored, by rebuilding the

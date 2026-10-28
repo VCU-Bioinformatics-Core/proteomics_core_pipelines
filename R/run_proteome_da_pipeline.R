@@ -17,8 +17,8 @@
 #'   used in output file names and the HTML report title.
 #' @param protein_matrix_file Character. Path to the protein-level intensity matrix
 #'   (tab-separated, rows = proteins, cols = samples).
-#' @param samplesheet_file Character. Path to the sample sheet CSV with
-#'   \code{SampleID} and \code{GroupID} columns.
+#' @param samplesheet_file Character. Path to the sample sheet CSV: a sample ID
+#'   column plus variable columns (see \code{\link{prepare_samplesheet}}).
 #' @param out_dir Character. Directory where all outputs will be written.
 #'   Created if it does not already exist. Default \code{"./output"}.
 #' @param genome Character. Organism genome to use for annotation
@@ -50,13 +50,16 @@
 #'   \code{"all"}. See \code{\link{parse_comparisons}}.
 #' @param reference Character or \code{NULL}. Reference (control) group used by
 #'   \code{"all"} and \code{"vs_reference"}.
-#' @param group_factors Character vector or \code{NULL}. Samplesheet columns combined
-#'   into the groups (e.g. \code{c("tissue", "response")} gives \code{V_R}, \code{L_NR},
-#'   ...). \code{NULL} uses the GroupID column. See \code{\link{build_groups}}.
-#' @param block Character or \code{NULL}. Samplesheet column identifying correlated
-#'   samples (e.g. a patient ID); handled with \code{duplicateCorrelation}.
+#' @param sample_id Character. Samplesheet column holding the sample IDs (the
+#'   intensity matrix column names). Default \code{"SampleID"}.
+#' @param primary_variables Character vector or \code{NULL}. Samplesheet columns being
+#'   compared. One column: its values are the groups. Several: each combination is a
+#'   group (e.g. \code{c("tissue", "response")} gives \code{V_R}, \code{L_NR}, ...).
+#'   \code{NULL} uses a \code{GroupID} column. See \code{\link{prepare_samplesheet}}.
 #' @param covariates Character vector or \code{NULL}. Samplesheet columns added to the
 #'   design as categorical fixed effects (e.g. \code{"batch"}).
+#' @param blocking_variable Character or \code{NULL}. Samplesheet column identifying
+#'   correlated samples (e.g. a patient ID); handled with \code{duplicateCorrelation}.
 #'
 #' @return Invisibly returns the path to the generated HTML report.
 #'
@@ -87,9 +90,10 @@ run_proteome_da_pipeline <- function(
   group_color2      = "#0072B2",
   comparisons       = NULL,
   reference         = NULL,
-  group_factors     = NULL,
-  block             = NULL,
-  covariates        = NULL
+  sample_id         = "SampleID",
+  primary_variables = NULL,
+  covariates        = NULL,
+  blocking_variable = NULL
 ) {
   run_config <- as.list(environment())
   setup_logging(out_dir, run_id = run_id)
@@ -98,9 +102,10 @@ run_proteome_da_pipeline <- function(
   # ==========================
   # Read the samplesheet and define the comparisons (fail fast on config errors)
   # ==========================
-  samplesheet <- build_groups(read.csv(samplesheet_file), group_factors)
-  check_design_columns(samplesheet, block, covariates)
-  comparisons <- parse_comparisons(samplesheet, comparisons, reference)
+  samplesheet <- prepare_samplesheet(read.csv(samplesheet_file), sample_id, primary_variables,
+                                     covariates, blocking_variable)
+  comparisons <- parse_comparisons(samplesheet, comparisons, reference,
+                                   legacy_columns = is.null(primary_variables))
 
   # ==========================
   # Load annotation DB
@@ -246,7 +251,7 @@ run_proteome_da_pipeline <- function(
   design      <- build_design(samplesheet, covariates)
   limma_params <- list(E = intensity_matrix, design = design,
                        fit = fit_limma_model(intensity_matrix, design,
-                                             block = if (!is.null(block)) samplesheet[[block]]),
+                                             block = if (!is.null(blocking_variable)) samplesheet[[blocking_variable]]),
                        sample_groups = setNames(sample_info$condition, colnames(intensity_matrix)))
 
   results <- vector("list", length(comparisons))
@@ -364,11 +369,12 @@ run_proteome_da_pipeline <- function(
                             heatmap_top_n = heatmap_top_n, heatmap_norm = heatmap_norm,
                             color1 = group_color1, color2 = group_color2,
                             design_formula = attr(design, "formula_label"),
-                            group_factors = group_factors, covariates = covariates,
-                            block = block, block_correlation = limma_params$fit$correlation,
+                            sample_id = sample_id, primary_variables = primary_variables,
+                            covariates = covariates, blocking_variable = blocking_variable,
+                            block_correlation = limma_params$fit$correlation,
                             design = design, contrast_matrix = build_contrast_matrix(comparisons, design),
-                            design_samplesheet = samplesheet[unique(c("SampleID", "GroupID", group_factors,
-                                                                      block, covariates))])
+                            design_samplesheet = samplesheet[unique(c("SampleID", "GroupID", primary_variables,
+                                                                      blocking_variable, covariates))])
   rds      <- list(results, comparisons, out_dirs, pca_plot, intensity_matrix_raw,
                    intensity_matrix, imputation_params, sample_info, protein_counts,
                    analysis_params, anova_summary)

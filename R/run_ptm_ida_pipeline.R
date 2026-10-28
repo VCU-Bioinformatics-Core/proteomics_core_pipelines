@@ -17,8 +17,8 @@
 #'   used in output file names and the HTML report title.
 #' @param ptm_input_file Character. Path to the PTM-level intensity matrix
 #'   (tab-separated, rows = PTM sites, cols = samples).
-#' @param samplesheet_file Character. Path to the sample sheet CSV with
-#'   \code{SampleID} and \code{GroupID} columns.
+#' @param samplesheet_file Character. Path to the sample sheet CSV: a sample ID
+#'   column plus variable columns (see \code{\link{prepare_samplesheet}}).
 #' @param ptm_matrix_file Character. Path to the PTM-level intensity
 #'   matrix
 #' @param protein_matrix_file Character. Path to the protein-level intensity
@@ -53,10 +53,15 @@
 #'   columns if present, otherwise \code{"all"}. See \code{\link{parse_comparisons}}.
 #' @param reference Character or \code{NULL}. Reference (control) group used by
 #'   \code{"all"} and \code{"vs_reference"}.
-#' @param group_factors Character vector or \code{NULL}. Samplesheet columns combined
-#'   into the groups. \code{NULL} uses the GroupID column. See \code{\link{build_groups}}.
-#' @param block,covariates Not supported: this pipeline tests each comparison with
-#'   per-site t-tests rather than a limma model. Setting either stops the run.
+#' @param sample_id Character. Samplesheet column holding the sample IDs (the
+#'   intensity matrix column names). Default \code{"SampleID"}.
+#' @param primary_variables Character vector or \code{NULL}. Samplesheet columns being
+#'   compared. One column: its values are the groups. Several: each combination is a
+#'   group (e.g. \code{c("tissue", "response")} gives \code{V_R}, \code{L_NR}, ...).
+#'   \code{NULL} uses a \code{GroupID} column. See \code{\link{prepare_samplesheet}}.
+#' @param covariates,blocking_variable Not supported: this pipeline tests each
+#'   comparison with per-site t-tests rather than a limma model. Setting either
+#'   stops the run.
 #'
 #' @return Invisibly returns the path to the generated HTML report.
 #'
@@ -90,9 +95,10 @@ run_ptm_ida_pipeline <- function(
   group_color2      = "#0072B2",
   comparisons       = NULL,
   reference         = NULL,
-  group_factors     = NULL,
-  block             = NULL,
-  covariates        = NULL
+  sample_id         = "SampleID",
+  primary_variables = NULL,
+  covariates        = NULL,
+  blocking_variable = NULL
 ) {
   run_config <- as.list(environment())
   setup_logging(out_dir, run_id = run_id)
@@ -101,10 +107,12 @@ run_ptm_ida_pipeline <- function(
   # ===============================================
   # Read the samplesheet and define the comparisons (fail fast on config errors)
   # ===============================================
-  if (!is.null(block) || length(covariates) > 0)
-    stop("The PTM-IDA pipeline does not support `block` or `covariates` (it uses per-site t-tests, not a limma model)")
-  samplesheet <- build_groups(read.csv(samplesheet_file), group_factors)
-  comparisons <- parse_comparisons(samplesheet, comparisons, reference)
+  if (!is.null(blocking_variable) || length(covariates) > 0)
+    stop(paste("The PTM-IDA pipeline does not support `blocking_variable` or `covariates`",
+               "(it uses per-site t-tests, not a limma model)"))
+  samplesheet <- prepare_samplesheet(read.csv(samplesheet_file), sample_id, primary_variables)
+  comparisons <- parse_comparisons(samplesheet, comparisons, reference,
+                                   legacy_columns = is.null(primary_variables))
   check_simple_comparisons(comparisons, "The PTM-IDA pipeline")
 
   # ==========================

@@ -24,17 +24,18 @@ run_ptm_ida_pipeline(
   group_color2 = "#0072B2",
   comparisons = NULL,
   reference = NULL,
-  group_factors = NULL,
-  block = NULL,
-  covariates = NULL
+  sample_id = "SampleID",
+  primary_variables = NULL,
+  covariates = NULL,
+  blocking_variable = NULL
 )
 }
 \arguments{
 \item{run_id}{Character. Unique identifier for this analysis run;
 used in output file names and the HTML report title.}
 
-\item{samplesheet_file}{Character. Path to the sample sheet CSV with
-\code{SampleID} and \code{GroupID} columns.}
+\item{samplesheet_file}{Character. Path to the sample sheet CSV: a sample ID
+column plus variable columns (see \code{\link{prepare_samplesheet}}).}
 
 \item{ptm_matrix_file}{Character. Path to the PTM-level intensity
 matrix}
@@ -86,11 +87,17 @@ columns if present, otherwise \code{"all"}. See \code{\link{parse_comparisons}}.
 \item{reference}{Character or \code{NULL}. Reference (control) group used by
 \code{"all"} and \code{"vs_reference"}.}
 
-\item{group_factors}{Character vector or \code{NULL}. Samplesheet columns combined
-into the groups. \code{NULL} uses the GroupID column. See \code{\link{build_groups}}.}
+\item{sample_id}{Character. Samplesheet column holding the sample IDs (the
+intensity matrix column names). Default \code{"SampleID"}.}
 
-\item{block, covariates}{Not supported: this pipeline tests each comparison with
-per-site t-tests rather than a limma model. Setting either stops the run.}
+\item{primary_variables}{Character vector or \code{NULL}. Samplesheet columns being
+compared. One column: its values are the groups. Several: each combination is a
+group (e.g. \code{c("tissue", "response")} gives \code{V_R}, \code{L_NR}, ...).
+\code{NULL} uses a \code{GroupID} column. See \code{\link{prepare_samplesheet}}.}
+
+\item{covariates, blocking_variable}{Not supported: this pipeline tests each
+comparison with per-site t-tests rather than a limma model. Setting either
+stops the run.}
 
 \item{ptm_input_file}{Character. Path to the PTM-level intensity matrix
 (tab-separated, rows = PTM sites, cols = samples).}

@@ -7,6 +7,6 @@ Rscript --vanilla inst/scripts/plot_single_gene.R \
     --gene CD59 \
     --imputed test/ovarian_results/data/protein_imputed_matrix.csv \
     --limma test/ovarian_results/data/de_data/tumor_vs_control_limma.csv \
-    --samplesheet inst/extdata/ovarian_samplesheet.csv \
+    --config test/ovarian_results/run_config.yaml \
     --raw test/ovarian_results/data/protein_raw_matrix.csv \
     --out test/ovarian_results/figures/CD59_strip_plot.png

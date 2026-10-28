@@ -22,9 +22,10 @@ run_proteome_da_pipeline(
   group_color2 = "#0072B2",
   comparisons = NULL,
   reference = NULL,
-  group_factors = NULL,
-  block = NULL,
-  covariates = NULL
+  sample_id = "SampleID",
+  primary_variables = NULL,
+  covariates = NULL,
+  blocking_variable = NULL
 )
 }
 \arguments{
@@ -34,8 +35,8 @@ used in output file names and the HTML report title.}
 \item{protein_matrix_file}{Character. Path to the protein-level intensity matrix
 (tab-separated, rows = proteins, cols = samples).}
 
-\item{samplesheet_file}{Character. Path to the sample sheet CSV with
-\code{SampleID} and \code{GroupID} columns.}
+\item{samplesheet_file}{Character. Path to the sample sheet CSV: a sample ID
+column plus variable columns (see \code{\link{prepare_samplesheet}}).}
 
 \item{out_dir}{Character. Directory where all outputs will be written.
 Created if it does not already exist. Default \code{"./output"}.}
@@ -82,15 +83,19 @@ of \code{c(exp, ctrl)} pairs and \code{list(name, contrast)} formula contrasts.
 \item{reference}{Character or \code{NULL}. Reference (control) group used by
 \code{"all"} and \code{"vs_reference"}.}
 
-\item{group_factors}{Character vector or \code{NULL}. Samplesheet columns combined
-into the groups (e.g. \code{c("tissue", "response")} gives \code{V_R}, \code{L_NR},
-...). \code{NULL} uses the GroupID column. See \code{\link{build_groups}}.}
+\item{sample_id}{Character. Samplesheet column holding the sample IDs (the
+intensity matrix column names). Default \code{"SampleID"}.}
 
-\item{block}{Character or \code{NULL}. Samplesheet column identifying correlated
-samples (e.g. a patient ID); handled with \code{duplicateCorrelation}.}
+\item{primary_variables}{Character vector or \code{NULL}. Samplesheet columns being
+compared. One column: its values are the groups. Several: each combination is a
+group (e.g. \code{c("tissue", "response")} gives \code{V_R}, \code{L_NR}, ...).
+\code{NULL} uses a \code{GroupID} column. See \code{\link{prepare_samplesheet}}.}
 
 \item{covariates}{Character vector or \code{NULL}. Samplesheet columns added to the
 design as categorical fixed effects (e.g. \code{"batch"}).}
+
+\item{blocking_variable}{Character or \code{NULL}. Samplesheet column identifying
+correlated samples (e.g. a patient ID); handled with \code{duplicateCorrelation}.}
 }
 \value{
 Invisibly returns the path to the generated HTML report.

@@ -4,14 +4,24 @@
 \alias{parse_comparisons}
 \title{Define the Comparisons for a Run}
 \usage{
-parse_comparisons(samplesheet, comparisons = NULL, reference = NULL)
+parse_comparisons(
+  samplesheet,
+  comparisons = NULL,
+  reference = NULL,
+  legacy_columns = TRUE
+)
 }
 \arguments{
-\item{samplesheet}{Data frame with \code{SampleID} and \code{GroupID} columns.}
+\item{samplesheet}{Data frame with \code{SampleID} and \code{GroupID} columns (see
+\code{\link{prepare_samplesheet}}).}
 
 \item{comparisons}{See Details.}
 
 \item{reference}{Character or \code{NULL}. Reference (control) group.}
+
+\item{legacy_columns}{Logical. Look for legacy 0/1 comparison columns when
+\code{comparisons} is \code{NULL}. Only older GroupID samplesheets have them; with
+\code{primary_variables} set, 0/1 columns are ordinary variables (e.g. sex).}
 }
 \value{
 List of comparison definitions as built by \code{\link{make_comparison}}.

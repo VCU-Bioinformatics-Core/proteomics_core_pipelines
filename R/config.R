@@ -3,7 +3,7 @@
 # ==========================
 # resolve_run_config()  — merge pipeline defaults < YAML config < CLI flags
 # common_cli_options()  — optparse options shared by the inst/scripts/ wrappers
-# build_groups()        — derive GroupID from one or more samplesheet factor columns
+# prepare_samplesheet() — validate samplesheet columns and derive the sample groups
 # parse_comparisons()   — turn the `comparisons` setting into contrast definitions
 # write_run_config()    — save the fully resolved configuration to the output dir
 
@@ -55,7 +55,7 @@ common_cli_options <- function(pipeline = c("proteome", "ptm", "ptm_ida")) {
                 help = "YAML run config. Keys are the pipeline argument names; CLI flags override it"),
     make_option(c("-c", "--counts"), type = "character", default = NULL, help = counts_help),
     make_option(c("-s", "--samplesheet"), type = "character", default = NULL,
-                help = "Path to samplesheet.csv (SampleID, GroupID)"),
+                help = "Path to samplesheet.csv (a sample ID column plus variable columns)"),
     make_option(c("-o", "--outdir"), type = "character", default = NULL,
                 help = "Output directory [default: ./output]"),
     make_option(c("-r", "--runid"), type = "character", default = NULL,
@@ -160,59 +160,69 @@ resolve_run_config <- function(pipeline, config_file = NULL, cli_args = list()) 
   cfg
 }
 
-#' @title Derive Sample Groups from Samplesheet Factor Columns
-#' @details With \code{group_factors = c("tissue", "response")}, each sample's GroupID
-#'   becomes \code{"<tissue>_<response>"} (e.g. \code{V_R}), giving one limma
-#'   coefficient per cell of the factorial design. With \code{NULL}, the samplesheet's
-#'   own \code{GroupID} column is used unchanged.
+#' @title Validate the Samplesheet and Derive Sample Groups
+#' @details The samplesheet has one sample ID column plus any number of variable
+#'   columns; the run config says what each variable is for:
+#'   \describe{
+#'     \item{\code{primary_variables}}{The variables being compared. With one variable,
+#'       its values are the groups. With several, e.g. \code{c("tissue", "response")},
+#'       each combination is a group named \code{"<tissue>_<response>"} (e.g.
+#'       \code{V_R}), giving one limma coefficient per cell of the factorial design.
+#'       \code{NULL} uses a column named \code{GroupID} (older two-column samplesheets).}
+#'     \item{\code{covariates}}{Nuisance variables added as categorical fixed effects.}
+#'     \item{\code{blocking_variable}}{One variable whose levels group correlated
+#'       samples (e.g. a patient ID).}
+#'   }
+#'   The rest of the pipeline reads the sample IDs from \code{SampleID} and the
+#'   groups from \code{GroupID}, so those columns are (re)written here.
 #' @param samplesheet Data frame read from the samplesheet CSV.
-#' @param group_factors Character vector of samplesheet columns, or \code{NULL}.
-#' @return \code{samplesheet} with its \code{GroupID} column set.
-build_groups <- function(samplesheet, group_factors = NULL) {
-  if (is.null(group_factors) || identical(group_factors, "GroupID")) {
-    if (!"GroupID" %in% colnames(samplesheet))
-      stop("The samplesheet needs a GroupID column (or set `group_factors` to the columns that define the groups)")
-    return(samplesheet)
-  }
-  missing <- setdiff(group_factors, colnames(samplesheet))
-  if (length(missing) > 0)
-    stop(sprintf("group_factors column(s) not in the samplesheet: %s", paste(missing, collapse = ", ")))
-  for (col in group_factors) {
-    if (any(is.na(samplesheet[[col]]) | samplesheet[[col]] == ""))
-      stop(sprintf("group_factors column '%s' has empty values", col))
-  }
-  if ("GroupID" %in% colnames(samplesheet))
-    flog.warn("Samplesheet GroupID column replaced by groups built from: %s", paste(group_factors, collapse = ", "))
+#' @param sample_id Character. Column holding the sample IDs (matrix column names).
+#' @param primary_variables Character vector of columns, or \code{NULL}.
+#' @param covariates Character vector of columns, or \code{NULL}.
+#' @param blocking_variable Character or \code{NULL}.
+#' @return \code{samplesheet} with \code{SampleID} and \code{GroupID} columns set.
+prepare_samplesheet <- function(samplesheet, sample_id = "SampleID", primary_variables = NULL,
+                                covariates = NULL, blocking_variable = NULL) {
+  if (!is.character(sample_id) || length(sample_id) != 1)
+    stop("`sample_id` must be a single samplesheet column name")
+  if (length(blocking_variable) > 1) stop("`blocking_variable` must be a single samplesheet column")
+  group_cols <- primary_variables %||% "GroupID"
 
-  samplesheet$GroupID <- do.call(paste, c(lapply(samplesheet[group_factors], as.character), sep = "_"))
-  cell_counts <- table(factor(samplesheet$GroupID, levels = unique(samplesheet$GroupID)))
-  flog.info("Groups built from %s:\n%s", paste(group_factors, collapse = " x "),
-            paste0("  ", names(cell_counts), ": ", cell_counts, " sample(s)", collapse = "\n"))
-  samplesheet
-}
+  missing <- setdiff(c(sample_id, group_cols, covariates, blocking_variable), colnames(samplesheet))
+  if (length(missing) > 0) {
+    hint <- if (is.null(primary_variables) && "GroupID" %in% missing)
+      " Set `primary_variables` to the column(s) that define the groups." else ""
+    stop(sprintf("Column(s) not in the samplesheet: %s. Samplesheet columns: %s.%s",
+                 paste(missing, collapse = ", "), paste(colnames(samplesheet), collapse = ", "), hint))
+  }
 
-#' @title Check the Samplesheet Columns Used by the limma Design
-#' @param samplesheet Data frame read from the samplesheet CSV.
-#' @param block Character or \code{NULL}. Column whose levels group correlated samples
-#'   (e.g. a patient ID).
-#' @param covariates Character vector or \code{NULL}. Columns added as categorical fixed
-#'   effects.
-#' @return \code{TRUE} invisibly; stops on missing columns or empty values.
-check_design_columns <- function(samplesheet, block = NULL, covariates = NULL) {
-  if (length(block) > 1) stop("`block` must be a single samplesheet column")
-  cols <- c(block, covariates)
-  missing <- setdiff(cols, colnames(samplesheet))
-  if (length(missing) > 0)
-    stop(sprintf("block/covariates column(s) not in the samplesheet: %s", paste(missing, collapse = ", ")))
-  for (col in cols) {
+  roles <- list(sample_id = sample_id, primary_variables = group_cols,
+                covariates = covariates, blocking_variable = blocking_variable)
+  used <- unlist(roles)
+  dups <- unique(used[duplicated(used)])
+  if (length(dups) > 0)
+    stop(sprintf("Column(s) assigned to more than one of sample_id/primary_variables/covariates/blocking_variable: %s",
+                 paste(dups, collapse = ", ")))
+  for (col in used) {
     if (any(is.na(samplesheet[[col]]) | samplesheet[[col]] == ""))
       stop(sprintf("Samplesheet column '%s' has empty values", col))
   }
-  if (!is.null(block) && block %in% covariates)
-    stop(sprintf("'%s' cannot be both the block and a covariate", block))
-  if (any(c(block, covariates) %in% c("SampleID", "GroupID")))
-    stop("block/covariates cannot be SampleID or GroupID")
-  invisible(TRUE)
+  if (anyDuplicated(samplesheet[[sample_id]]))
+    stop(sprintf("Samplesheet column '%s' has duplicated sample IDs", sample_id))
+
+  # internal names: a variable column called SampleID/GroupID would be overwritten
+  clash <- intersect(setdiff(used, c(sample_id, group_cols)), c("SampleID", "GroupID"))
+  if (sample_id != "SampleID" && "SampleID" %in% group_cols) clash <- c(clash, "SampleID")
+  if (length(clash) > 0)
+    stop(sprintf("Rename samplesheet column(s) %s: the pipeline uses these names internally",
+                 paste(clash, collapse = ", ")))
+
+  samplesheet$SampleID <- as.character(samplesheet[[sample_id]])
+  samplesheet$GroupID  <- do.call(paste, c(lapply(samplesheet[group_cols], as.character), sep = "_"))
+  group_counts <- table(factor(samplesheet$GroupID, levels = unique(samplesheet$GroupID)))
+  flog.info("Groups from %s:\n%s", paste(group_cols, collapse = " x "),
+            paste0("  ", names(group_counts), ": ", group_counts, " sample(s)", collapse = "\n"))
+  samplesheet
 }
 
 #' @title Find Legacy 0/1 Comparison Columns in a Samplesheet
@@ -310,16 +320,20 @@ contrast_comparison <- function(entry, groups) {
 #'       contrast formula over the group names, e.g.
 #'       \code{"(V_R + L_R)/2 - (V_NR + L_NR)/2"} (see \code{\link{contrast_comparison}}).}
 #'   }
-#' @param samplesheet Data frame with \code{SampleID} and \code{GroupID} columns.
+#' @param samplesheet Data frame with \code{SampleID} and \code{GroupID} columns (see
+#'   \code{\link{prepare_samplesheet}}).
 #' @param comparisons See Details.
 #' @param reference Character or \code{NULL}. Reference (control) group.
+#' @param legacy_columns Logical. Look for legacy 0/1 comparison columns when
+#'   \code{comparisons} is \code{NULL}. Only older GroupID samplesheets have them; with
+#'   \code{primary_variables} set, 0/1 columns are ordinary variables (e.g. sex).
 #' @return List of comparison definitions as built by \code{\link{make_comparison}}.
-parse_comparisons <- function(samplesheet, comparisons = NULL, reference = NULL) {
+parse_comparisons <- function(samplesheet, comparisons = NULL, reference = NULL, legacy_columns = TRUE) {
   groups <- unique(as.character(samplesheet$GroupID))
 
   bad_names <- groups[make.names(groups) != groups]
   if (length(bad_names) > 0)
-    stop(sprintf(paste("GroupID values must be valid R names (letters, digits, '.' or '_',",
+    stop(sprintf(paste("Group names (from primary_variables) must be valid R names (letters, digits, '.' or '_',",
                        "not starting with a digit) so limma can build contrasts: %s"),
                  paste(bad_names, collapse = ", ")))
 
@@ -329,10 +343,10 @@ parse_comparisons <- function(samplesheet, comparisons = NULL, reference = NULL)
     flog.warn("Group(s) with fewer than 2 samples: %s", paste(small, collapse = ", "))
 
   if (!is.null(reference) && !reference %in% groups)
-    stop(sprintf("reference '%s' is not a GroupID. Groups: %s", reference, paste(groups, collapse = ", ")))
+    stop(sprintf("reference '%s' is not a group. Groups: %s", reference, paste(groups, collapse = ", ")))
 
   if (is.null(comparisons)) {
-    legacy_cols <- legacy_comparison_columns(samplesheet)
+    legacy_cols <- if (legacy_columns) legacy_comparison_columns(samplesheet) else character(0)
     if (length(legacy_cols) > 0) {
       flog.warn(paste("Comparisons defined by 0/1 samplesheet columns (%s) are deprecated.",
                       "Use `comparisons` in the YAML run config instead."),
@@ -394,7 +408,7 @@ parse_comparisons <- function(samplesheet, comparisons = NULL, reference = NULL)
 #' @param comparisons List of comparison definitions.
 #' @return \code{comparisons}, unchanged.
 finalize_comparisons <- function(comparisons) {
-  if (length(comparisons) == 0) stop("No comparisons defined. Check `comparisons` and the samplesheet GroupID column.")
+  if (length(comparisons) == 0) stop("No comparisons defined. Check `comparisons` and `primary_variables`.")
   comparison_names <- vapply(comparisons, `[[`, character(1), "name")
   dups <- unique(comparison_names[duplicated(comparison_names)])
   if (length(dups) > 0) stop(sprintf("Duplicate comparison(s): %s", paste(dups, collapse = ", ")))

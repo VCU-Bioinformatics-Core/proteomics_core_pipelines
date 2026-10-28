@@ -35,14 +35,15 @@ md_table <- function(df) {
 #' @title Describe the limma Model for the Report
 #' @details Builds the "Statistical Model" report section: the model equation and its
 #'   matrix form, a definition of every term, the sample correlation structure (when
-#'   \code{block} is used), the design matrix, each comparison as a contrast, the
+#'   \code{blocking_variable} is used), the design matrix, each comparison as a contrast, the
 #'   moderated t-statistic, and the equivalent limma code. Output is Markdown with LaTeX
 #'   math (rendered by MathJax in the HTML report), meant for a \code{results="asis"}
 #'   chunk. Works with results saved before the design was stored, by rebuilding the
 #'   cell-means design from \code{sample_info}.
 #' @param analysis_params Named list saved by the pipeline (uses \code{design},
 #'   \code{contrast_matrix}, \code{design_samplesheet}, \code{design_formula},
-#'   \code{group_factors}, \code{covariates}, \code{block}, \code{block_correlation}).
+#'   \code{sample_id}, \code{primary_variables}, \code{covariates}, \code{blocking_variable},
+#'   \code{block_correlation}).
 #' @param sample_info Data frame with columns \code{sample} and \code{condition}.
 #' @param comparisons List of comparison definitions.
 #' @param feature Character. Singular feature name, e.g. \code{"protein"} or
@@ -60,7 +61,9 @@ describe_limma_model <- function(analysis_params, sample_info, comparisons, feat
   }
   covariate_cols <- setdiff(colnames(design), groups)
   covariates     <- analysis_params$covariates
-  block          <- analysis_params$block
+  block          <- analysis_params$blocking_variable
+  primary_vars   <- analysis_params$primary_variables
+  sample_id_col  <- analysis_params$sample_id %||% "SampleID"
   rho            <- analysis_params$block_correlation
   sheet          <- analysis_params$design_samplesheet
   n <- nrow(design); p <- ncol(design); K <- length(groups); L <- length(covariate_cols)
@@ -92,11 +95,11 @@ describe_limma_model <- function(analysis_params, sample_info, comparisons, feat
       " \\qquad \\boldsymbol{\\varepsilon}_g \\sim \\mathcal{N}\\!\\left(\\mathbf{0},\\ \\sigma_g^2\\,\\mathbf{V}\\right)\n$$\n")
 
   # ---- term definitions ----
-  group_source <- if (!is.null(analysis_params$group_factors)) {
-    sprintf("built from the samplesheet columns %s (joined with `_`)",
-            paste0("`", analysis_params$group_factors, "`", collapse = " × "))
+  group_source <- if (length(primary_vars) > 1) {
+    sprintf("one per combination of the primary variables %s (joined with `_`)",
+            paste0("`", primary_vars, "`", collapse = " × "))
   } else {
-    "the samplesheet `GroupID` column"
+    sprintf("the levels of the samplesheet column `%s`", primary_vars %||% "GroupID")
   }
   y_desc <- paste0("log2(intensity + 1)",
                    if (!is.null(imputation_method) && imputation_method != "none")
@@ -110,7 +113,7 @@ describe_limma_model <- function(analysis_params, sample_info, comparisons, feat
                 paste0("Mean log2 abundance of ", feature, " $g$ in group $k$ (estimated)")),
     `In this analysis` = c(y_desc,
                            if (!is.null(n_features)) paste0(n_features, " ", feature, "s tested") else paste0("each ", feature),
-                           paste0(n, " samples (`SampleID`)"),
+                           paste0(n, " samples (`", sample_id_col, "`)"),
                            paste0(K, " groups, ", group_source, ": ", paste0("`", groups, "`", collapse = ", ")),
                            paste0("one per group: ", paste0("$\\mu_{g,", latex_text(groups), "}$", collapse = ", "))),
     check.names = FALSE, stringsAsFactors = FALSE
@@ -176,6 +179,7 @@ describe_limma_model <- function(analysis_params, sample_info, comparisons, feat
       ". Rows are samples; columns are the coefficients $\\boldsymbol{\\beta}_g$.\n")
   design_df <- data.frame(SampleID = as.character(sample_info$sample), Group = as.character(sample_info$condition),
                           stringsAsFactors = FALSE)
+  colnames(design_df)[1] <- sample_id_col
   if (!is.null(block) && !is.null(sheet) && block %in% colnames(sheet)) design_df[[block]] <- as.character(sheet[[block]])
   design_df <- cbind(design_df, as.data.frame(matrix(design, nrow = n, dimnames = list(NULL, colnames(design))),
                                               check.names = FALSE))
@@ -241,9 +245,11 @@ describe_limma_model <- function(analysis_params, sample_info, comparisons, feat
   code <- c(
     "```r",
     "# E: log2 intensity matrix (features x samples), samples in samplesheet order",
-    if (!is.null(analysis_params$group_factors))
+    if (length(primary_vars) > 1)
       sprintf("samplesheet$GroupID <- paste(%s, sep = \"_\")",
-              paste0("samplesheet$", analysis_params$group_factors, collapse = ", ")),
+              paste0("samplesheet$", primary_vars, collapse = ", "))
+    else if (length(primary_vars) == 1 && primary_vars != "GroupID")
+      sprintf("samplesheet$GroupID <- samplesheet$%s", primary_vars),
     if (length(covariates) > 0)
       sprintf("samplesheet$%s <- factor(samplesheet$%s)   # covariates are categorical", covariates, covariates),
     sprintf("design <- model.matrix(%s, data = samplesheet)", formula_label),

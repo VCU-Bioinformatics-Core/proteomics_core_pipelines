@@ -216,15 +216,19 @@ if (!is.null(analysis_params)) {{
     params_df <- rbind(params_df, data.frame(Parameter = "limma Design",
                                              Value = analysis_params$design_formula))
   }}
-  if (!is.null(analysis_params$group_factors)) {{
-    params_df <- rbind(params_df, data.frame(Parameter = "Groups Built From",
-                                             Value = paste(analysis_params$group_factors, collapse = " x ")))
+  if (!is.null(analysis_params$primary_variables)) {{
+    params_df <- rbind(params_df, data.frame(Parameter = "Primary Variables",
+                                             Value = paste(analysis_params$primary_variables, collapse = " x ")))
   }}
-  if (!is.null(analysis_params$block)) {{
+  if (length(analysis_params$covariates) > 0) {{
+    params_df <- rbind(params_df, data.frame(Parameter = "Covariates",
+                                             Value = paste(analysis_params$covariates, collapse = ", ")))
+  }}
+  if (!is.null(analysis_params$blocking_variable)) {{
     params_df <- rbind(params_df, data.frame(
-      Parameter = "Blocking (duplicateCorrelation)",
+      Parameter = "Blocking Variable (duplicateCorrelation)",
       Value = sprintf("%s (consensus within-block correlation %.3f)",
-                      analysis_params$block, analysis_params$block_correlation)))
+                      analysis_params$blocking_variable, analysis_params$block_correlation)))
   }}
   knitr::kable(params_df)
 }}
