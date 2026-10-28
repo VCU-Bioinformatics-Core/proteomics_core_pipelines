@@ -8,7 +8,7 @@ run_ptm_pipeline(
   run_id,
   samplesheet_file,
   ptm_matrix_file,
-  out_dir,
+  out_dir = "./output",
   ptm_marker = "Phospho \\\\(STY\\\\)",
   genome = "mouse",
   imputation_method = "DEP-MinProb",
@@ -20,21 +20,23 @@ run_ptm_pipeline(
   skip_gsea = FALSE,
   skip_anova = FALSE,
   group_color1 = "#D55E00",
-  group_color2 = "#0072B2"
+  group_color2 = "#0072B2",
+  comparisons = NULL,
+  reference = NULL
 )
 }
 \arguments{
 \item{run_id}{Character. Unique identifier for this analysis run;
 used in output file names and the HTML report title.}
 
-\item{samplesheet_file}{Character. Path to the sample sheet CSV describing
-sample groups and pairwise comparisons.}
+\item{samplesheet_file}{Character. Path to the sample sheet CSV with
+\code{SampleID} and \code{GroupID} columns.}
 
 \item{ptm_matrix_file}{Character. Path to the PTM-level intensity
 matrix}
 
 \item{out_dir}{Character. Directory where all outputs will be written.
-Created if it does not already exist.}
+Created if it does not already exist. Default \code{"./output"}.}
 
 \item{genome}{Character. Organism genome to use for annotation
 (\code{"mouse"} or \code{"human"}). Default \code{"mouse"}.}
@@ -69,6 +71,13 @@ Default \code{"#D55E00"}.}
 
 \item{group_color2}{Character. Hex colour for the second group in plots.
 Default \code{"#0072B2"}.}
+
+\item{comparisons}{Comparisons to run: \code{"all"}, \code{"vs_reference"}, or a list
+of \code{c(exp, ctrl)} pairs. \code{NULL} (default) uses legacy 0/1 samplesheet
+columns if present, otherwise \code{"all"}. See \code{\link{parse_comparisons}}.}
+
+\item{reference}{Character or \code{NULL}. Reference (control) group used by
+\code{"all"} and \code{"vs_reference"}.}
 
 \item{ptm_input_file}{Character. Path to the PTM-level intensity matrix
 (tab-separated, rows = PTM sites, cols = samples).}

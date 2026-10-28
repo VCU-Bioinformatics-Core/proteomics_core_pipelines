@@ -189,9 +189,12 @@ generate_ma_plot_protein <- function(data, exp_name, ctrl_name, highlighted_ids 
 #'     \item Generates volcano, MA, and heatmap figures.
 #'     \item Optionally runs GSEA via \code{\link{process_gsea}} and saves results.
 #'   }
-#' @param comparison Named list with elements \code{name}, \code{exp}, and \code{ctrl}.
-#' @param limma_params Named list with elements \code{E} (intensity matrix) and
-#'   \code{design} (model matrix).
+#' @param comparison Comparison definition from \code{\link{parse_comparisons}}
+#'   (\code{name}, \code{contrast}, \code{exp}, \code{ctrl}, \code{exp_groups},
+#'   \code{ctrl_groups}).
+#' @param limma_params Named list with elements \code{E} (intensity matrix),
+#'   \code{design} (model matrix), \code{fit} (from \code{\link{fit_limma_model}}) and
+#'   \code{sample_groups} (named vector mapping sample names to GroupID).
 #' @param normalized_counts Numeric matrix or data frame (proteins x samples) of
 #'   imputed log2 intensities passed to \code{\link{generate_heatmap}}.
 #' @param out_dirs Named list of output directories as returned by
@@ -223,7 +226,7 @@ run_single_proteome_da_comparison <- function(comparison, limma_params, normaliz
   tryCatch({
     flog.info("=== Starting analysis for comparison: %s ===", comparison$name)
 
-    limma_results <- perform_limma_analysis(limma_params, comparison$exp, comparison$ctrl)
+    limma_results <- perform_limma_analysis(limma_params, comparison$contrast)
     limma_results <- limma_results %>% rownames_to_column(var = "uniprotswissprot")
 
     # Join gene names from input data (PG.Genes column)
@@ -236,9 +239,8 @@ run_single_proteome_da_comparison <- function(comparison, limma_params, normaliz
 
     # Compute per-protein imputation category using pre-imputation NA counts
     if (!is.null(intensity_matrix_raw)) {
-      all_samples  <- colnames(limma_params$E)
-      exp_samples  <- all_samples[limma_params$design[, comparison$exp]  == 1]
-      ctrl_samples <- all_samples[limma_params$design[, comparison$ctrl] == 1]
+      exp_samples  <- get_group_samples(limma_params$sample_groups, comparison$exp_groups)
+      ctrl_samples <- get_group_samples(limma_params$sample_groups, comparison$ctrl_groups)
       n_exp  <- length(exp_samples)
       n_ctrl <- length(ctrl_samples)
 
@@ -284,8 +286,8 @@ run_single_proteome_da_comparison <- function(comparison, limma_params, normaliz
     png(create_file_path(out_dirs$heatmap, "", comparison$name, "_heatmap.png"),
         width = 2400, height = 3200, res = 300)
     ht <- generate_heatmap(limma_results, normalized_counts,
-                     exp_name = comparison$exp, ctrl_name = comparison$ctrl,
-                     fig_dir = out_dirs$heatmap, design = limma_params$design,
+                     exp_groups = comparison$exp_groups, ctrl_groups = comparison$ctrl_groups,
+                     fig_dir = out_dirs$heatmap, sample_groups = limma_params$sample_groups,
                      heatmap_norm = heatmap_norm, color1 = color1, color2 = color2)
     draw(ht, column_title = paste0(comparison$exp, " vs ", comparison$ctrl, " — Differentially Abundant Proteins"),
          column_title_gp = grid::gpar(fontsize = 14, fontface = "bold"))

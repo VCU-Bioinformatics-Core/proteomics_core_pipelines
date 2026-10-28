@@ -123,6 +123,16 @@ align_to_samplesheet <- function(mat, samplesheet) {
   mat[, sample_ids, drop = FALSE]
 }
 
+#' @title Samples Belonging to a Set of Groups
+#' @param sample_groups Named character vector: names are matrix column (sample) names,
+#'   values are their GroupID.
+#' @param groups Character vector of group names.
+#' @return Character vector of sample names whose group is in \code{groups}, in
+#'   \code{sample_groups} order.
+get_group_samples <- function(sample_groups, groups) {
+  names(sample_groups)[sample_groups %in% groups]
+}
+
 #' @title Build a Tree-Style String of Pipeline Output Files
 #' @details Renders the actual files present under \code{out_dirs$data} and
 #'   \code{out_dirs$figures} (and their standard subdirectories) as a Unicode
@@ -403,12 +413,12 @@ generate_imputation_figures <- function(intensity_raw, intensity_imputed, out_di
 #' @param p Numeric. Adjusted p-value threshold for significance. Default \code{0.05}.
 #' @param lfc Numeric. Minimum absolute log2 fold-change threshold. Default \code{0.58}
 #'   (~1.5-fold).
-#' @param exp_name Character. Column name in \code{design} identifying experimental samples.
-#' @param ctrl_name Character. Column name in \code{design} identifying control samples.
+#' @param exp_groups Character vector of the experimental group(s) of the comparison.
+#' @param ctrl_groups Character vector of the control group(s) of the comparison.
 #' @param fig_dir Character. Directory for figure output (saving is the caller's
 #'   responsibility).
-#' @param design Model matrix (samples x groups) used to identify which samples belong to
-#'   each group.
+#' @param sample_groups Named character vector mapping sample (column) names to their
+#'   GroupID, used to pick the samples of \code{exp_groups} and \code{ctrl_groups}.
 #' @param row_id_col Character. Column in \code{diff_df} whose values index rows of
 #'   \code{intensity_df}. Default \code{"uniprotswissprot"}.
 #' @param heatmap_norm Character. \code{"zscore"} (default) or any other value for raw
@@ -419,7 +429,7 @@ generate_imputation_figures <- function(intensity_raw, intensity_imputed, out_di
 #'   \code{"#0072B2"}.
 #' @return A \code{ComplexHeatmap::Heatmap} object ready to be drawn with \code{draw()}.
 generate_heatmap <- function(diff_df, intensity_df, p = 0.05, lfc = 0.58,
-                             exp_name, ctrl_name, fig_dir, design,
+                             exp_groups, ctrl_groups, fig_dir, sample_groups,
                              row_id_col = "uniprotswissprot",
                              heatmap_norm = "zscore",
                              color1 = "#D55E00", color2 = "#0072B2") {
@@ -431,9 +441,8 @@ generate_heatmap <- function(diff_df, intensity_df, p = 0.05, lfc = 0.58,
   flog.info("generate_heatmap: row_id_col='%s', values: %s", row_id_col, paste(head(filtered_data[[row_id_col]], 3), collapse=", "))
 
   # restrict columns to only the two groups being compared
-  all_samples  <- colnames(intensity_df)
-  exp_samples  <- all_samples[design[, exp_name]  == 1]
-  ctrl_samples <- all_samples[design[, ctrl_name] == 1]
+  exp_samples  <- intersect(get_group_samples(sample_groups, exp_groups),  colnames(intensity_df))
+  ctrl_samples <- intersect(get_group_samples(sample_groups, ctrl_groups), colnames(intensity_df))
   comparison_samples <- c(exp_samples, ctrl_samples)
   flog.info("generate_heatmap: exp_samples=%s", paste(exp_samples, collapse=", "))
   flog.info("generate_heatmap: ctrl_samples=%s", paste(ctrl_samples, collapse=", "))

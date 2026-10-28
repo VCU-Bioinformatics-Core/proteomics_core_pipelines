@@ -42,10 +42,12 @@ Percentages describe about how much of the pipeline is complete
   - [Usage](#usage)
     - [Preparing Your Data](#preparing-your-data)
       - [Intensity Matrix](#intensity-matrix)
-      - [Samplesheet](#samplesheet)
+      - [Samplesheet](#2-samplesheet)
+      - [Run Config](#3-run-config-yaml)
     - [Running the Script](#running-the-script)
-      - [Human Analysis](#human-analysis)
-      - [Mouse Analysis](#mouse-analysis)
+      - [With a Run Config](#with-a-run-config-recommended)
+      - [Human Analysis](#human-analysis-flags-only)
+      - [Mouse Analysis](#mouse-analysis-flags-only)
       - [Arguments](#arguments)
     - [Current Execution Workflow](#current-execution-workflow-temporary)
   - [Pipeline Output](#pipeline-output)
@@ -157,7 +159,7 @@ Differential abundance analysis is performed using the **limma** R package (v3.6
 ### Pipeline
 <img height="450" alt="Proteomics Pipeline" src="https://github.com/user-attachments/assets/ca5e73a9-7a5c-4578-bf7b-3ea563cc0237" />
 
-- The input samplesheet is parsed to generate comparisons definitions.
+- The run config and samplesheet are parsed to generate the comparison definitions.
 - Runs differential analysis over all comparisons specified using [limma R package 3.64.3](https://academic.oup.com/nar/article/43/7/e47/2414268).
 - Runs [Gene Set Enrichment Analysis (Gene Ontology)](https://www.gsea-msigdb.org/gsea/index.jsp).
 - Generates exploratory and differential analysis plots.
@@ -190,7 +192,7 @@ renv::restore()
 ### Usage
 
 #### Preparing Your Data
-Two input files are required in specific formats: the **Intensity Matrix** and the **Samplesheet**.
+Two input files are required in specific formats, the **Intensity Matrix** and the **Samplesheet**, plus a **Run Config** (recommended) describing the analysis.
 
 ##### 1. Intensity Matrix
 **Required format:** Tab-Separated Values (`.tsv`)
@@ -210,37 +212,78 @@ This file contains the protein ids and raw merged protein levels. The columns mu
   
 ##### 2. Samplesheet:
 **Required format:** Comma-Separated Values (`.csv`)
-This file contains metadata for each sample, including group identifiers and binary indicators for specific comparisons. The columns must be organized as follows:
-- **SampleID:** Sample identifiers that exactly match the sample column headers in the count matrix.
-- **GroupID:** Group identifiers for each sample (e.g., `experiment1`, `control1`). These group identifiers are crucial for defining the experimental design in limma.
-- [comparison]: Subsequent columns define pairwise comparisons. The column name should follow the format `experiment_vs_control`. For each comparison column, use `1` to indicate samples belonging to the experimental group, `0` for the control group, and leave the cell `blank` for samples to be excluded from that specific comparison. This design matrix setup allows the user to specify which samples are used for each comparison, providing flexibility in complex experimental designs.
+This file assigns each sample to a group. Only two columns are needed:
+- **SampleID:** Sample identifiers that exactly match the sample column headers in the intensity matrix.
+- **GroupID:** Group identifiers for each sample (e.g., `treated`, `control`). These define the limma design (`~0 + GroupID`). They must be valid R names: letters, digits, `.` or `_`, not starting with a digit (`KO_1`, `h24`, not `KO-1`, `24h`).
 
-| SampleID | GroupID      | experiment1_vs_control1	| experiment2_vs_control2	|
-| -------- | ------------ | ------------------------- | ------------------------- |
-| sample1_r1  | experiment1    | 1                  |              							|
-| sample1_r2  | experiment1    | 1                  |							              |
-| sample1_r3  | experiment1    | 1                  |							              |
-| sample2_r1  | control1  | 0                 |                        	|
-| sample2_r2  | control1  | 0                 |                        	|
-| sample2_r3  | control1  | 0                 |                        	|
-| sample3_r1  | experiment2 |                		    | 1                      	|
-| sample3_r2  | experiment2 |                		    | 1                      	|
-| sample3_r3  | experiment2 |                		    | 1                      	|
-| sample4_r1  | control2 |                		| 0                      	|
-| sample4_r2  | control2 |                		| 0                      	|
-| sample4_r3  | control2 |                		| 0                      	|
+Which groups are compared is set in the run config (see below), not in the samplesheet. Additional columns are ignored.
+
+| SampleID   | GroupID     |
+| ---------- | ----------- |
+| sample1_r1 | experiment1 |
+| sample1_r2 | experiment1 |
+| sample1_r3 | experiment1 |
+| sample2_r1 | control1    |
+| sample2_r2 | control1    |
+| sample2_r3 | control1    |
+| sample3_r1 | experiment2 |
+| sample3_r2 | experiment2 |
+| sample3_r3 | experiment2 |
+
+> **Deprecated format.** Older samplesheets defined comparisons as extra 0/1 columns (`1` = experimental, `0` = control). These still work when the run config does not set `comparisons`, but a deprecation warning is logged. Note that blank cells in those columns never excluded samples: limma always fits all samples together and only the contrast changes.
+
+##### 3. Run Config (YAML)
+**Recommended.** One YAML file per analysis holds every run setting, including the comparisons. Keys are the pipeline argument names. CLI flags override values from the file, and anything not set falls back to the defaults listed under [Arguments](#arguments). Relative paths are resolved against the directory you run `Rscript` from.
+
+```yaml
+run_id: ovarian_example
+protein_matrix_file: inst/extdata/ovarian_intensity_matrix.csv   # PTM: ptm_matrix_file (+ protein_matrix_file for IDA)
+samplesheet_file: inst/extdata/ovarian_samplesheet.csv
+out_dir: results/ovarian
+
+genome: human
+imputation_method: DEP-MinProb
+skip_gsea: false
+
+comparisons: all       # all | vs_reference | list of [exp, ctrl] pairs
+reference: control     # optional for 'all', required for 'vs_reference'
+```
+
+`comparisons` accepts:
+
+| Value | Comparisons run |
+| ----- | --------------- |
+| `all` (default) | Every pair of groups. The group listed first in the samplesheet is the control, unless `reference` is set, in which case the reference is always the control. *k* groups give *k(k−1)/2* comparisons. |
+| `vs_reference` | Every other group against `reference`. |
+| a list of pairs | Exactly these, e.g. `[[treatA, control], [treatB, control], [treatA, treatB]]`. |
+
+In a pair `[exp, ctrl]` the first group is the numerator: **positive logFC means higher in `exp`**. Each comparison is named `<exp>_vs_<ctrl>`, which is used in the output file names. Group names such as `yes`, `no`, `on`, `off` must be quoted in YAML (`["yes", control]`), otherwise they are read as true/false.
+
+Every run writes the fully resolved settings, with the comparisons spelled out, to `<out_dir>/run_config.yaml`. Pass that file to `--config` to reproduce the run.
+
 
 
 #### Running the Script
 
-The pipeline is executed using an R script. Example commands for running it on VCU HPRC (high performance research computing servers) are as follows:
+The pipelines are executed with the R scripts in `inst/scripts/`: `da.proteome.R` (protein level), `da.ptm.R` (PTM peptides) and `ida.ptm.R` (PTM peptides adjusted for protein abundance). Example commands for running them on VCU HPRC (high performance research computing servers) are as follows:
 
-##### Human Analysis
+##### With a Run Config (recommended)
 
 ```bash
 module load R/4.4.1
 
-Rscript de.regular.R \
+Rscript inst/scripts/da.proteome.R --config analysis.yaml
+
+# CLI flags override the config, e.g. a quick run without GSEA:
+Rscript inst/scripts/da.proteome.R --config analysis.yaml --skip-gsea --outdir results_quick
+```
+
+##### Human Analysis (flags only)
+
+```bash
+module load R/4.4.1
+
+Rscript inst/scripts/da.proteome.R \
 --counts human_counts.tsv \
 --samplesheet samplesheet.csv \
 --outdir human_results \
@@ -248,12 +291,12 @@ Rscript de.regular.R \
 --annotation human
 ```
 
-##### Mouse Analysis
+##### Mouse Analysis (flags only)
 
 ```bash
 module load R/4.4.1
 
-Rscript de.regular.R \
+Rscript inst/scripts/da.proteome.R \
 --counts mouse_counts.tsv \
 --samplesheet samplesheet.csv \
 --outdir mouse_results \
@@ -261,22 +304,29 @@ Rscript de.regular.R \
 --annotation mouse
 ```
 
+Without a config, `comparisons` defaults to `all` (or to the legacy 0/1 samplesheet columns, if present).
+
 ##### Arguments
-- `-c, --counts`: Path to the merged counts file **(Mandatory)**
-- `-s, --samplesheet`: Path to the sample sheet file **(Mandatory)**
-- `-o, --outdir`: Output directory (default: `./output`)
-- `-r, --runid`: Unique identifier for the analysis run **(Mandatory)**
-- `-a, --annotation`: Genome to use for annotation: `mouse` or `human` (default: `mouse`)
-- `-i, --imputation`: Imputation method (default: `DEP-MinProb`). DEP methods: `DEP-MinProb`, `DEP-knn`, `DEP-bpca`, `DEP-QRILC`, `DEP-man`. Custom methods defined in `workflow/custom_imputation.R` (e.g. `3by3`). Use `none` to skip.
-- `-q, --imputation-q`: Quantile cutoff for the left-censored distribution used by `DEP-MinProb` and `DEP-QRILC` (default: `0.01`)
-- `--seed`: Random seed for reproducibility of stochastic imputation methods (default: `42`)
-- `--heatmap-norm`: Heatmap row normalization — `zscore` (z-score normalize rows) or `none` (raw intensity) (default: `zscore`)
-- `--heatmap-top-n`: Number of top proteins by CV to show in the global heatmap (default: `1000`)
-- `--gsea-ont`: Gene Ontology category for GSEA: `BP`, `MF`, `CC`, or `ALL` (default: `BP`)
-- `--skip-gsea`: Skip GSEA analysis for faster runs (flag, no value needed)
-- `--skip-anova`: Skip one-way ANOVA for faster runs (flag, no value needed)
-- `--group-color1`: Hex color for the up-regulated group in plots (default: `#D55E00`)
-- `--group-color2`: Hex color for the down-regulated group in plots (default: `#0072B2`)
+Each flag has a config key (in brackets). Mandatory settings can come from either the config or the flags.
+- `--config`: YAML run config (see [Run Config](#3-run-config-yaml))
+- `-c, --counts`: Path to the intensity matrix [`protein_matrix_file`; `ptm_matrix_file` for `da.ptm.R`/`ida.ptm.R`] **(Mandatory)**
+- `--protein-counts`: Path to the imputed protein matrix, `ida.ptm.R` only [`protein_matrix_file`] **(Mandatory for IDA)**
+- `--ptm-marker`: Regex selecting PTM peptides in `EG.PrecursorId`, PTM scripts only [`ptm_marker`] (default: `Phospho \(STY\)`)
+- `-s, --samplesheet`: Path to the sample sheet file [`samplesheet_file`] **(Mandatory)**
+- `-o, --outdir`: Output directory [`out_dir`] (default: `./output`)
+- `-r, --runid`: Unique identifier for the analysis run [`run_id`] **(Mandatory)**
+- Config only: `comparisons` (default: `all`) and `reference` (see [Run Config](#3-run-config-yaml))
+- `-a, --annotation`: Genome to use for annotation: `mouse` or `human` [`genome`] (default: `mouse`)
+- `-i, --imputation`: Imputation method [`imputation_method`] (default: `DEP-MinProb`). DEP methods: `DEP-MinProb`, `DEP-knn`, `DEP-bpca`, `DEP-QRILC`, `DEP-man`. Custom methods defined in `R/custom_imputation.R` (e.g. `3by3`). Use `none` to skip.
+- `-q, --imputation-q`: Quantile cutoff for the left-censored distribution used by `DEP-MinProb` and `DEP-QRILC` [`imputation_q`] (default: `0.01`)
+- `--seed`: Random seed for reproducibility of stochastic imputation methods [`imputation_seed`] (default: `42`)
+- `--heatmap-norm`: Heatmap row normalization — `zscore` (z-score normalize rows) or `none` (raw intensity) [`heatmap_norm`] (default: `zscore`)
+- `--heatmap-top-n`: Number of top proteins by CV to show in the global heatmap [`heatmap_top_n`] (default: `1000`)
+- `--gsea-ont`: Gene Ontology category for GSEA: `BP`, `MF`, `CC`, or `ALL` [`gsea_ont`] (default: `BP`)
+- `--skip-gsea`: Skip GSEA analysis for faster runs (flag, no value needed) [`skip_gsea: true`]
+- `--skip-anova`: Skip one-way ANOVA for faster runs (flag, no value needed) [`skip_anova: true`]
+- `--group-color1`: Hex color for the up-regulated group in plots [`group_color1`] (default: `#D55E00`)
+- `--group-color2`: Hex color for the down-regulated group in plots [`group_color2`] (default: `#0072B2`)
 
 #### Current execution workflow (temporary)
 
@@ -297,10 +347,13 @@ This step is required to activate the project-specific **renv** environment and 
 
 ##### Wrapper script invocation
 
-The pipeline is currently launched via a shell wrapper that calls the R script with all required command-line arguments as show:
+The pipeline is currently launched via a shell wrapper that calls the R script with a run config (or all required command-line arguments) as shown:
 
 ```
 project_dir="<path-to-project-dir>"
+Rscript <wrapper-script-path> --config <analysis.yaml>
+
+# or, without a config
 Rscript <wrapper-script-path> \
   --counts <counts-path> \
   --samplesheet <samplesheet-path> \
@@ -494,31 +547,31 @@ Overall execution flow
 
 - These steps should be reviewed carefully if the upstream quantification format changes or if missingness patterns differ substantially.
 
-**Comparison definition logic**
+**Run configuration and comparison definition logic** (`R/config.R`)
 
-- Comparisons are inferred from the samplesheet using the following convention:
+- `resolve_run_config()` merges, in increasing priority, the pipeline function defaults, the YAML config and the CLI flags. Config keys are the pipeline argument names; unknown keys stop the run. The CLI wrappers share their options through `common_cli_options()`.
 
-  - Column 1–2: sample metadata (SampleID, GroupID)
+- `parse_comparisons()` turns the `comparisons` setting (`all`, `vs_reference`, or `[exp, ctrl]` pairs) into a list of comparison definitions with:
 
-  - Column 3 onward: binary comparison vectors
+  - `name` (`<exp>_vs_<ctrl>`, used in file names) and `contrast` (a limma contrast string, e.g. `"tumor - control"`)
 
-    - 1 → experimental group
+  - `exp` / `ctrl`: display labels used in plots and the report
 
-    - 0 → control group
+  - `exp_groups` / `ctrl_groups`: groups whose samples are shown in per-comparison plots and used for imputation categories
 
-- For each comparison column:
+- If `comparisons` is not set and the samplesheet still has 0/1 comparison columns, they are parsed as before (with a deprecation warning).
 
-  - Experimental and control group labels are inferred dynamically
+- Group names, references and pairs are validated before any data is read.
 
-  - Only valid comparisons (both groups present) are retained
-
-- This makes the pipeline flexible but tightly couples it to the samplesheet schema.
+- `write_run_config()` saves the resolved settings to `<out_dir>/run_config.yaml`.
 
 **Limma model construction**
 
 The limma setup is intentionally minimal:
 
 - A no-intercept design (~0 + condition) is used
+
+- The model is fitted once per run (`fit_limma_model()`); each comparison applies its contrast to that shared fit (`perform_limma_analysis()`)
 
 - One contrast is evaluated per comparison
 

@@ -17,14 +17,14 @@
 #'   used in output file names and the HTML report title.
 #' @param ptm_input_file Character. Path to the PTM-level intensity matrix
 #'   (tab-separated, rows = PTM sites, cols = samples).
-#' @param samplesheet_file Character. Path to the sample sheet CSV describing
-#'   sample groups and pairwise comparisons.
+#' @param samplesheet_file Character. Path to the sample sheet CSV with
+#'   \code{SampleID} and \code{GroupID} columns.
 #' @param ptm_matrix_file Character. Path to the PTM-level intensity
 #'   matrix
 #' @param protein_matrix_file Character. Path to the protein-level intensity
 #'   matrix
 #' @param out_dir Character. Directory where all outputs will be written.
-#'   Created if it does not already exist.
+#'   Created if it does not already exist. Default \code{"./output"}.
 #' @param genome Character. Organism genome to use for annotation
 #'   (\code{"mouse"} or \code{"human"}). Default \code{"mouse"}.
 #' @param imputation_method Character. Imputation strategy. One of
@@ -48,6 +48,11 @@
 #'   Default \code{"#D55E00"}.
 #' @param group_color2 Character. Hex colour for the second group in plots.
 #'   Default \code{"#0072B2"}.
+#' @param comparisons Comparisons to run: \code{"all"}, \code{"vs_reference"}, or a list
+#'   of \code{c(exp, ctrl)} pairs. \code{NULL} (default) uses legacy 0/1 samplesheet
+#'   columns if present, otherwise \code{"all"}. See \code{\link{parse_comparisons}}.
+#' @param reference Character or \code{NULL}. Reference (control) group used by
+#'   \code{"all"} and \code{"vs_reference"}.
 #'
 #' @return Invisibly returns the path to the generated HTML report.
 #'
@@ -66,7 +71,7 @@ run_ptm_ida_pipeline <- function(
   samplesheet_file,
   ptm_matrix_file,
   protein_matrix_file,
-  out_dir,
+  out_dir           = "./output",
   ptm_marker = "Phospho \\(STY\\)",
   genome            = "mouse",
   imputation_method = "DEP-MinProb",
@@ -78,8 +83,11 @@ run_ptm_ida_pipeline <- function(
   skip_gsea         = FALSE,
   skip_anova        = FALSE,
   group_color1      = "#D55E00",
-  group_color2      = "#0072B2"
+  group_color2      = "#0072B2",
+  comparisons       = NULL,
+  reference         = NULL
 ) {
+  run_config <- as.list(environment())
   setup_logging(out_dir, run_id = run_id)
   flog.info("PTM pipeline started: runID=%s, genome=%s, outdir=%s", run_id, genome, out_dir)
 
@@ -111,28 +119,18 @@ run_ptm_ida_pipeline <- function(
     stop("Invalid genome specified. Use 'mouse' or 'human'")
   }
 
-  # ================================
-  # Read and prepare the comparisons
-  # ================================
-  comparisons_raw  <- read.csv(samplesheet_file)
-  comparisons_cols <- colnames(comparisons_raw)[3:ncol(comparisons_raw)]
-  comparisons <- list()
-  for (comparisons_name in comparisons_cols) {
-    comparisons_vector <- comparisons_raw[[comparisons_name]]
-    exp_group  <- as.character(unique(comparisons_raw$GroupID[comparisons_vector == 1 & !is.na(comparisons_vector)]))
-    ctrl_group <- as.character(unique(comparisons_raw$GroupID[comparisons_vector == 0 & !is.na(comparisons_vector)]))
-    if (length(exp_group) > 0 && length(ctrl_group) > 0) {
-      comparisons[[length(comparisons) + 1]] <- list(
-        name = comparisons_name, exp = exp_group, ctrl = ctrl_group
-      )
-    }
-  }
+  # ===============================================
+  # Read the samplesheet and define the comparisons
+  # ===============================================
+  samplesheet <- read.csv(samplesheet_file)
+  comparisons <- parse_comparisons(samplesheet, comparisons, reference)
 
   # ================================
   # Read and prepare PTM data matrix
   # ================================
 
   out_dirs <- setup_directories(out_dir)
+  write_run_config(run_config, comparisons, out_dir)
   
   # loading the data and getting initial counts
   full_ptm_peptide_levels <- data.frame(
@@ -163,7 +161,7 @@ run_ptm_ida_pipeline <- function(
   non_numeric_cols <- c("PG.ProteinAccessions", "PG.Genes", "PG.UniProtIds",
                         "PG.FASTAName", "EG.PrecursorId")
   matrix <- full_ptm_peptide_levels %>% dplyr::select(-any_of(non_numeric_cols))
-  ptm_matrix <- align_to_samplesheet(log2(matrix + 1), comparisons_raw)
+  ptm_matrix <- align_to_samplesheet(log2(matrix + 1), samplesheet)
   ptm_matrix_raw <- ptm_matrix
 
   ptm_peptide_metadata <- full_ptm_peptide_levels %>%
@@ -188,7 +186,7 @@ run_ptm_ida_pipeline <- function(
     set.seed(imputation_seed)
     se <- SummarizedExperiment::SummarizedExperiment(
       assays  = list(intensity = as.matrix(ptm_matrix)),
-      colData = S4Vectors::DataFrame(label = comparisons_raw$SampleID, condition = comparisons_raw$GroupID),
+      colData = S4Vectors::DataFrame(label = samplesheet$SampleID, condition = samplesheet$GroupID),
       rowData = S4Vectors::DataFrame(name  = rownames(ptm_matrix), ID = rownames(ptm_matrix))
     )
     se_imputed <- if (dep_func %in% c("MinProb", "QRILC")) {
@@ -216,7 +214,7 @@ run_ptm_ida_pipeline <- function(
     # perform custom imputation
     set.seed(imputation_seed)
     imp_func <- get(imp_func_name) # getting function loaded by R/custom_imputation.R from the global env
-    groups_vec <- setNames(comparisons_raw$GroupID, colnames(ptm_matrix))
+    groups_vec <- setNames(samplesheet$GroupID, colnames(ptm_matrix))
     imputed_mat <- imp_func(as.matrix(ptm_matrix), groups = groups_vec)
 
     n_peptides_not_imputable <- attr(imputed_mat, "n_not_imputable") %||% 0L
@@ -244,10 +242,11 @@ run_ptm_ida_pipeline <- function(
   # ===========================================================================
 
   # Limma design matrix
-  sample_info <- data.frame(sample = comparisons_raw$SampleID, condition = comparisons_raw$GroupID)
+  sample_info <- data.frame(sample = samplesheet$SampleID, condition = samplesheet$GroupID)
   design      <- model.matrix(~0 + condition, data = sample_info)
   colnames(design) <- levels(factor(sample_info$condition))
-  limma_params <- list(E = ptm_matrix, design = design)
+  limma_params <- list(E = ptm_matrix, design = design,
+                       sample_groups = setNames(sample_info$condition, colnames(ptm_matrix)))
 
   # add back the protein accession for use in run_single_ptm_ida_comparison
   ptm_imp_with_prots <- merge(ptm_peptide_metadata, ptm_imp_matrix, by = "row.names", all.y = TRUE)

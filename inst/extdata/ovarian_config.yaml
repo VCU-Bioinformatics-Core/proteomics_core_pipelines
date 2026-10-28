@@ -1,0 +1,23 @@
+# DAPRmd run configuration for the ovarian example dataset.
+# Keys are the pipeline function arguments; CLI flags override them.
+# Relative paths are resolved against the directory Rscript is run from.
+
+run_id: ovarian_example
+protein_matrix_file: inst/extdata/ovarian_intensity_matrix.csv
+samplesheet_file: inst/extdata/ovarian_samplesheet.csv
+out_dir: test/ovarian_results
+
+genome: human
+imputation_method: none
+skip_gsea: true
+
+# Comparisons:
+#   all            every pair of groups (default); the group listed first in the
+#                  samplesheet is the control unless `reference` is set
+#   vs_reference   every other group against `reference`
+#   a list of [exp, ctrl] pairs, e.g.
+#     comparisons:
+#       - [tumor, control]
+# The first group of a pair is the numerator: positive logFC = higher in exp.
+comparisons: all
+reference: control

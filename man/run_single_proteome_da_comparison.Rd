@@ -20,10 +20,13 @@ run_single_proteome_da_comparison(
 )
 }
 \arguments{
-\item{comparison}{Named list with elements \code{name}, \code{exp}, and \code{ctrl}.}
+\item{comparison}{Comparison definition from \code{\link{parse_comparisons}}
+(\code{name}, \code{contrast}, \code{exp}, \code{ctrl}, \code{exp_groups},
+\code{ctrl_groups}).}
 
-\item{limma_params}{Named list with elements \code{E} (intensity matrix) and
-\code{design} (model matrix).}
+\item{limma_params}{Named list with elements \code{E} (intensity matrix),
+\code{design} (model matrix), \code{fit} (from \code{\link{fit_limma_model}}) and
+\code{sample_groups} (named vector mapping sample names to GroupID).}
 
 \item{normalized_counts}{Numeric matrix or data frame (proteins x samples) of
 imputed log2 intensities passed to \code{\link{generate_heatmap}}.}

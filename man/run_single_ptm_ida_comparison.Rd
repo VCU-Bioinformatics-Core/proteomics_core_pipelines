@@ -22,10 +22,12 @@ run_single_ptm_ida_comparison(
 )
 }
 \arguments{
-\item{comparison}{Named list with elements \code{name}, \code{exp}, and \code{ctrl}.}
+\item{comparison}{Comparison definition from \code{\link{parse_comparisons}}
+(\code{name}, \code{exp}, \code{ctrl}, \code{exp_groups}, \code{ctrl_groups}).}
 
 \item{limma_params}{Named list with elements \code{E} (intensity matrix) and
-\code{design} (model matrix), used to identify sample group membership.}
+\code{sample_groups} (named vector mapping sample names to GroupID), used to
+identify sample group membership.}
 
 \item{ptm_imp_matrix}{Numeric matrix or data frame (PTM peptides x samples) of
 imputed log2 intensities, with columns \code{peptide_id} and \code{PG.UniProtIds}.}

@@ -2,23 +2,19 @@
 % Please edit documentation in R/perform_limma_analysis.R
 \name{perform_limma_analysis}
 \alias{perform_limma_analysis}
-\title{Run a limma Differential Expression Analysis}
+\title{Run a limma Differential Expression Analysis for One Contrast}
 \usage{
-perform_limma_analysis(limma_params, exp, ctrl, min_valid_samples = 2)
+perform_limma_analysis(limma_params, contrast)
 }
 \arguments{
 \item{limma_params}{Named list containing at minimum:
 \describe{
-\item{E}{Numeric matrix of log2 intensities (features × samples).}
-\item{design}{Model matrix as produced by \code{model.matrix}.}
+\item{fit}{\code{MArrayLM} object from \code{\link{fit_limma_model}}.}
+\item{design}{Model matrix used for the fit.}
 }}
 
-\item{exp}{Character. Column name in \code{limma_params$design} for the experimental group.}
-
-\item{ctrl}{Character. Column name in \code{limma_params$design} for the control group.}
-
-\item{min_valid_samples}{Integer. Minimum number of valid (non-missing) samples required
-per group. Default \code{2}. (Informational; filtering is expected upstream.)}
+\item{contrast}{Character. limma contrast in terms of the design columns,
+e.g. \code{"tumor - control"}.}
 }
 \value{
 Data frame of limma results from \code{topTable} sorted by p-value, with columns
@@ -26,5 +22,5 @@ including \code{logFC}, \code{AveExpr}, \code{t}, \code{P.Value}, \code{adj.P.Va
 \code{B}. Stops with an error if the analysis fails.
 }
 \description{
-Run a limma Differential Expression Analysis
+Run a limma Differential Expression Analysis for One Contrast
 }

@@ -1,12 +1,6 @@
 # run from the package directory
-Rscript --vanilla inst/scripts/de.regular.R \
-    --counts inst/scripts/extdata/ovarian_intensity_matrix.csv \
-    --samplesheet inst/extdata/ovarian_samplesheet.csv \
-    --outdir test/ovarian_results \
-    --runid ovarian_example \
-    --annotation human \
-    --imputation none \
-    --skip-gsea
+Rscript --vanilla inst/scripts/da.proteome.R \
+    --config inst/extdata/ovarian_config.yaml
 
 # single-gene strip plot from the results above
 Rscript --vanilla inst/scripts/plot_single_gene.R \

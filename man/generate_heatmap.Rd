@@ -9,10 +9,10 @@ generate_heatmap(
   intensity_df,
   p = 0.05,
   lfc = 0.58,
-  exp_name,
-  ctrl_name,
+  exp_groups,
+  ctrl_groups,
   fig_dir,
-  design,
+  sample_groups,
   row_id_col = "uniprotswissprot",
   heatmap_norm = "zscore",
   color1 = "#D55E00",
@@ -32,15 +32,15 @@ Row names must match values in \code{diff_df[[row_id_col]]}.}
 \item{lfc}{Numeric. Minimum absolute log2 fold-change threshold. Default \code{0.58}
 (~1.5-fold).}
 
-\item{exp_name}{Character. Column name in \code{design} identifying experimental samples.}
+\item{exp_groups}{Character vector of the experimental group(s) of the comparison.}
 
-\item{ctrl_name}{Character. Column name in \code{design} identifying control samples.}
+\item{ctrl_groups}{Character vector of the control group(s) of the comparison.}
 
 \item{fig_dir}{Character. Directory for figure output (saving is the caller's
 responsibility).}
 
-\item{design}{Model matrix (samples x groups) used to identify which samples belong to
-each group.}
+\item{sample_groups}{Named character vector mapping sample (column) names to their
+GroupID, used to pick the samples of \code{exp_groups} and \code{ctrl_groups}.}
 
 \item{row_id_col}{Character. Column in \code{diff_df} whose values index rows of
 \code{intensity_df}. Default \code{"uniprotswissprot"}.}

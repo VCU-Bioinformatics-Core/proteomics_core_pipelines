@@ -17,10 +17,10 @@
 #'   used in output file names and the HTML report title.
 #' @param protein_matrix_file Character. Path to the protein-level intensity matrix
 #'   (tab-separated, rows = proteins, cols = samples).
-#' @param samplesheet_file Character. Path to the sample sheet CSV describing
-#'   sample groups and pairwise comparisons.
+#' @param samplesheet_file Character. Path to the sample sheet CSV with
+#'   \code{SampleID} and \code{GroupID} columns.
 #' @param out_dir Character. Directory where all outputs will be written.
-#'   Created if it does not already exist.
+#'   Created if it does not already exist. Default \code{"./output"}.
 #' @param genome Character. Organism genome to use for annotation
 #'   (\code{"mouse"} or \code{"human"}). Default \code{"mouse"}.
 #' @param imputation_method Character. Imputation strategy. One of
@@ -44,6 +44,11 @@
 #'   Default \code{"#D55E00"}.
 #' @param group_color2 Character. Hex colour for the second group in plots.
 #'   Default \code{"#0072B2"}.
+#' @param comparisons Comparisons to run: \code{"all"}, \code{"vs_reference"}, or a list
+#'   of \code{c(exp, ctrl)} pairs. \code{NULL} (default) uses legacy 0/1 samplesheet
+#'   columns if present, otherwise \code{"all"}. See \code{\link{parse_comparisons}}.
+#' @param reference Character or \code{NULL}. Reference (control) group used by
+#'   \code{"all"} and \code{"vs_reference"}.
 #'
 #' @return Invisibly returns the path to the generated HTML report.
 #'
@@ -60,7 +65,7 @@ run_proteome_da_pipeline <- function(
   run_id,
   protein_matrix_file,
   samplesheet_file,
-  out_dir,
+  out_dir           = "./output",
   genome            = "mouse",
   imputation_method = "DEP-MinProb",
   imputation_q      = 0.01,
@@ -71,8 +76,11 @@ run_proteome_da_pipeline <- function(
   skip_gsea         = FALSE,
   skip_anova        = FALSE,
   group_color1      = "#D55E00",
-  group_color2      = "#0072B2"
+  group_color2      = "#0072B2",
+  comparisons       = NULL,
+  reference         = NULL
 ) {
+  run_config <- as.list(environment())
   setup_logging(out_dir, run_id = run_id)
   flog.info("Pipeline started: runID=%s, genome=%s, outdir=%s", run_id, genome, out_dir)
 
@@ -102,27 +110,17 @@ run_proteome_da_pipeline <- function(
     stop("Invalid genome specified. Use 'mouse' or 'human'")
   }
 
-   # ==========================
-  # Read and prepare the comparisons
   # ==========================
-  comparisons_raw  <- read.csv(samplesheet_file)
-  comparisons_cols <- colnames(comparisons_raw)[3:ncol(comparisons_raw)]
-  comparisons <- list()
-  for (comparisons_name in comparisons_cols) {
-    comparisons_vector <- comparisons_raw[[comparisons_name]]
-    exp_group  <- unique(comparisons_raw$GroupID[comparisons_vector == 1 & !is.na(comparisons_vector)])
-    ctrl_group <- unique(comparisons_raw$GroupID[comparisons_vector == 0 & !is.na(comparisons_vector)])
-    if (length(exp_group) > 0 && length(ctrl_group) > 0) {
-      comparisons[[length(comparisons) + 1]] <- list(
-        name = comparisons_name, exp = exp_group, ctrl = ctrl_group
-      )
-    }
-  }
+  # Read the samplesheet and define the comparisons
+  # ==========================
+  samplesheet <- read.csv(samplesheet_file)
+  comparisons <- parse_comparisons(samplesheet, comparisons, reference)
 
   # ==========================
   # Read and prepare data
   # ==========================
   out_dirs <- setup_directories(out_dir)
+  write_run_config(run_config, comparisons, out_dir)
   full_prot_levels <- data.frame(read_csv(protein_matrix_file, col_names = TRUE))
   full_prot_levels <- full_prot_levels %>% filter(!is.na(PG.Genes))
   n_proteins_total <- nrow(full_prot_levels)
@@ -167,7 +165,7 @@ run_proteome_da_pipeline <- function(
                      "PG.Organisms", "PG.ProteinDescriptions", "PG.FASTAName")
   counts <- full_prot_levels %>% dplyr::select(-any_of(non_prot_cols))
 
-  intensity_matrix     <- align_to_samplesheet(log2(counts + 1), comparisons_raw)
+  intensity_matrix     <- align_to_samplesheet(log2(counts + 1), samplesheet)
   intensity_matrix_raw <- intensity_matrix
 
   # ==========================
@@ -187,7 +185,7 @@ run_proteome_da_pipeline <- function(
     set.seed(imputation_seed)
     se <- SummarizedExperiment::SummarizedExperiment(
       assays  = list(intensity = as.matrix(intensity_matrix)),
-      colData = S4Vectors::DataFrame(label = comparisons_raw$SampleID, condition = comparisons_raw$GroupID),
+      colData = S4Vectors::DataFrame(label = samplesheet$SampleID, condition = samplesheet$GroupID),
       rowData = S4Vectors::DataFrame(name  = rownames(intensity_matrix), ID = rownames(intensity_matrix))
     )
     se_imputed <- if (dep_fun %in% c("MinProb", "QRILC")) {
@@ -213,7 +211,7 @@ run_proteome_da_pipeline <- function(
     }
     set.seed(imputation_seed)
     imp_func <- get(fn_name)
-    groups_vec <- setNames(comparisons_raw$GroupID, colnames(intensity_matrix))
+    groups_vec <- setNames(samplesheet$GroupID, colnames(intensity_matrix))
     imputed_mat <- imp_func(as.matrix(intensity_matrix), groups = groups_vec)
     n_peptides_not_imputable <- attr(imputed_mat, "n_not_imputable") %||% 0L
     intensity_matrix <- as.data.frame(imputed_mat)
@@ -232,10 +230,12 @@ run_proteome_da_pipeline <- function(
   # ==========================
   # Limma design matrix + analysis loop
   # ==========================
-  sample_info <- data.frame(sample = comparisons_raw$SampleID, condition = comparisons_raw$GroupID)
+  sample_info <- data.frame(sample = samplesheet$SampleID, condition = samplesheet$GroupID)
   design      <- model.matrix(~0 + condition, data = sample_info)
   colnames(design) <- levels(factor(sample_info$condition))
-  limma_params <- list(E = intensity_matrix, design = design)
+  limma_params <- list(E = intensity_matrix, design = design,
+                       fit = fit_limma_model(intensity_matrix, design),
+                       sample_groups = setNames(sample_info$condition, colnames(intensity_matrix)))
 
   results <- vector("list", length(comparisons))
   for (i in seq_along(comparisons)) {

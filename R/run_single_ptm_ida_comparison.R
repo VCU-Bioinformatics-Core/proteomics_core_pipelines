@@ -200,9 +200,11 @@ perform_multitest_ptm_ida_analysis <- function(comparison, exp_samples, ctrl_sam
 #'     \item Generates volcano, MA, and heatmap figures.
 #'     \item Optionally runs GSEA via \code{\link{process_gsea}} and saves results.
 #'   }
-#' @param comparison Named list with elements \code{name}, \code{exp}, and \code{ctrl}.
+#' @param comparison Comparison definition from \code{\link{parse_comparisons}}
+#'   (\code{name}, \code{exp}, \code{ctrl}, \code{exp_groups}, \code{ctrl_groups}).
 #' @param limma_params Named list with elements \code{E} (intensity matrix) and
-#'   \code{design} (model matrix), used to identify sample group membership.
+#'   \code{sample_groups} (named vector mapping sample names to GroupID), used to
+#'   identify sample group membership.
 #' @param ptm_imp_matrix Numeric matrix or data frame (PTM peptides x samples) of
 #'   imputed log2 intensities, with columns \code{peptide_id} and \code{PG.UniProtIds}.
 #' @param protein_imp_matrix Numeric matrix or data frame (proteins x samples) of
@@ -246,9 +248,8 @@ run_single_ptm_ida_comparison <- function(comparison, limma_params, ptm_imp_matr
     flog.info("=== Starting PTM analysis for comparison: %s ===", comparison$name)
 
     # define the list of samples for ctrl and exp
-    all_samples  <- colnames(limma_params$E)
-    exp_samples  <- all_samples[limma_params$design[, comparison$exp]  == 1]
-    ctrl_samples <- all_samples[limma_params$design[, comparison$ctrl] == 1]
+    exp_samples  <- get_group_samples(limma_params$sample_groups, comparison$exp_groups)
+    ctrl_samples <- get_group_samples(limma_params$sample_groups, comparison$ctrl_groups)
     n_exp  <- length(exp_samples)
     n_ctrl <- length(ctrl_samples)
 
@@ -350,8 +351,8 @@ run_single_ptm_ida_comparison <- function(comparison, limma_params, ptm_imp_matr
 
     heatmap_df <- ptm_imp_matrix_filtered %>% select(-c(peptide_id, PG.UniProtIds))
     ht <- generate_heatmap(diff_results, heatmap_df,
-                           exp_name = comparison$exp, ctrl_name = comparison$ctrl,
-                           fig_dir = out_dirs$heatmap, design = limma_params$design,
+                           exp_groups = comparison$exp_groups, ctrl_groups = comparison$ctrl_groups,
+                           fig_dir = out_dirs$heatmap, sample_groups = limma_params$sample_groups,
                            row_id_col = "peptide_id",
                            heatmap_norm = heatmap_norm, color1 = color1, color2 = color2)
     draw(ht, column_title = paste0(comparison$exp, " vs ", comparison$ctrl, " — Differentially Abundant PTM Peptides"),

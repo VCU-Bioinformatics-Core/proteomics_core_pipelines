@@ -8,7 +8,7 @@ run_proteome_da_pipeline(
   run_id,
   protein_matrix_file,
   samplesheet_file,
-  out_dir,
+  out_dir = "./output",
   genome = "mouse",
   imputation_method = "DEP-MinProb",
   imputation_q = 0.01,
@@ -19,7 +19,9 @@ run_proteome_da_pipeline(
   skip_gsea = FALSE,
   skip_anova = FALSE,
   group_color1 = "#D55E00",
-  group_color2 = "#0072B2"
+  group_color2 = "#0072B2",
+  comparisons = NULL,
+  reference = NULL
 )
 }
 \arguments{
@@ -29,11 +31,11 @@ used in output file names and the HTML report title.}
 \item{protein_matrix_file}{Character. Path to the protein-level intensity matrix
 (tab-separated, rows = proteins, cols = samples).}
 
-\item{samplesheet_file}{Character. Path to the sample sheet CSV describing
-sample groups and pairwise comparisons.}
+\item{samplesheet_file}{Character. Path to the sample sheet CSV with
+\code{SampleID} and \code{GroupID} columns.}
 
 \item{out_dir}{Character. Directory where all outputs will be written.
-Created if it does not already exist.}
+Created if it does not already exist. Default \code{"./output"}.}
 
 \item{genome}{Character. Organism genome to use for annotation
 (\code{"mouse"} or \code{"human"}). Default \code{"mouse"}.}
@@ -68,6 +70,13 @@ Default \code{"#D55E00"}.}
 
 \item{group_color2}{Character. Hex colour for the second group in plots.
 Default \code{"#0072B2"}.}
+
+\item{comparisons}{Comparisons to run: \code{"all"}, \code{"vs_reference"}, or a list
+of \code{c(exp, ctrl)} pairs. \code{NULL} (default) uses legacy 0/1 samplesheet
+columns if present, otherwise \code{"all"}. See \code{\link{parse_comparisons}}.}
+
+\item{reference}{Character or \code{NULL}. Reference (control) group used by
+\code{"all"} and \code{"vs_reference"}.}
 }
 \value{
 Invisibly returns the path to the generated HTML report.
