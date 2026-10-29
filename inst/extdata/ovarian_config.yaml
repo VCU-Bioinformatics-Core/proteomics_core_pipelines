@@ -14,7 +14,8 @@ skip_gsea: true
 # Samplesheet columns
 sample_id: SampleID                # sample IDs (the intensity matrix column names)
 primary_variables: [condition]     # the variable(s) being compared; groups = their levels
-# covariates: [batch]              # nuisance variables to adjust for
+# categorical_covariates: [batch]  # nuisance variables made of categories
+# numerical_covariates: [age]      # nuisance variables that are numbers
 # blocking_variable: PatientID     # samples sharing a value are correlated
 
 # Comparisons:

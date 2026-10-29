@@ -282,7 +282,8 @@ The samplesheet itself does not say what each column is for. The [run config](#3
 |---|---|---|
 | `sample_id` | the sample ID column | `SampleID` (the default) |
 | `primary_variables` | the variable(s) you are comparing; their values are the **groups** | `[treatment]` → groups `drugA`, `drugB`, `control` |
-| `covariates` | nuisance variables to adjust for (optional) | `[batch]` |
+| `categorical_covariates` | nuisance variables made of categories, to adjust for (optional) | `[batch, sex]` |
+| `numerical_covariates` | nuisance variables that are numbers, to adjust for (optional) | `[age, RIN]` |
 | `blocking_variable` | one variable whose samples are correlated, e.g. a patient ID (optional) | `PatientID` |
 
 Columns not named in the config are ignored.
@@ -307,7 +308,8 @@ out_dir: results/my_experiment
 # ---- samplesheet columns ----
 sample_id: SampleID               # column with the sample IDs
 primary_variables: [treatment]    # what you are comparing; its values are the groups
-covariates: [batch]               # optional: adjust for batch
+categorical_covariates: [batch]   # optional: adjust for batch
+# numerical_covariates: [age]     # optional: adjust for age
 # blocking_variable: PatientID    # optional: samples from the same patient
 
 # ---- analysis settings (delete any line to use the default) ----
@@ -385,7 +387,7 @@ Any setting can be overridden on the command line without editing the config, e.
 Rscript inst/scripts/da.proteome.R --config analysis.yaml --skip-gsea --outdir results_quick
 ```
 
-You can also skip the config and pass everything as flags. Without a config, `comparisons` defaults to `all`, and the samplesheet needs `SampleID` and `GroupID` columns (`sample_id`, `primary_variables`, `covariates` and `blocking_variable` can only be set in a config):
+You can also skip the config and pass everything as flags. Without a config, `comparisons` defaults to `all`, and the samplesheet needs `SampleID` and `GroupID` columns (`sample_id`, `primary_variables`, `categorical_covariates`, `numerical_covariates` and `blocking_variable` can only be set in a config):
 
 ```bash
 Rscript inst/scripts/da.proteome.R \
@@ -415,7 +417,8 @@ The protein (`da.proteome.R`) and PTM (`da.ptm.R`) pipelines can also handle mor
 | more than one primary variable (e.g. tissue × response) | `primary_variables` | [Several primary variables](#several-primary-variables) |
 | comparisons that pool or combine groups | formula comparisons | [Formula comparisons](#formula-comparisons) |
 | several samples from the same patient | `blocking_variable` | [Several samples per patient](#several-samples-per-patient) |
-| batches or other nuisance factors | `covariates` | [Batches and other covariates](#batches-and-other-covariates) |
+| batches or other nuisance factors | `categorical_covariates` | [Batches and other covariates](#batches-and-other-covariates) |
+| numbers to adjust for, e.g. age or RIN | `numerical_covariates` | [Batches and other covariates](#batches-and-other-covariates) |
 
 ### Worked example
 
@@ -444,7 +447,7 @@ genome: human
 
 sample_id: SampleID
 primary_variables: [tissue, response]   # groups become V_R, L_R, V_NR, L_NR
-covariates: [batch]                     # adjust for batch
+categorical_covariates: [batch]         # adjust for batch
 blocking_variable: PatientID            # each patient gave several samples
 
 comparisons:
@@ -492,22 +495,31 @@ Only one `blocking_variable` can be used.
 ### Batches and other covariates
 
 ```yaml
-covariates: [batch]
+categorical_covariates: [batch, sex]
+numerical_covariates: [age, RIN]
 ```
 
-Covariates adjust every comparison for nuisance factors such as batch or run date; the comparisons are written the same way. Covariates are treated as **categories** (batch `1`, `2`, `3` are three batches, not a number). Continuous covariates such as age are not supported yet.
+Covariates adjust every comparison for nuisance factors; the comparisons are written the same way. There are two kinds, and you choose which by the config key:
 
-If a covariate is mixed up with the groups (e.g. every responder was run in batch 1 and every non-responder in batch 2), the effects cannot be separated, and the pipeline stops and names the covariate. Remove it from `covariates` in that case.
+| | `categorical_covariates` | `numerical_covariates` |
+|---|---|---|
+| Use for | batch, sex, run day, site | age, RIN, BMI, storage time |
+| How it's used | each value is a separate category: batch `1`, `2`, `3` are three batches, not a number | as a number: one straight-line effect (e.g. log2 change per year), the same in every group |
+| Values | anything; empty cells are not allowed | numbers only; no empty cells, and not the same value for every sample |
+
+Numerical covariates are centered on their mean, so the group means in the model are at the average age (the report lists the means). This does not change any logFC or p-value. Dates must be converted to numbers first, e.g. days since the first sample.
+
+If a covariate is mixed up with the groups (e.g. every responder was run in batch 1 and every non-responder in batch 2), the effects cannot be separated, and the pipeline stops and names the covariate. Remove it from the config in that case. For a numerical covariate that largely follows the groups (e.g. responders are much older), the pipeline runs but logs a warning: the comparisons are then unreliable.
 
 ### What changes in the output
 
-- The report's **Analysis Parameters** table shows the limma design, the primary variables, the covariates and the blocking correlation, and each comparison section shows its limma contrast.
+- The report's **Analysis Parameters** table shows the limma design, the primary variables, the categorical and numerical covariates (with their means) and the blocking correlation, and each comparison section shows its limma contrast.
 - The report's **Statistical Model** section (after the sample QC) writes out the model as an equation, defines every term for your study, shows the design matrix, each comparison as a formula and a contrast matrix, and the equivalent limma code.
-- With more than two groups, the **global F-test** (`global_anova.csv`) lists proteins that differ between any of the groups. It uses the same model, so it also accounts for `covariates` and `blocking_variable`.
+- With more than two groups, the **global F-test** (`global_anova.csv`) lists proteins that differ between any of the groups. It uses the same model, so it also accounts for the covariates and `blocking_variable`.
 
 ### PTM-IDA limitations
 
-`ida.ptm.R` uses a different statistical test (per-site t-tests), so it accepts `primary_variables` and `[A, B]` pairs only. `covariates`, `blocking_variable` and formula comparisons stop the run with an error.
+`ida.ptm.R` uses a different statistical test (per-site t-tests), so it accepts `primary_variables` and `[A, B]` pairs only. `categorical_covariates`, `numerical_covariates`, `blocking_variable` and formula comparisons stop the run with an error.
 
 ---
 
@@ -538,7 +550,8 @@ Each setting can go in the run config or be passed as a command-line flag. Comma
 | `reference` | — | — | The control group for `all` / `vs_reference` |
 | `sample_id` | — | `SampleID` | Samplesheet column with the sample IDs |
 | `primary_variables` | — | `GroupID` | Samplesheet column(s) being compared; their values are the groups ([details](#several-primary-variables)) |
-| `covariates` | — | — | Columns to adjust for, e.g. batch ([details](#batches-and-other-covariates)) |
+| `categorical_covariates` | — | — | Category columns to adjust for, e.g. batch ([details](#batches-and-other-covariates)) |
+| `numerical_covariates` | — | — | Number columns to adjust for, e.g. age ([details](#batches-and-other-covariates)) |
 | `blocking_variable` | — | — | Column identifying samples from the same patient ([details](#several-samples-per-patient)) |
 | — | `--config` | — | Path to the run config |
 
@@ -555,11 +568,13 @@ The pipeline checks the samplesheet and config before the analysis starts, so mo
 | `Missing required setting(s)` | Add the listed settings to the config or as flags |
 | `Comparison [...] uses unknown group(s)` | Group names in `comparisons` must match the samplesheet groups exactly (or the combined names, with several `primary_variables`) |
 | `Invalid contrast` | The formula uses a name that is not a group; the message lists the valid groups |
-| `Column(s) not in the samplesheet` | A `sample_id`, `primary_variables`, `covariates` or `blocking_variable` name is misspelled; the message lists the samplesheet columns |
+| `Column(s) not in the samplesheet` | A `sample_id`, `primary_variables`, covariate or `blocking_variable` name is misspelled; the message lists the samplesheet columns |
 | `Column(s) assigned to more than one of ...` | A column can have only one role, e.g. not both a primary variable and a covariate |
 | `Samplesheet SampleIDs and matrix columns do not match` | Make the sample IDs match the intensity matrix column headers |
-| `The design matrix is not full rank` | A covariate is mixed up with the groups; remove it from `covariates` |
-| `The PTM-IDA pipeline does not support ...` | Remove `covariates`, `blocking_variable` and formula comparisons for `ida.ptm.R` |
+| `The design matrix is not full rank` | A covariate is mixed up with the groups; remove it from the config |
+| `numerical_covariates column ... must contain only numbers` | Fix the listed values, or move the column to `categorical_covariates` |
+| `The groups explain ...% of the variation in numerical covariate` (warning) | The covariate largely follows the groups; group and covariate effects can't be separated well |
+| `The PTM-IDA pipeline does not support ...` | Remove covariates, `blocking_variable` and formula comparisons for `ida.ptm.R` |
 | Group names like `yes`, `no`, `on`, `off` behave oddly | YAML reads them as true/false; put them in quotes: `["yes", control]` |
 
 ---

@@ -233,7 +233,8 @@ The run config assigns each column a role (`prepare_samplesheet()` validates the
 | ---------- | ---- | ------- |
 | `sample_id` | Sample IDs; must exactly match the sample column headers in the intensity matrix | `SampleID` |
 | `primary_variables` | Variable(s) being compared. One variable: its values are the groups. Several: each combination is a group, joined with `_` (see [Advanced Designs](#4-advanced-designs)). Groups define the limma design (`~0 + group`) | `GroupID` column |
-| `covariates` | Nuisance variables, added as categorical fixed effects | none |
+| `categorical_covariates` | Nuisance variables added as categorical fixed effects (numeric codes such as batch `1`/`2` are levels) | none |
+| `numerical_covariates` | Nuisance variables added as numbers (e.g. age), centered on their mean: one slope shared by all groups | none |
 | `blocking_variable` | One variable identifying correlated samples (e.g. patient), handled with `duplicateCorrelation` | none |
 
 A column can have only one role, and columns not named in the config are ignored. Group names must be valid R names: letters, digits, `.` or `_`, not starting with a digit (`KO_1`, `h24`, not `KO-1`, `24h`). Which groups are compared is set by `comparisons` in the run config (see below).
@@ -274,7 +275,7 @@ In a pair `[exp, ctrl]` the first group is the numerator: **positive logFC means
 Every run writes the fully resolved settings, with the comparisons spelled out, to `<out_dir>/run_config.yaml`. Pass that file to `--config` to reproduce the run.
 
 ##### 4. Advanced Designs
-The protein (`da.proteome.R`) and PTM (`da.ptm.R`) pipelines support multi-factor groups, arbitrary contrasts, patients with several samples, and batch covariates. The model is always a cell-means design, `~0 + group [+ covariates]`, fitted **once** on all samples (no voom: the inputs are already log2 intensities). Each comparison is a contrast on that fit, so all comparisons share one residual variance estimate, which gives more power than separate subset analyses.
+The protein (`da.proteome.R`) and PTM (`da.ptm.R`) pipelines support multi-factor groups, arbitrary contrasts, patients with several samples, and categorical or numerical covariates. The model is always a cell-means design, `~0 + group [+ covariates]`, fitted **once** on all samples (no voom: the inputs are already log2 intensities). Each comparison is a contrast on that fit, so all comparisons share one residual variance estimate, which gives more power than separate subset analyses.
 
 Example: ventricular (V) and lumbar (L) samples from responders (R) and non-responders (NR), where each patient contributes both a V and an L sample.
 
@@ -288,7 +289,8 @@ Example: ventricular (V) and lumbar (L) samples from responders (R) and non-resp
 ```yaml
 sample_id: SampleID
 primary_variables: [tissue, response]   # groups V_R, L_R, V_NR, L_NR (columns pasted with "_")
-covariates: [batch]                     # categorical fixed effects
+categorical_covariates: [batch]         # categorical fixed effects
+numerical_covariates: [age]             # numeric, centered; one slope shared by all groups
 blocking_variable: PatientID            # patients contribute several samples -> duplicateCorrelation
 
 comparisons:
@@ -305,10 +307,11 @@ comparisons:
 - **`primary_variables`** with several columns: one group per combination of their values.
 - **Formula contrasts** need a `name` (used in file names) and a `contrast` written with the group names. `(V_R + L_R)/2 - (V_NR + L_NR)/2` weights the two tissues equally regardless of group sizes. Groups with positive coefficients are treated as the "experimental" side and negative ones as the "control" side in the volcano, MA and heatmap figures.
 - **`blocking_variable`**: use it when the same patient (or animal, or pool) contributes several samples. The within-patient correlation is estimated with `duplicateCorrelation` and used in the fit; the estimate is logged and shown in the report. Without it, p-values for comparisons that cut across patients (here `R_vs_NR`, the within-responder V vs L, and the interaction) are anti-conservative. A response that is a patient-level trait is fully confounded with a patient fixed effect, which is why blocking is used rather than adding the patient as a covariate.
-- **`covariates`**: categorical fixed effects (numeric codes such as batch `1`/`2` are treated as levels, not as a trend). The contrasts don't change. The run stops if a covariate is confounded with the groups (e.g. every batch holds a single group).
+- **`categorical_covariates`**: categorical fixed effects (numeric codes such as batch `1`/`2` are treated as levels, not as a trend). The contrasts don't change. The run stops if a covariate is confounded with the groups (e.g. every batch holds a single group).
+- **`numerical_covariates`**: numeric fixed effects, centered on their mean so the group coefficients are group means at the average covariate value (centering changes no logFC or p-value). Each adds one coefficient, the log2 change per unit, shared by all groups. Values must be numeric with no missing values and not constant. A warning is logged when the groups explain more than 80% of a covariate's variance (e.g. responders much older), since group and covariate effects are then poorly separated.
 - Every group referenced by a contrast needs samples; a group with a single sample is allowed (its variance is pooled with the other groups) but logged as a warning.
-- With more than two groups, the global F-test (`global_anova.csv`) tests whether any group differs, using the same fit, so it also accounts for `covariates` and `blocking_variable`.
-- The PTM-IDA pipeline (`ida.ptm.R`) tests each comparison with per-site t-tests, so it accepts `primary_variables` and `[exp, ctrl]` pairs only; `covariates`, `blocking_variable` and formula contrasts stop the run with an error.
+- With more than two groups, the global F-test (`global_anova.csv`) tests whether any group differs, using the same fit, so it also accounts for the covariates and `blocking_variable`.
+- The PTM-IDA pipeline (`ida.ptm.R`) tests each comparison with per-site t-tests, so it accepts `primary_variables` and `[exp, ctrl]` pairs only; covariates, `blocking_variable` and formula contrasts stop the run with an error.
 
 
 
@@ -364,7 +367,7 @@ Each flag has a config key (in brackets). Mandatory settings can come from eithe
 - `-s, --samplesheet`: Path to the sample sheet file [`samplesheet_file`] **(Mandatory)**
 - `-o, --outdir`: Output directory [`out_dir`] (default: `./output`)
 - `-r, --runid`: Unique identifier for the analysis run [`run_id`] **(Mandatory)**
-- Config only: `comparisons` (default: `all`) and `reference` (see [Run Config](#3-run-config-yaml)); `sample_id`, `primary_variables`, `covariates` and `blocking_variable` (see [Samplesheet](#2-samplesheet)). Without a config the samplesheet needs `SampleID` and `GroupID` columns
+- Config only: `comparisons` (default: `all`) and `reference` (see [Run Config](#3-run-config-yaml)); `sample_id`, `primary_variables`, `categorical_covariates`, `numerical_covariates` and `blocking_variable` (see [Samplesheet](#2-samplesheet)). Without a config the samplesheet needs `SampleID` and `GroupID` columns
 - `-a, --annotation`: Genome to use for annotation: `mouse` or `human` [`genome`] (default: `mouse`)
 - `-i, --imputation`: Imputation method [`imputation_method`] (default: `DEP-MinProb`). DEP methods: `DEP-MinProb`, `DEP-knn`, `DEP-bpca`, `DEP-QRILC`, `DEP-man`. Custom methods defined in `R/custom_imputation.R` (e.g. `3by3`). Use `none` to skip.
 - `-q, --imputation-q`: Quantile cutoff for the left-censored distribution used by `DEP-MinProb` and `DEP-QRILC` [`imputation_q`] (default: `0.01`)
@@ -449,14 +452,14 @@ The pipeline generates an output directory (specified by `--outdir`) with the fo
 **Key output files:**
 - `[comparison]_limma.csv` — full limma results (logFC, pvalue, padj, imputation_category per protein)
 - `[comparison]_go_analysis_.csv` — GSEA Gene Ontology results (NES, pvalue, p.adjust, leading edge)
-- `global_anova.csv` — global limma moderated F-test across all groups, the limma analogue of a one-way ANOVA that respects `covariates` and `blocking_variable` (generated when >2 groups; the PTM-IDA pipeline uses a classic one-way ANOVA)
+- `global_anova.csv` — global limma moderated F-test across all groups, the limma analogue of a one-way ANOVA that respects the covariates and `blocking_variable` (generated when >2 groups; the PTM-IDA pipeline uses a classic one-way ANOVA)
 - `run_config.yaml` — the fully resolved run settings, reusable with `--config`
 - `global_pca_plot.png` — PCA of all samples colored by group
 - `global_heatmap.png` — top proteins by coefficient of variation across all samples
 - `global_imputation_*.png` — four diagnostic plots for the imputation step
 
 ### Limitations
-- Covariates are categorical only; continuous covariates (e.g. age) are not supported yet.
+- Numerical covariates enter as a single straight-line effect shared by all groups (no splines, no group-specific slopes), and they can only be adjusted for, not tested.
 - Only one `blocking_variable` can be used (`duplicateCorrelation` estimates a single within-block correlation).
 - The PTM-IDA pipeline supports pairwise `[exp, ctrl]` comparisons only (no blocking, covariates or formula contrasts).
 
@@ -621,7 +624,7 @@ Overall execution flow
 
 The limma setup is intentionally minimal:
 
-- A no-intercept cell-means design (`~0 + group`, plus categorical `covariates`) is built by `build_design()`, which stops if the design is not full rank
+- A no-intercept cell-means design (`~0 + group`, plus `categorical_covariates` and centered `numerical_covariates`) is built by `build_design()`, which stops if the design is not full rank
 
 - The model is fitted once per run (`fit_limma_model()`), with `duplicateCorrelation` blocking when `blocking_variable` is set; each comparison applies its contrast to that shared fit (`perform_limma_analysis()`)
 
