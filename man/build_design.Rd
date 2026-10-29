@@ -4,25 +4,38 @@
 \alias{build_design}
 \title{Build the limma Design Matrix}
 \usage{
-build_design(samplesheet, covariates = NULL)
+build_design(
+  samplesheet,
+  categorical_covariates = NULL,
+  numerical_covariates = NULL
+)
 }
 \arguments{
 \item{samplesheet}{Data frame with a \code{GroupID} column and any covariate columns.}
 
-\item{covariates}{Character vector of samplesheet columns, or \code{NULL}. Each is
-treated as categorical (numeric codes such as batch 1/2/3 become factor levels).}
+\item{categorical_covariates}{Character vector of samplesheet columns, or \code{NULL}.
+Each is treated as categorical (numeric codes such as batch 1/2/3 become factor
+levels).}
+
+\item{numerical_covariates}{Character vector of samplesheet columns, or \code{NULL}.
+Each is used as a number (e.g. age), centered on its mean.}
 }
 \value{
 Model matrix with group columns named by GroupID. The attribute
-\code{"formula_label"} holds a readable formula, e.g. \code{"~0 + GroupID + batch"}.
+\code{"formula_label"} holds a readable formula, e.g.
+\code{"~0 + GroupID + batch + age"}, and \code{"numerical_covariate_means"} the
+means subtracted from each numerical covariate.
 }
 \description{
 Build the limma Design Matrix
 }
 \details{
 Cell-means design: one column per GroupID (\code{~0 + group}), plus
-treatment-coded columns for each categorical covariate. Comparisons are contrasts
-between the group columns, so covariates adjust every comparison without changing
-how contrasts are written. Stops if the design is not full rank, which happens when
-a covariate is confounded with the groups.
+treatment-coded columns for each categorical covariate and one column per
+numerical covariate. Numerical covariates are centered on their mean, so each group
+column is the group mean at the average covariate value; their coefficient is the
+change in log2 abundance per unit, with one slope shared by all groups. Comparisons
+are contrasts between the group columns, so covariates adjust every comparison
+without changing how contrasts are written. Stops if the design is not full rank,
+which happens when a covariate is confounded with the groups.
 }

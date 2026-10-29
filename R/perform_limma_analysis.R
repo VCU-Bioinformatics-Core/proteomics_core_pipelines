@@ -4,36 +4,50 @@
 
 #' @title Build the limma Design Matrix
 #' @details Cell-means design: one column per GroupID (\code{~0 + group}), plus
-#'   treatment-coded columns for each categorical covariate. Comparisons are contrasts
-#'   between the group columns, so covariates adjust every comparison without changing
-#'   how contrasts are written. Stops if the design is not full rank, which happens when
-#'   a covariate is confounded with the groups.
+#'   treatment-coded columns for each categorical covariate and one column per
+#'   numerical covariate. Numerical covariates are centered on their mean, so each group
+#'   column is the group mean at the average covariate value; their coefficient is the
+#'   change in log2 abundance per unit, with one slope shared by all groups. Comparisons
+#'   are contrasts between the group columns, so covariates adjust every comparison
+#'   without changing how contrasts are written. Stops if the design is not full rank,
+#'   which happens when a covariate is confounded with the groups.
 #' @param samplesheet Data frame with a \code{GroupID} column and any covariate columns.
-#' @param covariates Character vector of samplesheet columns, or \code{NULL}. Each is
-#'   treated as categorical (numeric codes such as batch 1/2/3 become factor levels).
+#' @param categorical_covariates Character vector of samplesheet columns, or \code{NULL}.
+#'   Each is treated as categorical (numeric codes such as batch 1/2/3 become factor
+#'   levels).
+#' @param numerical_covariates Character vector of samplesheet columns, or \code{NULL}.
+#'   Each is used as a number (e.g. age), centered on its mean.
 #' @return Model matrix with group columns named by GroupID. The attribute
-#'   \code{"formula_label"} holds a readable formula, e.g. \code{"~0 + GroupID + batch"}.
-build_design <- function(samplesheet, covariates = NULL) {
+#'   \code{"formula_label"} holds a readable formula, e.g.
+#'   \code{"~0 + GroupID + batch + age"}, and \code{"numerical_covariate_means"} the
+#'   means subtracted from each numerical covariate.
+build_design <- function(samplesheet, categorical_covariates = NULL, numerical_covariates = NULL) {
   group <- factor(samplesheet$GroupID)
-  if (length(covariates) == 0) {
-    design <- model.matrix(~0 + group)
-  } else {
-    cov_df <- as.data.frame(lapply(samplesheet[covariates], function(x) factor(as.character(x))))
-    design <- model.matrix(as.formula(paste("~0 + group +", paste(covariates, collapse = " + "))),
-                           data = cbind(data.frame(group = group), cov_df))
-  }
+  covariates <- c(categorical_covariates, numerical_covariates)
+  categorical_df <- as.data.frame(lapply(samplesheet[categorical_covariates], function(x) factor(as.character(x))))
+  numerical_means <- vapply(samplesheet[numerical_covariates], mean, numeric(1))
+  numerical_df <- as.data.frame(lapply(numerical_covariates, function(cv) samplesheet[[cv]] - numerical_means[[cv]]),
+                                col.names = numerical_covariates)
+  design_data <- data.frame(group = group)
+  if (length(categorical_covariates) > 0) design_data <- cbind(design_data, categorical_df)
+  if (length(numerical_covariates) > 0) design_data <- cbind(design_data, numerical_df)
+  design <- model.matrix(as.formula(paste(c("~0 + group", covariates), collapse = " + ")), data = design_data)
   colnames(design)[seq_len(nlevels(group))] <- levels(group)
   colnames(design) <- make.names(colnames(design), unique = TRUE)
 
   if (!is.fullrank(design))
     stop(sprintf(paste("The design matrix is not full rank; these coefficients cannot be estimated: %s.",
                        "A covariate is confounded with the groups (e.g. every batch holds a single group);",
-                       "remove it from `covariates`."),
+                       "remove it from `categorical_covariates` / `numerical_covariates`."),
                  paste(nonEstimable(design), collapse = ", ")))
 
   attr(design, "formula_label") <- paste(c("~0 + GroupID", covariates), collapse = " + ")
+  attr(design, "numerical_covariate_means") <- numerical_means
   flog.info("limma design %s: %d samples x %d coefficients (%s)", attr(design, "formula_label"),
             nrow(design), ncol(design), paste(colnames(design), collapse = ", "))
+  if (length(numerical_covariates) > 0)
+    flog.info("Numerical covariates centered on their means: %s",
+              paste(sprintf("%s = %g", numerical_covariates, numerical_means), collapse = ", "))
   design
 }
 

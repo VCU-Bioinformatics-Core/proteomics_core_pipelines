@@ -211,9 +211,15 @@ if (!is.null(analysis_params)) {{
     params_df <- rbind(params_df, data.frame(Parameter = "Primary Variables",
                                              Value = paste(analysis_params$primary_variables, collapse = " x ")))
   }}
-  if (length(analysis_params$covariates) > 0) {{
-    params_df <- rbind(params_df, data.frame(Parameter = "Covariates",
-                                             Value = paste(analysis_params$covariates, collapse = ", ")))
+  if (length(analysis_params$categorical_covariates) > 0) {{
+    params_df <- rbind(params_df, data.frame(Parameter = "Categorical Covariates",
+                                             Value = paste(analysis_params$categorical_covariates, collapse = ", ")))
+  }}
+  if (length(analysis_params$numerical_covariates) > 0) {{
+    params_df <- rbind(params_df, data.frame(
+      Parameter = "Numerical Covariates (centered)",
+      Value = paste(sprintf("%s (mean %s)", analysis_params$numerical_covariates,
+                            signif(analysis_params$numerical_covariate_means, 4)), collapse = ", ")))
   }}
   if (!is.null(analysis_params$blocking_variable)) {{
     params_df <- rbind(params_df, data.frame(

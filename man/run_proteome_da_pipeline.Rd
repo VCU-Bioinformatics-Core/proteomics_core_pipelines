@@ -24,7 +24,8 @@ run_proteome_da_pipeline(
   reference = NULL,
   sample_id = "SampleID",
   primary_variables = NULL,
-  covariates = NULL,
+  categorical_covariates = NULL,
+  numerical_covariates = NULL,
   blocking_variable = NULL
 )
 }
@@ -91,8 +92,11 @@ compared. One column: its values are the groups. Several: each combination is a
 group (e.g. \code{c("tissue", "response")} gives \code{V_R}, \code{L_NR}, ...).
 \code{NULL} uses a \code{GroupID} column. See \code{\link{prepare_samplesheet}}.}
 
-\item{covariates}{Character vector or \code{NULL}. Samplesheet columns added to the
-design as categorical fixed effects (e.g. \code{"batch"}).}
+\item{categorical_covariates}{Character vector or \code{NULL}. Samplesheet columns
+added to the design as categorical fixed effects (e.g. \code{"batch"}).}
+
+\item{numerical_covariates}{Character vector or \code{NULL}. Samplesheet columns
+added to the design as numbers, centered on their mean (e.g. \code{"age"}).}
 
 \item{blocking_variable}{Character or \code{NULL}. Samplesheet column identifying
 correlated samples (e.g. a patient ID); handled with \code{duplicateCorrelation}.}

@@ -56,8 +56,10 @@
 #'   compared. One column: its values are the groups. Several: each combination is a
 #'   group (e.g. \code{c("tissue", "response")} gives \code{V_R}, \code{L_NR}, ...).
 #'   \code{NULL} uses a \code{GroupID} column. See \code{\link{prepare_samplesheet}}.
-#' @param covariates Character vector or \code{NULL}. Samplesheet columns added to the
-#'   design as categorical fixed effects (e.g. \code{"batch"}).
+#' @param categorical_covariates Character vector or \code{NULL}. Samplesheet columns
+#'   added to the design as categorical fixed effects (e.g. \code{"batch"}).
+#' @param numerical_covariates Character vector or \code{NULL}. Samplesheet columns
+#'   added to the design as numbers, centered on their mean (e.g. \code{"age"}).
 #' @param blocking_variable Character or \code{NULL}. Samplesheet column identifying
 #'   correlated samples (e.g. a patient ID); handled with \code{duplicateCorrelation}.
 #'
@@ -92,7 +94,8 @@ run_proteome_da_pipeline <- function(
   reference         = NULL,
   sample_id         = "SampleID",
   primary_variables = NULL,
-  covariates        = NULL,
+  categorical_covariates = NULL,
+  numerical_covariates   = NULL,
   blocking_variable = NULL
 ) {
   run_config <- as.list(environment())
@@ -103,7 +106,7 @@ run_proteome_da_pipeline <- function(
   # Read the samplesheet and define the comparisons (fail fast on config errors)
   # ==========================
   samplesheet <- prepare_samplesheet(read.csv(samplesheet_file), sample_id, primary_variables,
-                                     covariates, blocking_variable)
+                                     categorical_covariates, numerical_covariates, blocking_variable)
   comparisons <- parse_comparisons(samplesheet, comparisons, reference,
                                    legacy_columns = is.null(primary_variables))
 
@@ -248,7 +251,7 @@ run_proteome_da_pipeline <- function(
   # Limma design matrix + analysis loop
   # ==========================
   sample_info <- data.frame(sample = samplesheet$SampleID, condition = samplesheet$GroupID)
-  design      <- build_design(samplesheet, covariates)
+  design      <- build_design(samplesheet, categorical_covariates, numerical_covariates)
   limma_params <- list(E = intensity_matrix, design = design,
                        fit = fit_limma_model(intensity_matrix, design,
                                              block = if (!is.null(blocking_variable)) samplesheet[[blocking_variable]]),
@@ -370,11 +373,14 @@ run_proteome_da_pipeline <- function(
                             color1 = group_color1, color2 = group_color2,
                             design_formula = attr(design, "formula_label"),
                             sample_id = sample_id, primary_variables = primary_variables,
-                            covariates = covariates, blocking_variable = blocking_variable,
+                            categorical_covariates = categorical_covariates,
+                            numerical_covariates = numerical_covariates,
+                            numerical_covariate_means = attr(design, "numerical_covariate_means"),
+                            blocking_variable = blocking_variable,
                             block_correlation = limma_params$fit$correlation,
                             design = design, contrast_matrix = build_contrast_matrix(comparisons, design),
-                            design_samplesheet = samplesheet[unique(c("SampleID", "GroupID", primary_variables,
-                                                                      blocking_variable, covariates))])
+                            design_samplesheet = samplesheet[unique(c("SampleID", "GroupID", primary_variables, blocking_variable,
+                                                                      categorical_covariates, numerical_covariates))])
   rds      <- list(results, comparisons, out_dirs, pca_plot, intensity_matrix_raw,
                    intensity_matrix, imputation_params, sample_info, protein_counts,
                    analysis_params, anova_summary)

@@ -169,7 +169,12 @@ resolve_run_config <- function(pipeline, config_file = NULL, cli_args = list()) 
 #'       each combination is a group named \code{"<tissue>_<response>"} (e.g.
 #'       \code{V_R}), giving one limma coefficient per cell of the factorial design.
 #'       \code{NULL} uses a column named \code{GroupID} (older two-column samplesheets).}
-#'     \item{\code{covariates}}{Nuisance variables added as categorical fixed effects.}
+#'     \item{\code{categorical_covariates}}{Nuisance variables added as categorical
+#'       fixed effects (e.g. batch; codes such as 1/2/3 are levels, not numbers).}
+#'     \item{\code{numerical_covariates}}{Nuisance variables used as numbers (e.g. age).
+#'       They must be numeric with no missing values and not constant; a warning is
+#'       logged when the groups explain most of their variation, because the comparisons
+#'       then become unreliable.}
 #'     \item{\code{blocking_variable}}{One variable whose levels group correlated
 #'       samples (e.g. a patient ID).}
 #'   }
@@ -178,17 +183,20 @@ resolve_run_config <- function(pipeline, config_file = NULL, cli_args = list()) 
 #' @param samplesheet Data frame read from the samplesheet CSV.
 #' @param sample_id Character. Column holding the sample IDs (matrix column names).
 #' @param primary_variables Character vector of columns, or \code{NULL}.
-#' @param covariates Character vector of columns, or \code{NULL}.
+#' @param categorical_covariates Character vector of columns, or \code{NULL}.
+#' @param numerical_covariates Character vector of columns, or \code{NULL}.
 #' @param blocking_variable Character or \code{NULL}.
 #' @return \code{samplesheet} with \code{SampleID} and \code{GroupID} columns set.
 prepare_samplesheet <- function(samplesheet, sample_id = "SampleID", primary_variables = NULL,
-                                covariates = NULL, blocking_variable = NULL) {
+                                categorical_covariates = NULL, numerical_covariates = NULL,
+                                blocking_variable = NULL) {
   if (!is.character(sample_id) || length(sample_id) != 1)
     stop("`sample_id` must be a single samplesheet column name")
   if (length(blocking_variable) > 1) stop("`blocking_variable` must be a single samplesheet column")
   group_cols <- primary_variables %||% "GroupID"
 
-  missing <- setdiff(c(sample_id, group_cols, covariates, blocking_variable), colnames(samplesheet))
+  missing <- setdiff(c(sample_id, group_cols, categorical_covariates, numerical_covariates, blocking_variable),
+                     colnames(samplesheet))
   if (length(missing) > 0) {
     hint <- if (is.null(primary_variables) && "GroupID" %in% missing)
       " Set `primary_variables` to the column(s) that define the groups." else ""
@@ -197,18 +205,28 @@ prepare_samplesheet <- function(samplesheet, sample_id = "SampleID", primary_var
   }
 
   roles <- list(sample_id = sample_id, primary_variables = group_cols,
-                covariates = covariates, blocking_variable = blocking_variable)
+                categorical_covariates = categorical_covariates, numerical_covariates = numerical_covariates,
+                blocking_variable = blocking_variable)
   used <- unlist(roles)
   dups <- unique(used[duplicated(used)])
   if (length(dups) > 0)
-    stop(sprintf("Column(s) assigned to more than one of sample_id/primary_variables/covariates/blocking_variable: %s",
-                 paste(dups, collapse = ", ")))
+    stop(sprintf("Column(s) assigned to more than one of %s: %s",
+                 paste(names(roles), collapse = "/"), paste(dups, collapse = ", ")))
   for (col in used) {
     if (any(is.na(samplesheet[[col]]) | samplesheet[[col]] == ""))
       stop(sprintf("Samplesheet column '%s' has empty values", col))
   }
   if (anyDuplicated(samplesheet[[sample_id]]))
     stop(sprintf("Samplesheet column '%s' has duplicated sample IDs", sample_id))
+  for (col in numerical_covariates) {
+    if (!is.numeric(samplesheet[[col]])) {
+      bad <- unique(samplesheet[[col]][is.na(suppressWarnings(as.numeric(as.character(samplesheet[[col]]))))])
+      stop(sprintf("numerical_covariates column '%s' must contain only numbers; non-numeric value(s): %s",
+                   col, paste(head(bad, 5), collapse = ", ")))
+    }
+    if (length(unique(samplesheet[[col]])) < 2)
+      stop(sprintf("numerical_covariates column '%s' has the same value for every sample", col))
+  }
 
   # internal names: a variable column called SampleID/GroupID would be overwritten
   clash <- intersect(setdiff(used, c(sample_id, group_cols)), c("SampleID", "GroupID"))
@@ -222,6 +240,16 @@ prepare_samplesheet <- function(samplesheet, sample_id = "SampleID", primary_var
   group_counts <- table(factor(samplesheet$GroupID, levels = unique(samplesheet$GroupID)))
   flog.info("Groups from %s:\n%s", paste(group_cols, collapse = " x "),
             paste0("  ", names(group_counts), ": ", group_counts, " sample(s)", collapse = "\n"))
+
+  # a numerical covariate that largely tracks the groups (e.g. all responders older)
+  # passes the rank check but leaves little information to separate group and covariate
+  for (col in numerical_covariates) {
+    x <- samplesheet[[col]]
+    r2 <- 1 - sum(residuals(lm(x ~ factor(samplesheet$GroupID)))^2) / sum((x - mean(x))^2)
+    if (r2 > 0.8)
+      flog.warn(paste("The groups explain %.0f%% of the variation in numerical covariate '%s'; group and",
+                      "covariate effects are hard to separate, so the comparisons are unreliable"), 100 * r2, col)
+  }
   samplesheet
 }
 

@@ -59,9 +59,9 @@
 #'   compared. One column: its values are the groups. Several: each combination is a
 #'   group (e.g. \code{c("tissue", "response")} gives \code{V_R}, \code{L_NR}, ...).
 #'   \code{NULL} uses a \code{GroupID} column. See \code{\link{prepare_samplesheet}}.
-#' @param covariates,blocking_variable Not supported: this pipeline tests each
-#'   comparison with per-site t-tests rather than a limma model. Setting either
-#'   stops the run.
+#' @param categorical_covariates,numerical_covariates,blocking_variable Not supported:
+#'   this pipeline tests each comparison with per-site t-tests rather than a limma
+#'   model. Setting any of them stops the run.
 #'
 #' @return Invisibly returns the path to the generated HTML report.
 #'
@@ -97,7 +97,8 @@ run_ptm_ida_pipeline <- function(
   reference         = NULL,
   sample_id         = "SampleID",
   primary_variables = NULL,
-  covariates        = NULL,
+  categorical_covariates = NULL,
+  numerical_covariates   = NULL,
   blocking_variable = NULL
 ) {
   run_config <- as.list(environment())
@@ -107,8 +108,9 @@ run_ptm_ida_pipeline <- function(
   # ===============================================
   # Read the samplesheet and define the comparisons (fail fast on config errors)
   # ===============================================
-  if (!is.null(blocking_variable) || length(covariates) > 0)
-    stop(paste("The PTM-IDA pipeline does not support `blocking_variable` or `covariates`",
+  if (!is.null(blocking_variable) || length(categorical_covariates) > 0 || length(numerical_covariates) > 0)
+    stop(paste("The PTM-IDA pipeline does not support `blocking_variable`, `categorical_covariates`",
+               "or `numerical_covariates`",
                "(it uses per-site t-tests, not a limma model)"))
   samplesheet <- prepare_samplesheet(read.csv(samplesheet_file), sample_id, primary_variables)
   comparisons <- parse_comparisons(samplesheet, comparisons, reference,

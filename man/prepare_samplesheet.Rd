@@ -8,7 +8,8 @@ prepare_samplesheet(
   samplesheet,
   sample_id = "SampleID",
   primary_variables = NULL,
-  covariates = NULL,
+  categorical_covariates = NULL,
+  numerical_covariates = NULL,
   blocking_variable = NULL
 )
 }
@@ -19,7 +20,9 @@ prepare_samplesheet(
 
 \item{primary_variables}{Character vector of columns, or \code{NULL}.}
 
-\item{covariates}{Character vector of columns, or \code{NULL}.}
+\item{categorical_covariates}{Character vector of columns, or \code{NULL}.}
+
+\item{numerical_covariates}{Character vector of columns, or \code{NULL}.}
 
 \item{blocking_variable}{Character or \code{NULL}.}
 }
@@ -38,7 +41,12 @@ its values are the groups. With several, e.g. \code{c("tissue", "response")},
 each combination is a group named \code{"<tissue>_<response>"} (e.g.
 \code{V_R}), giving one limma coefficient per cell of the factorial design.
 \code{NULL} uses a column named \code{GroupID} (older two-column samplesheets).}
-\item{\code{covariates}}{Nuisance variables added as categorical fixed effects.}
+\item{\code{categorical_covariates}}{Nuisance variables added as categorical
+fixed effects (e.g. batch; codes such as 1/2/3 are levels, not numbers).}
+\item{\code{numerical_covariates}}{Nuisance variables used as numbers (e.g. age).
+They must be numeric with no missing values and not constant; a warning is
+logged when the groups explain most of their variation, because the comparisons
+then become unreliable.}
 \item{\code{blocking_variable}}{One variable whose levels group correlated
 samples (e.g. a patient ID).}
 }

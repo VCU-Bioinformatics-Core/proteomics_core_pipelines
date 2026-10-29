@@ -42,7 +42,8 @@ md_table <- function(df) {
 #'   cell-means design from \code{sample_info}.
 #' @param analysis_params Named list saved by the pipeline (uses \code{design},
 #'   \code{contrast_matrix}, \code{design_samplesheet}, \code{design_formula},
-#'   \code{sample_id}, \code{primary_variables}, \code{covariates}, \code{blocking_variable},
+#'   \code{sample_id}, \code{primary_variables}, \code{categorical_covariates},
+#'   \code{numerical_covariates}, \code{numerical_covariate_means}, \code{blocking_variable},
 #'   \code{block_correlation}).
 #' @param sample_info Data frame with columns \code{sample} and \code{condition}.
 #' @param comparisons List of comparison definitions.
@@ -60,13 +61,18 @@ describe_limma_model <- function(analysis_params, sample_info, comparisons, feat
     colnames(design) <- levels(factor(sample_info$condition))
   }
   covariate_cols <- setdiff(colnames(design), groups)
-  covariates     <- analysis_params$covariates
+  categorical_covariates <- analysis_params$categorical_covariates %||% analysis_params$covariates
+  numerical_covariates   <- analysis_params$numerical_covariates
+  numerical_means        <- analysis_params$numerical_covariate_means
+  numerical_cols   <- intersect(make.names(numerical_covariates), covariate_cols)
+  categorical_cols <- setdiff(covariate_cols, numerical_cols)
   block          <- analysis_params$blocking_variable
   primary_vars   <- analysis_params$primary_variables
   sample_id_col  <- analysis_params$sample_id %||% "SampleID"
   rho            <- analysis_params$block_correlation
   sheet          <- analysis_params$design_samplesheet
-  n <- nrow(design); p <- ncol(design); K <- length(groups); L <- length(covariate_cols)
+  n <- nrow(design); p <- ncol(design); K <- length(groups)
+  L <- length(categorical_cols); M <- length(numerical_cols)
   formula_label  <- analysis_params$design_formula %||% "~0 + GroupID"
 
   cm <- analysis_params$contrast_matrix
@@ -88,8 +94,9 @@ describe_limma_model <- function(analysis_params, sample_info, comparisons, feat
   # ---- model equation ----
   add("### Model\n")
   add("For ", feature, " $g$ and sample $i$:\n")
-  covariate_term <- if (L > 0) " + \\sum_{l=1}^{L} \\gamma_{gl}\\, z_{il}" else ""
-  add("$$\ny_{gi} = \\mu_{g,G(i)}", covariate_term, " + \\varepsilon_{gi}\n$$\n")
+  categorical_term <- if (L > 0) " + \\sum_{l=1}^{L} \\gamma_{gl}\\, z_{il}" else ""
+  numerical_term   <- if (M > 0) " + \\sum_{m=1}^{M} \\delta_{gm}\\, (x_{im} - \\bar{x}_m)" else ""
+  add("$$\ny_{gi} = \\mu_{g,G(i)}", categorical_term, numerical_term, " + \\varepsilon_{gi}\n$$\n")
   add("or, for all samples at once (matrix form):\n")
   add("$$\n\\mathbf{y}_g = \\mathbf{X}\\boldsymbol{\\beta}_g + \\boldsymbol{\\varepsilon}_g,",
       " \\qquad \\boldsymbol{\\varepsilon}_g \\sim \\mathcal{N}\\!\\left(\\mathbf{0},\\ \\sigma_g^2\\,\\mathbf{V}\\right)\n$$\n")
@@ -110,7 +117,8 @@ describe_limma_model <- function(analysis_params, sample_info, comparisons, feat
                 paste0("Index of the ", feature),
                 "Index of the sample",
                 "The group of sample $i$",
-                paste0("Mean log2 abundance of ", feature, " $g$ in group $k$ (estimated)")),
+                paste0("Mean log2 abundance of ", feature, " $g$ in group $k$",
+                       if (M > 0) " at the average value of the numerical covariates" else "", " (estimated)")),
     `In this analysis` = c(y_desc,
                            if (!is.null(n_features)) paste0(n_features, " ", feature, "s tested") else paste0("each ", feature),
                            paste0(n, " samples (`", sample_id_col, "`)"),
@@ -119,7 +127,7 @@ describe_limma_model <- function(analysis_params, sample_info, comparisons, feat
     check.names = FALSE, stringsAsFactors = FALSE
   )
   if (L > 0) {
-    cov_desc <- vapply(covariates, function(cv) {
+    cov_desc <- vapply(categorical_covariates, function(cv) {
       lv <- if (!is.null(sheet) && cv %in% colnames(sheet)) levels(factor(as.character(sheet[[cv]]))) else character()
       if (length(lv) == 0) return(paste0("`", cv, "`"))
       sprintf("`%s` (levels %s; reference level `%s` is absorbed into the group means)",
@@ -127,10 +135,25 @@ describe_limma_model <- function(analysis_params, sample_info, comparisons, feat
     }, character(1))
     terms <- rbind(terms, data.frame(
       Term = c("$z_{il}$", "$\\gamma_{gl}$"),
-      Meaning = c("Covariate indicator: 1 if sample $i$ is in covariate level $l$, otherwise 0",
+      Meaning = c("Categorical covariate indicator: 1 if sample $i$ is in covariate level $l$, otherwise 0",
                   paste0("Shift in log2 abundance of ", feature, " $g$ for covariate level $l$ relative to the reference level (estimated, adjusted for)")),
-      `In this analysis` = c(paste0(L, " column(s): ", paste0("`", covariate_cols, "`", collapse = ", "),
+      `In this analysis` = c(paste0(L, " column(s): ", paste0("`", categorical_cols, "`", collapse = ", "),
                                     ", from ", paste(cov_desc, collapse = "; ")),
+                             "nuisance effects; they are not compared, only removed"),
+      check.names = FALSE, stringsAsFactors = FALSE))
+  }
+  if (M > 0) {
+    num_desc <- vapply(numerical_covariates, function(cv) {
+      mean_txt <- if (!is.null(numerical_means) && cv %in% names(numerical_means))
+        sprintf(" (mean %s)", signif(numerical_means[[cv]], 4)) else ""
+      paste0("`", cv, "`", mean_txt)
+    }, character(1))
+    terms <- rbind(terms, data.frame(
+      Term = c("$x_{im} - \\bar{x}_m$", "$\\delta_{gm}$"),
+      Meaning = c("Numerical covariate $m$ for sample $i$, centered on its mean $\\bar{x}_m$",
+                  paste0("Change in log2 abundance of ", feature, " $g$ per unit of covariate $m$; one slope shared ",
+                         "by all groups (estimated, adjusted for)")),
+      `In this analysis` = c(paste0(M, " column(s): ", paste(num_desc, collapse = ", ")),
                              "nuisance effects; they are not compared, only removed"),
       check.names = FALSE, stringsAsFactors = FALSE))
   }
@@ -139,7 +162,7 @@ describe_limma_model <- function(analysis_params, sample_info, comparisons, feat
     Meaning = c("Residual: the part of $y_{gi}$ the model does not explain",
                 paste0("Residual variance of ", feature, " $g$"),
                 "Design matrix: one row per sample, one column per coefficient (shown below)",
-                paste0("All coefficients of ", feature, " $g$: the group means", if (L > 0) " and covariate effects" else ""),
+                paste0("All coefficients of ", feature, " $g$: the group means", if (L + M > 0) " and covariate effects" else ""),
                 "Correlation between samples"),
     `In this analysis` = c("assumed normal with mean 0",
                            "moderated across all features by empirical Bayes (see *Testing* below)",
@@ -175,7 +198,8 @@ describe_limma_model <- function(analysis_params, sample_info, comparisons, feat
   add("### Design matrix\n")
   add("limma uses a **cell-means** design (`", formula_label, "`): there is no intercept, and each group has its own column. ",
       "A `1` in a group column means that sample's expected value is that group's mean $\\mu_{g,k}$",
-      if (L > 0) "; covariate columns add the shift $\\gamma_{gl}$ for samples in that covariate level" else "",
+      if (L > 0) "; categorical covariate columns add the shift $\\gamma_{gl}$ for samples in that covariate level" else "",
+      if (M > 0) "; numerical covariate columns hold each sample's centered value $x_{im} - \\bar{x}_m$, multiplied by the slope $\\delta_{gm}$" else "",
       ". Rows are samples; columns are the coefficients $\\boldsymbol{\\beta}_g$.\n")
   design_df <- data.frame(SampleID = as.character(sample_info$sample), Group = as.character(sample_info$condition),
                           stringsAsFactors = FALSE)
@@ -183,6 +207,7 @@ describe_limma_model <- function(analysis_params, sample_info, comparisons, feat
   if (!is.null(block) && !is.null(sheet) && block %in% colnames(sheet)) design_df[[block]] <- as.character(sheet[[block]])
   design_df <- cbind(design_df, as.data.frame(matrix(design, nrow = n, dimnames = list(NULL, colnames(design))),
                                               check.names = FALSE))
+  for (col in numerical_cols) design_df[[col]] <- signif(design_df[[col]], 4)
   if (n > 24) {
     add("<details><summary>Show the design matrix (", n, " samples)</summary>\n")
     add(md_table(design_df), "\n")
@@ -250,8 +275,12 @@ describe_limma_model <- function(analysis_params, sample_info, comparisons, feat
               paste0("samplesheet$", primary_vars, collapse = ", "))
     else if (length(primary_vars) == 1 && primary_vars != "GroupID")
       sprintf("samplesheet$GroupID <- samplesheet$%s", primary_vars),
-    if (length(covariates) > 0)
-      sprintf("samplesheet$%s <- factor(samplesheet$%s)   # covariates are categorical", covariates, covariates),
+    if (length(categorical_covariates) > 0)
+      sprintf("samplesheet$%s <- factor(samplesheet$%s)   # categorical covariate", categorical_covariates,
+              categorical_covariates),
+    if (length(numerical_covariates) > 0)
+      sprintf("samplesheet$%s <- samplesheet$%s - mean(samplesheet$%s)   # numerical covariate, centered",
+              numerical_covariates, numerical_covariates, numerical_covariates),
     sprintf("design <- model.matrix(%s, data = samplesheet)", formula_label),
     "colnames(design)[1:nlevels(factor(samplesheet$GroupID))] <- levels(factor(samplesheet$GroupID))",
     if (!is.null(block)) c(

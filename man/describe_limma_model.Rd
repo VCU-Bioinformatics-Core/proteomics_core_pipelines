@@ -16,7 +16,8 @@ describe_limma_model(
 \arguments{
 \item{analysis_params}{Named list saved by the pipeline (uses \code{design},
 \code{contrast_matrix}, \code{design_samplesheet}, \code{design_formula},
-\code{sample_id}, \code{primary_variables}, \code{covariates}, \code{blocking_variable},
+\code{sample_id}, \code{primary_variables}, \code{categorical_covariates},
+\code{numerical_covariates}, \code{numerical_covariate_means}, \code{blocking_variable},
 \code{block_correlation}).}
 
 \item{sample_info}{Data frame with columns \code{sample} and \code{condition}.}

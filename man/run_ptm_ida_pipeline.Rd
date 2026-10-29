@@ -26,7 +26,8 @@ run_ptm_ida_pipeline(
   reference = NULL,
   sample_id = "SampleID",
   primary_variables = NULL,
-  covariates = NULL,
+  categorical_covariates = NULL,
+  numerical_covariates = NULL,
   blocking_variable = NULL
 )
 }
@@ -95,9 +96,9 @@ compared. One column: its values are the groups. Several: each combination is a
 group (e.g. \code{c("tissue", "response")} gives \code{V_R}, \code{L_NR}, ...).
 \code{NULL} uses a \code{GroupID} column. See \code{\link{prepare_samplesheet}}.}
 
-\item{covariates, blocking_variable}{Not supported: this pipeline tests each
-comparison with per-site t-tests rather than a limma model. Setting either
-stops the run.}
+\item{categorical_covariates, numerical_covariates, blocking_variable}{Not supported:
+this pipeline tests each comparison with per-site t-tests rather than a limma
+model. Setting any of them stops the run.}
 
 \item{ptm_input_file}{Character. Path to the PTM-level intensity matrix
 (tab-separated, rows = PTM sites, cols = samples).}
