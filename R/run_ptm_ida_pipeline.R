@@ -123,7 +123,8 @@ run_ptm_ida_pipeline <- function(
     ctrl_group <- as.character(unique(comparisons_raw$GroupID[comparisons_vector == 0 & !is.na(comparisons_vector)]))
     if (length(exp_group) > 0 && length(ctrl_group) > 0) {
       comparisons[[length(comparisons) + 1]] <- list(
-        name = comparisons_name, exp = exp_group, ctrl = ctrl_group
+        name = comparisons_name, exp = exp_group, ctrl = ctrl_group,
+        samples = comparisons_vector %in% c(0, 1)  # blank cells exclude the sample
       )
     }
   }
@@ -247,6 +248,7 @@ run_ptm_ida_pipeline <- function(
   sample_info <- data.frame(sample = comparisons_raw$SampleID, condition = comparisons_raw$GroupID)
   design      <- model.matrix(~0 + condition, data = sample_info)
   colnames(design) <- levels(factor(sample_info$condition))
+  rownames(design) <- make.names(sample_info$sample)
   limma_params <- list(E = ptm_matrix, design = design)
 
   # add back the protein accession for use in run_single_ptm_ida_comparison
@@ -260,7 +262,7 @@ run_ptm_ida_pipeline <- function(
     
     curr_result <- run_single_ptm_ida_comparison(
                       comparison=comparisons[[i]],
-                      limma_params=limma_params,
+                      limma_params=subset_limma_params(limma_params, comparisons[[i]]),
                       ptm_imp_matrix = ptm_imp_with_prots,
                       protein_imp_matrix = protein_imp_matrix,
                       out_dirs = out_dirs,

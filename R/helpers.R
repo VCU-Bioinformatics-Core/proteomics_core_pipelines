@@ -123,6 +123,30 @@ align_to_samplesheet <- function(mat, samplesheet) {
   mat[, sample_ids, drop = FALSE]
 }
 
+#' @title Restrict limma Inputs to the Samples of One Comparison
+#' @details Samples left blank in a comparison's samplesheet column are excluded
+#'   from that comparison: they are dropped from \code{E} and \code{design}, so they
+#'   do not enter the limma fit, the imputation categories or the comparison's
+#'   figures. Design columns left without samples are dropped as well. Imputation,
+#'   PCA, ANOVA and the global heatmap still use all samples.
+#' @param limma_params Named list with elements \code{E} (features x samples) and
+#'   \code{design} (samples x groups, in the same sample order as \code{E}).
+#' @param comparison Named list with elements \code{name} and \code{samples}, a
+#'   logical vector (one per sample) that is \code{TRUE} for samples marked
+#'   \code{0} or \code{1}.
+#' @return \code{limma_params} with \code{E} and \code{design} restricted to the
+#'   comparison's samples.
+subset_limma_params <- function(limma_params, comparison) {
+  keep <- comparison$samples
+  if (!all(keep))
+    flog.info("%s: excluding %d sample(s) left blank in the samplesheet: %s",
+              comparison$name, sum(!keep), paste(colnames(limma_params$E)[!keep], collapse = ", "))
+  design <- limma_params$design[keep, , drop = FALSE]
+  limma_params$design <- design[, colSums(design) > 0, drop = FALSE]
+  limma_params$E      <- limma_params$E[, keep, drop = FALSE]
+  limma_params
+}
+
 #' @title Build a Tree-Style String of Pipeline Output Files
 #' @details Renders the actual files present under \code{out_dirs$data} and
 #'   \code{out_dirs$figures} (and their standard subdirectories) as a Unicode
@@ -408,7 +432,7 @@ generate_imputation_figures <- function(intensity_raw, intensity_imputed, out_di
 #' @param fig_dir Character. Directory for figure output (saving is the caller's
 #'   responsibility).
 #' @param design Model matrix (samples x groups) used to identify which samples belong to
-#'   each group.
+#'   each group. Row names must be the sample IDs (column names of \code{intensity_df}).
 #' @param row_id_col Character. Column in \code{diff_df} whose values index rows of
 #'   \code{intensity_df}. Default \code{"uniprotswissprot"}.
 #' @param heatmap_norm Character. \code{"zscore"} (default) or any other value for raw
@@ -430,10 +454,10 @@ generate_heatmap <- function(diff_df, intensity_df, p = 0.05, lfc = 0.58,
   flog.info("generate_heatmap: %d rows after significance filter (p=%.2f, lfc=%.2f)", nrow(filtered_data), p, lfc)
   flog.info("generate_heatmap: row_id_col='%s', values: %s", row_id_col, paste(head(filtered_data[[row_id_col]], 3), collapse=", "))
 
-  # restrict columns to only the two groups being compared
-  all_samples  <- colnames(intensity_df)
-  exp_samples  <- all_samples[design[, exp_name]  == 1]
-  ctrl_samples <- all_samples[design[, ctrl_name] == 1]
+  # restrict columns to only the two groups being compared; samples are matched by
+  # name (design row names) since intensity_df may hold more samples than design
+  exp_samples  <- rownames(design)[design[, exp_name]  == 1]
+  ctrl_samples <- rownames(design)[design[, ctrl_name] == 1]
   comparison_samples <- c(exp_samples, ctrl_samples)
   flog.info("generate_heatmap: exp_samples=%s", paste(exp_samples, collapse=", "))
   flog.info("generate_heatmap: ctrl_samples=%s", paste(ctrl_samples, collapse=", "))

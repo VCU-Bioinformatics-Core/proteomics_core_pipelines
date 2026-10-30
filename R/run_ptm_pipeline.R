@@ -119,7 +119,8 @@ run_ptm_pipeline <- function(
     ctrl_group <- unique(comparisons_raw$GroupID[comparisons_vector == 0 & !is.na(comparisons_vector)])
     if (length(exp_group) > 0 && length(ctrl_group) > 0) {
       comparisons[[length(comparisons) + 1]] <- list(
-        name = comparisons_name, exp = exp_group, ctrl = ctrl_group
+        name = comparisons_name, exp = exp_group, ctrl = ctrl_group,
+        samples = comparisons_vector %in% c(0, 1)  # blank cells exclude the sample
       )
     }
   }
@@ -235,13 +236,14 @@ run_ptm_pipeline <- function(
   sample_info <- data.frame(sample = comparisons_raw$SampleID, condition = comparisons_raw$GroupID)
   design      <- model.matrix(~0 + condition, data = sample_info)
   colnames(design) <- levels(factor(sample_info$condition))
+  rownames(design) <- make.names(sample_info$sample)
   limma_params <- list(E = ptm_matrix, design = design)
 
   results <- vector("list", length(comparisons))
   for (i in seq_along(comparisons)) {
     flog.info("=== Analysis loop iteration %d of %d ===", i, length(comparisons))
     curr_result <- run_analysis_ptm(
-      comparisons[[i]], limma_params, ptm_matrix, out_dirs, ptm_matrix_raw,
+      comparisons[[i]], subset_limma_params(limma_params, comparisons[[i]]), ptm_matrix, out_dirs, ptm_matrix_raw,
       ptm_peptide_metadata, ont_option = gsea_ont, skip_gsea = skip_gsea,
       heatmap_norm = heatmap_norm, color1 = group_color1, color2 = group_color2
     )
