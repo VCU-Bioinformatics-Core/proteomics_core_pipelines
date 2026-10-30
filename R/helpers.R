@@ -129,8 +129,9 @@ align_to_samplesheet <- function(mat, samplesheet) {
 #'   do not enter the limma fit, the imputation categories or the comparison's
 #'   figures. Design columns left without samples are dropped as well. Imputation,
 #'   PCA, ANOVA and the global heatmap still use all samples.
-#' @param limma_params Named list with elements \code{E} (features x samples) and
-#'   \code{design} (samples x groups, in the same sample order as \code{E}).
+#' @param limma_params Named list with elements \code{E} (features x samples),
+#'   \code{design} (samples x groups, in the same sample order as \code{E}) and
+#'   optionally \code{block} (one block ID per sample).
 #' @param comparison Named list with elements \code{name} and \code{samples}, a
 #'   logical vector (one per sample) that is \code{TRUE} for samples marked
 #'   \code{0} or \code{1}.
@@ -144,7 +145,34 @@ subset_limma_params <- function(limma_params, comparison) {
   design <- limma_params$design[keep, , drop = FALSE]
   limma_params$design <- design[, colSums(design) > 0, drop = FALSE]
   limma_params$E      <- limma_params$E[, keep, drop = FALSE]
+  if (!is.null(limma_params$block))
+    limma_params$block <- limma_params$block[keep]
   limma_params
+}
+
+#' @title Read the Optional BlockingID Column of a Samplesheet
+#' @details \code{BlockingID} marks samples that are not independent, e.g. several
+#'   samples from the same patient. Samples sharing a \code{BlockingID} are handled
+#'   with \code{limma::duplicateCorrelation} in \code{\link{perform_limma_analysis}}.
+#'   Every sample needs a value; give a sample its own ID if it shares a block with
+#'   no other sample. Stops if any value is missing.
+#' @param samplesheet Data frame read from the samplesheet.
+#' @return Character vector of block IDs (one per samplesheet row), or \code{NULL}
+#'   when the samplesheet has no \code{BlockingID} column.
+read_blocking_id <- function(samplesheet) {
+  block <- samplesheet[["BlockingID"]]
+  if (is.null(block)) return(NULL)
+  block <- as.character(block)
+  missing <- is.na(block) | trimws(block) == ""
+  if (any(missing)) {
+    msg <- sprintf("BlockingID is missing for sample(s): %s",
+                   paste(samplesheet$SampleID[missing], collapse = ", "))
+    flog.fatal(msg)
+    stop(msg)
+  }
+  flog.info("BlockingID column found: %d block(s), %d with more than one sample",
+            length(unique(block)), sum(table(block) > 1))
+  block
 }
 
 #' @title Build a Tree-Style String of Pipeline Output Files

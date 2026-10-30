@@ -7,6 +7,10 @@
 #'   \describe{
 #'     \item{E}{Numeric matrix of log2 intensities (features × samples).}
 #'     \item{design}{Model matrix as produced by \code{model.matrix}.}
+#'     \item{block}{Optional vector (one per sample) of block IDs, e.g. patients
+#'       contributing several samples. When any block has more than one sample, the
+#'       within-block correlation is estimated with \code{duplicateCorrelation} and
+#'       used in \code{lmFit}. \code{NULL} fits without blocking.}
 #'   }
 #' @param exp Character. Column name in \code{limma_params$design} for the experimental group.
 #' @param ctrl Character. Column name in \code{limma_params$design} for the control group.
@@ -23,8 +27,21 @@ perform_limma_analysis <- function(limma_params, exp, ctrl, min_valid_samples=2)
     contrast_matrix <- makeContrasts(contrasts = paste0(exp, "-", ctrl),
                                      levels = colnames(limma_params$design))
 
-    # Fit linear model
-    fit <- lmFit(limma_params$E, limma_params$design)
+    # Fit linear model; samples sharing a block (e.g. patient) are correlated, so the
+    # within-block correlation is estimated and used in the fit
+    block <- limma_params$block
+    if (!is.null(block) && !any(duplicated(block))) {
+      flog.info("No block has more than one sample in this comparison; fitting without blocking")
+      block <- NULL
+    }
+    if (is.null(block)) {
+      fit <- lmFit(limma_params$E, limma_params$design)
+    } else {
+      corfit <- duplicateCorrelation(limma_params$E, limma_params$design, block = block)
+      flog.info("Within-block correlation (duplicateCorrelation): %.3f", corfit$consensus.correlation)
+      fit <- lmFit(limma_params$E, limma_params$design,
+                   block = block, correlation = corfit$consensus.correlation)
+    }
     fit2 <- contrasts.fit(fit, contrast_matrix)
     fit2 <- eBayes(fit2, robust = TRUE)
 

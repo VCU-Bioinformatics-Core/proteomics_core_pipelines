@@ -111,7 +111,7 @@ run_ptm_pipeline <- function(
   # Read and prepare the comparisons
   # ==========================
   comparisons_raw  <- read.csv(samplesheet_file)
-  comparisons_cols <- colnames(comparisons_raw)[3:ncol(comparisons_raw)]
+  comparisons_cols <- setdiff(colnames(comparisons_raw)[3:ncol(comparisons_raw)], "BlockingID")
   comparisons <- list()
   for (comparisons_name in comparisons_cols) {
     comparisons_vector <- comparisons_raw[[comparisons_name]]
@@ -237,7 +237,7 @@ run_ptm_pipeline <- function(
   design      <- model.matrix(~0 + condition, data = sample_info)
   colnames(design) <- levels(factor(sample_info$condition))
   rownames(design) <- make.names(sample_info$sample)
-  limma_params <- list(E = ptm_matrix, design = design)
+  limma_params <- list(E = ptm_matrix, design = design, block = read_blocking_id(comparisons_raw))
 
   results <- vector("list", length(comparisons))
   for (i in seq_along(comparisons)) {

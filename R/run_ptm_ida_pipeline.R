@@ -115,7 +115,12 @@ run_ptm_ida_pipeline <- function(
   # Read and prepare the comparisons
   # ================================
   comparisons_raw  <- read.csv(samplesheet_file)
-  comparisons_cols <- colnames(comparisons_raw)[3:ncol(comparisons_raw)]
+  if ("BlockingID" %in% colnames(comparisons_raw)) {
+    msg <- "BlockingID is not supported by the PTM-IDA pipeline (per-site t-tests cannot account for blocks); remove the column to run it"
+    flog.fatal(msg)
+    stop(msg)
+  }
+  comparisons_cols <- setdiff(colnames(comparisons_raw)[3:ncol(comparisons_raw)], "BlockingID")
   comparisons <- list()
   for (comparisons_name in comparisons_cols) {
     comparisons_vector <- comparisons_raw[[comparisons_name]]
