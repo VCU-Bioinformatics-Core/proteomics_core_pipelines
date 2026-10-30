@@ -81,6 +81,14 @@ output:
     code_folding: hide
 ---
 
+```{{css, echo=FALSE}}
+/* Use most of the window instead of the theme default (~940px), so long group and
+   comparison names fit in figures, tables and the table of contents */
+.main-container {{ max-width: 95% !important; }}
+/* Wrap long names in the floating table of contents instead of cutting them off */
+.tocify .list-group-item {{ white-space: normal; overflow-wrap: anywhere; }}
+```
+
 ```{{r setup, include=FALSE}}
 knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE,
                       dpi = 150, fig.retina = 2)
@@ -413,8 +421,6 @@ if (file.exists(global_heatmap_path)) {{
 # Create a summary table for all comparisons
 summary_table <- data.frame(
   Comparison = character(),
-  Experimental = character(),
-  Control = character(),
   Total_DAPs = integer(),
   Upregulated = integer(),
   Downregulated = integer(),
@@ -439,8 +445,6 @@ for (i in seq_along(comparisons)) {{
 
       summary_table <- rbind(summary_table, data.frame(
         Comparison = comparisons[[i]]$name,
-        Experimental = comparisons[[i]]$exp,
-        Control = comparisons[[i]]$ctrl,
         Total_DAPs = total_daps,
         Upregulated = up_daps,
         Downregulated = down_daps,
@@ -597,10 +601,19 @@ if (isTRUE(analysis_params$heatmap_norm == "zscore")) {{
 ```{{r heatmap-{i} }}
 # Display heatmap from file
 heatmap_path <- file.path(out_dirs$heatmap, paste0("{name}_heatmap.png"))
-if (file.exists(heatmap_path)) {{
+n_daps <- if (!is.null(results[[{i}]]) && !is.null(results[[{i}]]$limma)) {{
+  with(results[[{i}]]$limma, sum(!is.na(adj.P.Val) & adj.P.Val < 0.05 & abs(logFC) >= 0.58))
+}} else 0
+if (n_daps > 0 && file.exists(heatmap_path)) {{
   knitr::include_graphics(heatmap_path)
-}} else {{
-  cat("Heatmap not available for this comparison")
+}}
+```
+
+```{{r heatmap-msg-{i}, results="asis"}}
+if (n_daps == 0) {{
+  cat("*No DAPs to display.*\n\n")
+}} else if (!file.exists(heatmap_path)) {{
+  cat("Heatmap not available for this comparison\n\n")
 }}
 ```
 
@@ -630,24 +643,18 @@ if (!is.null(results[[{i}]]) && !is.null(results[[{i}]]$limma)) {{
 }}
 ```
 
-```{{r top-check-daps-{i} }}
-if (dap_flags[1] == 0) {{
-  cat("No differential abundance results available for this comparison")
-}}
-
-```
-
 This table breaks down all significant PTM peptides (adj. p-value < 0.05 and |FC| ≥ 1.5) by their imputation category, giving an overall picture of how much the significant hits relied on imputed values. Peptides classified as *complete-data* had no missing values, while *imputation-low/medium/high* indicate increasing levels of imputation. *on-off* is a special case where the peptide is fully observed in one group but completely missing in the other, representing a presence/absence pattern rather than a continuous abundance difference.
 
-```{{r imputation-category-summary-{i} }}
-if (i <= length(results) && !is.null(results[[{i}]]) && !is.null(results[[{i}]]$limma)) {{
+```{{r imputation-category-summary-{i}, results="asis"}}
+if (n_daps == 0) {{
+  cat("*No DAPs to display.*\n\n")
+}} else if ("imputation_category" %in% colnames(results[[{i}]]$limma)) {{
   sig_df <- results[[{i}]]$limma %>%
     filter(!is.na(adj.P.Val) & adj.P.Val < 0.05 & abs(logFC) >= 0.58)
-  if ("imputation_category" %in% colnames(sig_df) && nrow(sig_df) > 0) {{
-    cat_counts <- as.data.frame(table(sig_df$imputation_category))
-    colnames(cat_counts) <- c("Category", "Count")
-    kable(cat_counts)
-  }}
+  cat_counts <- as.data.frame(table(sig_df$imputation_category))
+  colnames(cat_counts) <- c("Category", "Count")
+  cat("\n")
+  print(kable(cat_counts))
 }}
 ```
 ')
@@ -690,10 +697,13 @@ if (dap_flags[1] > 0){{
       filter = "top",
       options = list(pageLength = 25)),
     columns = c("P-value", "Adjusted P-value"), digits = 3)
-}} else {{
-  cat("No significant differentially abundant PTM peptides found\\n\\n")
 }}
-  
+```
+
+```{{r daps-msg-{i}, results="asis"}}
+if (n_daps == 0) {{
+  cat("*No DAPs to display.*\n\n")
+}}
 ```
 
 
