@@ -861,7 +861,7 @@ Please include the following statements in your acknowledgements manuscript sect
 - “High Performance Computing resources provided by the High Performance Research Computing (HPRC) core facility at Virginia Commonwealth University (https://hprc.vcu.edu) were used for conducting the research reported in this work.”  
 '
   # pasting together these last sections
-  rmd_content <- paste0(rmd_content, ipa_content, manuscript_content)
+  rmd_content <- paste0(rmd_content, ipa_content, manuscript_content, code_version_section())
   
   # Write the R Markdown file
   #fn <- glue('{report_prefix}_{timestamp}.Rmd')

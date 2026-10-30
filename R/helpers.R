@@ -199,6 +199,74 @@ global_ftest_blocked <- function(mat, group, block) {
        correlation = corfit$consensus.correlation)
 }
 
+#' @title Record the Code Version Used for a Run
+#' @details Collects the pipeline version, the git commit of the loaded code and the
+#'   versions of the packages doing the statistics, so the report states exactly which
+#'   code produced the results. Called when the pipeline runs (not when the report is
+#'   rendered), so re-rendering a report later does not change it. Git details are
+#'   \code{"unavailable"} when git or the repository cannot be found (e.g. an
+#'   installed package). Credentials embedded in the remote URL are removed.
+#' @return Named character vector; the names are the labels shown in the report.
+get_code_version <- function() {
+  pkg_root <- getNamespaceInfo("DAPRmd", "path")
+  git <- function(...) {
+    out <- tryCatch(suppressWarnings(system2("git", c("-C", shQuote(pkg_root), ...),
+                                             stdout = TRUE, stderr = FALSE)),
+                    error = function(e) structure(character(), status = 1))
+    if (!is.null(attr(out, "status"))) NULL else out
+  }
+  pkg_version <- function(pkg) {
+    if (requireNamespace(pkg, quietly = TRUE)) as.character(packageVersion(pkg)) else "not installed"
+  }
+  commit <- git("rev-parse", "HEAD")
+  remote <- git("config", "--get", "remote.origin.url")
+  if (is.null(commit)) {
+    git_info <- c("Git commit" = "unavailable", "Branch" = "unavailable",
+                  "Commit date" = "unavailable", "Uncommitted changes" = "unavailable")
+  } else {
+    dirty <- git("status", "--porcelain", "--untracked-files=no")
+    git_info <- c(
+      "Git commit"          = commit,
+      "Branch"              = git("rev-parse", "--abbrev-ref", "HEAD")[1],
+      "Commit date"         = git("log", "-1", "--format=%ci")[1],
+      "Uncommitted changes" = if (length(dirty) > 0)
+        "Yes: the code differed from this commit when the analysis ran" else "No"
+    )
+  }
+  c("Pipeline"     = paste("DAPRmd", as.character(packageVersion("DAPRmd"))),
+    git_info,
+    "Repository"   = if (length(remote) == 1) sub("//[^/@]*@", "//", remote) else "unavailable",
+    "Analysis run" = format(Sys.time(), "%Y-%m-%d %H:%M:%S %Z"),
+    "R"            = paste(R.version$major, R.version$minor, sep = "."),
+    "limma"        = pkg_version("limma"),
+    "DEP"          = pkg_version("DEP"))
+}
+
+#' @title R Markdown for the Code Version Section of a Report
+#' @details Shared by all report generators and appended as the last section. Renders
+#'   \code{analysis_params$code_version} (see \code{\link{get_code_version}}) as a
+#'   table; reports from runs that did not record it say so.
+#' @return Character string of R Markdown.
+code_version_section <- function() {
+  '
+
+## Code Version
+
+The table below identifies the code used for this analysis. Checking out the listed git
+commit from the repository recovers that code, unless **Uncommitted changes** is Yes, in
+which case the code that ran differed from the commit.
+
+```{r code-version, results="asis"}
+cv <- analysis_params$code_version
+if (is.null(cv)) {
+  cat("*The code version was not recorded for this run.*\\n\\n")
+} else {
+  print(knitr::kable(data.frame(Item = names(cv), Value = unname(cv)), row.names = FALSE))
+}
+```
+'
+}
+
 #' @title Build a Tree-Style String of Pipeline Output Files
 #' @details Renders the actual files present under \code{out_dirs$data} and
 #'   \code{out_dirs$figures} (and their standard subdirectories) as a Unicode

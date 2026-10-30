@@ -353,6 +353,8 @@ The pipeline generates an output directory (specified by `--outdir`) with the fo
 - `global_heatmap.png` — top proteins by coefficient of variation across all samples
 - `global_imputation_*.png` — four diagnostic plots for the imputation step
 
+The last section of the HTML report, **Code Version**, records the code that produced the results: the git commit, branch and commit date, whether the code had uncommitted changes, the repository, when the analysis ran, and the R, limma and DEP versions. It is captured when the pipeline runs, so re-rendering a report later does not change it. Push the commit so others can check it out.
+
 ### Limitations
 - This pipeline currently supports only pairwise comparisons. Support for more complex designs with multiple comparisons with covariates and contrast matrices will be added in future versions. This is a limitation for experiments with more than two conditions.
 

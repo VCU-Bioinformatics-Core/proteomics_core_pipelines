@@ -362,7 +362,8 @@ run_ptm_pipeline <- function(
                             ptm = n_peptides_ptm, not_imputable = n_peptides_not_imputable)
   analysis_params   <- list(genome = genome, gsea_ont = gsea_ont, skip_gsea = skip_gsea,
                             heatmap_top_n = heatmap_top_n, heatmap_norm = heatmap_norm,
-                            color1 = group_color1, color2 = group_color2)
+                            color1 = group_color1, color2 = group_color2,
+                            code_version = get_code_version())
   rds      <- list(results, comparisons, out_dirs, pca_plot, ptm_matrix_raw,
                    ptm_matrix, imputation_params, sample_info, peptide_counts,
                    analysis_params, anova_summary)

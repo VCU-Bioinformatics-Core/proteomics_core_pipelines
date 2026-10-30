@@ -366,7 +366,8 @@ run_proteome_da_pipeline <- function(
                             not_imputable = n_peptides_not_imputable, ensembl_mapped = n_ensembl_mapped)
   analysis_params   <- list(genome = genome, gsea_ont = gsea_ont, skip_gsea = skip_gsea,
                             heatmap_top_n = heatmap_top_n, heatmap_norm = heatmap_norm,
-                            color1 = group_color1, color2 = group_color2)
+                            color1 = group_color1, color2 = group_color2,
+                            code_version = get_code_version())
   rds      <- list(results, comparisons, out_dirs, pca_plot, intensity_matrix_raw,
                    intensity_matrix, imputation_params, sample_info, protein_counts,
                    analysis_params, anova_summary)
