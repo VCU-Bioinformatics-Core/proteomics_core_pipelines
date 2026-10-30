@@ -236,7 +236,7 @@ run_proteome_da_pipeline <- function(
   sample_info <- data.frame(sample = comparisons_raw$SampleID, condition = comparisons_raw$GroupID)
   design      <- model.matrix(~0 + condition, data = sample_info)
   colnames(design) <- levels(factor(sample_info$condition))
-  rownames(design) <- make.names(sample_info$sample)
+  rownames(design) <- as.character(sample_info$sample)
   limma_params <- list(E = intensity_matrix, design = design, block = read_blocking_id(comparisons_raw))
 
   results <- vector("list", length(comparisons))

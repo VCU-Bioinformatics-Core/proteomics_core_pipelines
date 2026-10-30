@@ -253,7 +253,7 @@ run_ptm_ida_pipeline <- function(
   sample_info <- data.frame(sample = comparisons_raw$SampleID, condition = comparisons_raw$GroupID)
   design      <- model.matrix(~0 + condition, data = sample_info)
   colnames(design) <- levels(factor(sample_info$condition))
-  rownames(design) <- make.names(sample_info$sample)
+  rownames(design) <- as.character(sample_info$sample)
   limma_params <- list(E = ptm_matrix, design = design)
 
   # add back the protein accession for use in run_single_ptm_ida_comparison

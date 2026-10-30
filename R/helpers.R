@@ -100,16 +100,22 @@ setup_directories <- function(base_dir) {
 #' @details Downstream code (limma design, DEP colData, PCA grouping, custom
 #'   imputation groups) pairs samplesheet rows with matrix columns by position,
 #'   so the matrix columns must be in the same order as
-#'   \code{samplesheet$SampleID}. Stops if the sample sets differ. SampleIDs are
-#'   compared after \code{make.names()}, since the matrices are read through
-#'   \code{data.frame()} (e.g. \code{"Control-4949"} becomes \code{"Control.4949"}).
+#'   \code{samplesheet$SampleID}. Stops if the sample sets differ. Names are
+#'   compared after \code{make.names()}, since matrices read through
+#'   \code{data.frame()} have rewritten headers (e.g. \code{"Control-4949"} becomes
+#'   \code{"Control.4949"} and \code{"33V"} becomes \code{"X33V"}). The columns are
+#'   then renamed to the samplesheet's SampleIDs exactly, so figures, tables and
+#'   output files show the original sample names.
 #' @param mat Data frame or matrix with one column per sample.
 #' @param samplesheet Data frame with a \code{SampleID} column.
-#' @return \code{mat} with columns reordered to match \code{samplesheet$SampleID}.
+#' @return \code{mat} with columns reordered to match \code{samplesheet$SampleID} and
+#'   named by it.
 align_to_samplesheet <- function(mat, samplesheet) {
-  sample_ids <- make.names(as.character(samplesheet$SampleID))
-  missing_in_matrix <- setdiff(sample_ids, colnames(mat))
-  missing_in_sheet  <- setdiff(colnames(mat), sample_ids)
+  sample_ids <- as.character(samplesheet$SampleID)
+  sheet_keys <- make.names(sample_ids)
+  mat_keys   <- make.names(colnames(mat))
+  missing_in_matrix <- sample_ids[!sheet_keys %in% mat_keys]
+  missing_in_sheet  <- colnames(mat)[!mat_keys %in% sheet_keys]
   if (length(missing_in_matrix) > 0 || length(missing_in_sheet) > 0) {
     msg <- sprintf(
       "Samplesheet SampleIDs and matrix columns do not match. In samplesheet only: [%s]. In matrix only: [%s]",
@@ -118,9 +124,11 @@ align_to_samplesheet <- function(mat, samplesheet) {
     flog.fatal(msg)
     stop(msg)
   }
-  if (!identical(colnames(mat), sample_ids))
+  if (!identical(mat_keys, sheet_keys))
     flog.info("Reordering matrix columns to match samplesheet SampleID order")
-  mat[, sample_ids, drop = FALSE]
+  mat <- mat[, match(sheet_keys, mat_keys), drop = FALSE]
+  colnames(mat) <- sample_ids
+  mat
 }
 
 #' @title Restrict limma Inputs to the Samples of One Comparison
