@@ -364,10 +364,19 @@ if (!isTRUE(anova_summary$skipped)) {{
     anova_path <- file.path(out_dirs$anova, "global_anova.csv")
     if (file.exists(anova_path)) {{
       anova_df <- read.csv(anova_path)
-      cat("A one-way ANOVA was performed across all", anova_summary$n_groups, "groups to identify",
-          "PTM peptides that vary significantly beyond any single pairwise",
-          "comparison. P-values were adjusted using the Benjamini-Hochberg (BH)",
-          "method.\n\n")
+      if (!is.null(anova_summary$block_correlation)) {{
+        cat("Because samples share a **BlockingID**, the one-way ANOVA was replaced by a limma",
+            "moderated F-test across all", anova_summary$n_groups, "groups that treats samples from the",
+            "same block as correlated (within-block correlation",
+            paste0(round(anova_summary$block_correlation, 3), ", estimated with `duplicateCorrelation`)"),
+            "to identify PTM peptides that vary significantly beyond any single pairwise comparison.",
+            "P-values were adjusted using the Benjamini-Hochberg (BH) method.\n\n")
+      }} else {{
+        cat("A one-way ANOVA was performed across all", anova_summary$n_groups, "groups to identify",
+            "PTM peptides that vary significantly beyond any single pairwise",
+            "comparison. P-values were adjusted using the Benjamini-Hochberg (BH)",
+            "method.\n\n")
+      }}
       cat(paste0("**", anova_summary$n_sig, "** out of **", anova_summary$n_total,
                  "** PTM peptides are significantly variable across groups",
                  " (ANOVA FDR < 0.05).\n\n"))
@@ -420,6 +429,7 @@ summary_table <- data.frame(
   Downregulated = integer(),
   `# Proteins Mapped` = integer(),
   GSEA_Performed = character(),
+  Within_Block_Correlation = numeric(),
   stringsAsFactors = FALSE,
   check.names = FALSE
 )
@@ -446,6 +456,7 @@ for (i in seq_along(comparisons)) {{
         Downregulated = down_daps,
         `# Proteins Mapped` = n_proteins_mapped,
         GSEA_Performed = gsea_status,
+        Within_Block_Correlation = if (!is.null(results[[i]]$block_correlation)) round(results[[i]]$block_correlation, 3) else NA_real_,
         stringsAsFactors = FALSE,
         check.names = FALSE
       ))
@@ -474,8 +485,21 @@ down this count accordingly. The **GSEA_Performed** column indicates whether GSE
 for each case.
 
 ```{{r display-summary-table}}
-# Display the summary table
+# Display the summary table; the correlation column is only shown when BlockingID was used
+blocking_used <- !all(is.na(summary_table$Within_Block_Correlation)) || !is.null(anova_summary$block_correlation)
+if (all(is.na(summary_table$Within_Block_Correlation))) summary_table$Within_Block_Correlation <- NULL
+options(knitr.kable.NA = "")
 kable(summary_table, caption = "")
+```
+
+```{{r blocking-note, results="asis"}}
+if ("Within_Block_Correlation" %in% colnames(summary_table)) {{
+  cat("Samples sharing a **BlockingID** (e.g. several samples from the same patient) were treated as",
+      "correlated. **Within_Block_Correlation** is the correlation between samples of the same block,",
+      "estimated with `duplicateCorrelation` (limma) and used in the fit of that comparison: values near 0",
+      "mean samples from the same block behave almost independently, values near 1 mean they are",
+      "nearly identical. It is blank for comparisons in which no block had more than one sample.\n\n")
+}}
 ```
 
 ### Query Differential Expression Hits Across All Analyses
@@ -804,6 +828,7 @@ a down-shifted Gaussian distribution centered at the low end of the observed
 intensity distribution.
 
 Differential abundance analysis was carried out using limma v 1.44.0 [2].
+`r if (blocking_used) "Samples from the same block (BlockingID, e.g. the same patient) were treated as correlated: the within-block correlation was estimated with the duplicateCorrelation function of limma and included in the linear model fit." else ""`
 Proteins were considered significantly differentially abundant (DAP) when they
 exhibited an absolute log₂ fold-change ≥ 0.58 (1.5-fold) and an adjusted P-value
 (FDR) < 0.05 (correction done with a Benjamini Hochberg). Volcano plots and

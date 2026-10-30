@@ -280,15 +280,23 @@ run_ptm_pipeline <- function(
   # ==========================
   flog.info("Running one-way ANOVA")
   n_anova_groups <- length(unique(sample_info$condition))
+  anova_correlation <- NULL
   if (skip_anova) {
     flog.info("Skipping ANOVA (--skip-anova flag set)")
     n_anova_sig <- n_anova_total <- NULL
   } else if (n_anova_groups > 2) {
     group       <- factor(sample_info$condition)
     mat         <- as.matrix(ptm_matrix)
-    anova_pvals <- apply(mat, 1, function(x) {
-      tryCatch(summary(aov(x ~ group))[[1]][["Pr(>F)"]][1], error = function(e) NA_real_)
-    })
+    if (!is.null(limma_params$block) && any(duplicated(limma_params$block))) {
+      flog.info("BlockingID present: using a limma moderated F-test with blocking instead of aov")
+      ftest             <- global_ftest_blocked(mat, group, limma_params$block)
+      anova_pvals       <- ftest$pvals
+      anova_correlation <- ftest$correlation
+    } else {
+      anova_pvals <- apply(mat, 1, function(x) {
+        tryCatch(summary(aov(x ~ group))[[1]][["Pr(>F)"]][1], error = function(e) NA_real_)
+      })
+    }
     anova_padj    <- p.adjust(anova_pvals, method = "BH")
     n_anova_sig   <- sum(anova_padj < 0.05, na.rm = TRUE)
     n_anova_total <- nrow(mat)
@@ -303,7 +311,8 @@ run_ptm_pipeline <- function(
     n_anova_sig <- n_anova_total <- NULL
   }
   anova_summary <- list(n_groups = n_anova_groups, n_sig = n_anova_sig,
-                        n_total = n_anova_total, skipped = skip_anova)
+                        n_total = n_anova_total, skipped = skip_anova,
+                        block_correlation = anova_correlation)
 
   # ==========================
   # Global heatmap + imputation figures

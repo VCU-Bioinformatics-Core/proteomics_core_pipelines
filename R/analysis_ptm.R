@@ -331,6 +331,8 @@ aggregate_ptm_for_gsea <- function(limma_results, peptide_metadata, ensembl, p =
 #'     \item{protein_counts}{Named list of GSEA aggregation counts, or \code{NULL}.}
 #'     \item{highlighted_ids}{Character vector of peptide IDs labelled on the volcano
 #'       plot.}
+#'     \item{block_correlation}{Within-block correlation used in the limma fit, or
+#'       \code{NULL} if the fit did not use blocking.}
 #'   }
 #'   Returns \code{NULL} if the analysis fails entirely.
 run_analysis_ptm <- function(comparison, limma_params, normalized_counts, out_dirs, intensity_matrix_raw = NULL, peptide_metadata = NULL, ont_option = "BP", ensembl=NULL, skip_gsea = FALSE, heatmap_norm = "zscore", color1 = "#D55E00", color2 = "#0072B2") {
@@ -338,6 +340,7 @@ run_analysis_ptm <- function(comparison, limma_params, normalized_counts, out_di
     flog.info("=== Starting PTM analysis for comparison: %s ===", comparison$name)
 
     limma_results <- perform_limma_analysis(limma_params, comparison$exp, comparison$ctrl)
+    block_correlation <- attr(limma_results, "block_correlation")
     limma_results <- limma_results %>% rownames_to_column(var = "peptide_id")
 
     # Join peptide metadata to get UniProt IDs, then annotate with gene symbols
@@ -454,7 +457,8 @@ run_analysis_ptm <- function(comparison, limma_params, normalized_counts, out_di
       }
     }
 
-    return(list(limma = limma_results, gsea = gse, protein_counts = protein_counts, highlighted_ids = volcano_result$highlighted_ids))
+    return(list(limma = limma_results, gsea = gse, protein_counts = protein_counts, highlighted_ids = volcano_result$highlighted_ids,
+                block_correlation = block_correlation))
 
   }, error = function(e) {
     flog.error("run_analysis_ptm failed for comparison '%s': %s",

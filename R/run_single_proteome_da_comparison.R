@@ -217,6 +217,8 @@ generate_ma_plot_protein <- function(data, exp_name, ctrl_name, highlighted_ids 
 #'       failed.}
 #'     \item{highlighted_ids}{Character vector of protein IDs labelled on the volcano
 #'       plot.}
+#'     \item{block_correlation}{Within-block correlation used in the limma fit, or
+#'       \code{NULL} if the fit did not use blocking.}
 #'   }
 #'   Returns \code{NULL} if the analysis fails entirely.
 run_single_proteome_da_comparison <- function(comparison, limma_params, normalized_counts, out_dirs, org_db=NULL, intensity_matrix_raw = NULL, ont_option = "BP", skip_gsea = FALSE, protein_metadata = NULL, heatmap_norm = "zscore", color1 = "#D55E00", color2 = "#0072B2") {
@@ -224,6 +226,7 @@ run_single_proteome_da_comparison <- function(comparison, limma_params, normaliz
     flog.info("=== Starting analysis for comparison: %s ===", comparison$name)
 
     limma_results <- perform_limma_analysis(limma_params, comparison$exp, comparison$ctrl)
+    block_correlation <- attr(limma_results, "block_correlation")
     limma_results <- limma_results %>% rownames_to_column(var = "uniprotswissprot")
 
     # Join gene names from input data (PG.Genes column)
@@ -309,7 +312,8 @@ run_single_proteome_da_comparison <- function(comparison, limma_params, normaliz
       }
     }
 
-    return(list(limma = annotated_results, gsea = gse, highlighted_ids = volcano_result$highlighted_ids))
+    return(list(limma = annotated_results, gsea = gse, highlighted_ids = volcano_result$highlighted_ids,
+                block_correlation = block_correlation))
 
 
   }, error = function(e) {

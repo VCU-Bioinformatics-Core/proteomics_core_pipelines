@@ -18,7 +18,9 @@
 #'   per group. Default \code{2}. (Informational; filtering is expected upstream.)
 #' @return Data frame of limma results from \code{topTable} sorted by p-value, with columns
 #'   including \code{logFC}, \code{AveExpr}, \code{t}, \code{P.Value}, \code{adj.P.Val},
-#'   \code{B}. Stops with an error if the analysis fails.
+#'   \code{B}. When blocking was used, the estimated within-block correlation is
+#'   attached as \code{attr(, "block_correlation")} (\code{NULL} otherwise). Stops with
+#'   an error if the analysis fails.
 perform_limma_analysis <- function(limma_params, exp, ctrl, min_valid_samples=2) {
   tryCatch({
     flog.info("Performing limma analysis: %s vs %s", exp, ctrl)
@@ -34,13 +36,15 @@ perform_limma_analysis <- function(limma_params, exp, ctrl, min_valid_samples=2)
       flog.info("No block has more than one sample in this comparison; fitting without blocking")
       block <- NULL
     }
+    block_correlation <- NULL
     if (is.null(block)) {
       fit <- lmFit(limma_params$E, limma_params$design)
     } else {
       corfit <- duplicateCorrelation(limma_params$E, limma_params$design, block = block)
-      flog.info("Within-block correlation (duplicateCorrelation): %.3f", corfit$consensus.correlation)
+      block_correlation <- corfit$consensus.correlation
+      flog.info("Within-block correlation (duplicateCorrelation): %.3f", block_correlation)
       fit <- lmFit(limma_params$E, limma_params$design,
-                   block = block, correlation = corfit$consensus.correlation)
+                   block = block, correlation = block_correlation)
     }
     fit2 <- contrasts.fit(fit, contrast_matrix)
     fit2 <- eBayes(fit2, robust = TRUE)
@@ -48,7 +52,9 @@ perform_limma_analysis <- function(limma_params, exp, ctrl, min_valid_samples=2)
     # Extract results
     res <- topTable(fit2, coef = 1, number = Inf, sort.by = "P")
     flog.info("Limma analysis complete: %d results", nrow(res))
-    return(as.data.frame(res))
+    res <- as.data.frame(res)
+    attr(res, "block_correlation") <- block_correlation
+    return(res)
   }, error = function(e) {
     flog.error("Limma analysis failed: %s", e$message)
     stop(e)

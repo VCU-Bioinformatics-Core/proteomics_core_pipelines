@@ -175,6 +175,30 @@ read_blocking_id <- function(samplesheet) {
   block
 }
 
+#' @title Global F-Test Across Groups With Blocking
+#' @details Replaces the per-feature one-way ANOVA when samples share a
+#'   \code{BlockingID}. A classical ANOVA with an \code{Error(block)} term has no
+#'   single group p-value when groups differ both within blocks (e.g. tissue) and
+#'   between blocks (e.g. responders), so a limma moderated F-test is used instead:
+#'   \code{~group} is fitted with the within-block correlation from
+#'   \code{duplicateCorrelation}, and all group coefficients are tested jointly.
+#' @param mat Numeric matrix (features x samples) of log2 intensities.
+#' @param group Factor (one per sample) of group labels.
+#' @param block Vector (one per sample) of block IDs.
+#' @return Named list with \code{pvals} (one per row of \code{mat}, in row order)
+#'   and \code{correlation} (the within-block correlation used).
+global_ftest_blocked <- function(mat, group, block) {
+  design <- model.matrix(~ group)
+  corfit <- duplicateCorrelation(mat, design, block = block)
+  flog.info("Global F-test within-block correlation (duplicateCorrelation): %.3f",
+            corfit$consensus.correlation)
+  fit <- eBayes(lmFit(mat, design, block = block, correlation = corfit$consensus.correlation),
+                robust = TRUE)
+  tt  <- topTable(fit, coef = 2:ncol(design), number = Inf, sort.by = "none")
+  list(pvals = setNames(tt$P.Value, rownames(tt))[rownames(mat)],
+       correlation = corfit$consensus.correlation)
+}
+
 #' @title Build a Tree-Style String of Pipeline Output Files
 #' @details Renders the actual files present under \code{out_dirs$data} and
 #'   \code{out_dirs$figures} (and their standard subdirectories) as a Unicode
