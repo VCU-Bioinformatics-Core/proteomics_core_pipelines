@@ -23,7 +23,6 @@
 #' @import ComplexHeatmap
 #' @import circlize
 #' @import DEP
-#' @import biomaRt
 #' @import rmarkdown
 #' @import knitr
 #' @import glue

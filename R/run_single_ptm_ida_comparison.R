@@ -215,8 +215,8 @@ perform_multitest_ptm_ida_analysis <- function(comparison, exp_samples, ctrl_sam
 #'   \code{PG.UniProtIds} columns for joining annotation. Pass \code{NULL} to skip.
 #' @param ont_option Character. GO ontology for GSEA: \code{"BP"} (default), \code{"MF"},
 #'   or \code{"CC"}.
-#' @param ensembl A \code{Mart} object from \code{biomaRt::useMart} used for gene symbol
-#'   annotation. Pass \code{NULL} to skip BioMart lookup.
+#' @param org_db \code{OrgDb} annotation package (e.g. \code{org.Hs.eg.db}) used for
+#'   gene symbols, Ensembl IDs and GSEA.
 #' @param skip_gsea Logical. If \code{TRUE}, GSEA is skipped entirely. Default
 #'   \code{FALSE}.
 #' @param heatmap_norm Character. \code{"zscore"} (default) or \code{"intensity"} for
@@ -237,7 +237,7 @@ perform_multitest_ptm_ida_analysis <- function(comparison, exp_samples, ctrl_sam
 #'   Returns \code{NULL} if the analysis fails entirely.
 run_single_ptm_ida_comparison <- function(comparison, limma_params, ptm_imp_matrix,
                                           protein_imp_matrix, out_dirs, intensity_matrix_raw = NULL,
-                                          peptide_metadata = NULL, ont_option = "BP", ensembl = NULL, org_db = NULL,
+                                          peptide_metadata = NULL, ont_option = "BP", org_db = NULL,
                                           skip_gsea = FALSE, heatmap_norm = "zscore",
                                           color1 = "#D55E00", color2 = "#0072B2") {
 
@@ -286,19 +286,8 @@ run_single_ptm_ida_comparison <- function(comparison, limma_params, ptm_imp_matr
       diff_results <- diff_results %>% left_join(peptide_metadata, by="peptide_id") %>%
         mutate(uniprot_id = sapply(strsplit(PG.UniProtIds, ";"), `[`, 1))
       
-      annotation <- tryCatch({
-        m <- getBM(
-          attributes = c("uniprotswissprot", "hgnc_symbol"),
-          filters = "uniprotswissprot",
-          values = unique(na.omit(diff_results$uniprot_id)),
-          mart = ensembl
-        )
-        distinct(m, uniprotswissprot, .keep_all = TRUE)
-      }, error = function(e) {
-        flog.error("BioMart annotation failed for PTM comparison '%s': %s",
-                   comparison$name, e$message)
-        data.frame(uniprotswissprot = character(), hgnc_symbol = character())
-      })
+      annotation <- map_uniprot_ids(diff_results$uniprot_id, org_db) %>%
+        dplyr::select(uniprotswissprot, hgnc_symbol)
       diff_results <- diff_results %>%
         left_join(annotation, by = c("uniprot_id" = "uniprotswissprot"))
     }
@@ -348,7 +337,7 @@ run_single_ptm_ida_comparison <- function(comparison, limma_params, ptm_imp_matr
     png(create_file_path(out_dirs$heatmap, "", comparison$name, "_heatmap.png"),
         width = 2400, height = 3200, res = 300)
 
-    heatmap_df <- ptm_imp_matrix_filtered %>% select(-c(peptide_id, PG.UniProtIds))
+    heatmap_df <- ptm_imp_matrix_filtered %>% dplyr::select(-c(peptide_id, PG.UniProtIds))
     ht <- generate_heatmap(diff_results, heatmap_df,
                            exp_name = comparison$exp, ctrl_name = comparison$ctrl,
                            fig_dir = out_dirs$heatmap, design = limma_params$design,
@@ -365,7 +354,7 @@ run_single_ptm_ida_comparison <- function(comparison, limma_params, ptm_imp_matr
     } else {
       flog.info("Running PTM GSEA for %s", comparison$name)
       agg_result <- tryCatch(
-        aggregate_ptm_for_gsea(diff_results, peptide_metadata, ensembl),
+        aggregate_ptm_for_gsea(diff_results, peptide_metadata, org_db),
         error = function(e) {
           flog.error("PTM GSEA aggregation failed for '%s': %s",
                      comparison$name, e$message)

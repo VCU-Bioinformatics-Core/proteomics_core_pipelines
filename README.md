@@ -471,7 +471,7 @@ Overall execution flow
 
 - Key steps:
 
-  - UniProt IDs are split, de-duplicated, and queried against Ensembl using biomaRt
+  - UniProt IDs are split, de-duplicated, and mapped to Ensembl gene IDs offline with the organism annotation package (`org.Hs.eg.db` / `org.Mm.eg.db`; isoform suffixes such as `-2` are ignored). No network access is needed, and the package version, recorded in the report's Code Version section, fixes the mapping
 
   - A one-to-one UniProt → Ensembl mapping is enforced via distinct()
 

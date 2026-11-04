@@ -85,22 +85,8 @@ run_ptm_pipeline <- function(
   # ==========================
   if (genome == "human") {
     annotation_db <- org.Hs.eg.db
-    ensembl <- tryCatch(
-      useEnsembl("ensembl", dataset = "hsapiens_gene_ensembl"),
-      error = function(e) {
-        flog.warn("BioMart connection failed for human: %s — GSEA will be skipped", e$message)
-        NULL
-      }
-    )
   } else if (genome == "mouse") {
     annotation_db <- org.Mm.eg.db
-    ensembl <- tryCatch(
-      useEnsembl("ensembl", dataset = "mmusculus_gene_ensembl"),
-      error = function(e) {
-        flog.warn("BioMart connection failed for mouse: %s — GSEA will be skipped", e$message)
-        NULL
-      }
-    )
   } else {
     flog.fatal("Invalid genome '%s'. Use 'mouse' or 'human'", genome)
     stop("Invalid genome specified. Use 'mouse' or 'human'")
@@ -244,7 +230,7 @@ run_ptm_pipeline <- function(
     flog.info("=== Analysis loop iteration %d of %d ===", i, length(comparisons))
     curr_result <- run_analysis_ptm(
       comparisons[[i]], subset_limma_params(limma_params, comparisons[[i]]), ptm_matrix, out_dirs, ptm_matrix_raw,
-      ptm_peptide_metadata, ont_option = gsea_ont, skip_gsea = skip_gsea,
+      ptm_peptide_metadata, ont_option = gsea_ont, org_db = annotation_db, skip_gsea = skip_gsea,
       heatmap_norm = heatmap_norm, color1 = group_color1, color2 = group_color2
     )
     if (!is.null(curr_result)) results[[i]] <- curr_result

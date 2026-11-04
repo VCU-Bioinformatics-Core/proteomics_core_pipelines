@@ -90,22 +90,8 @@ run_ptm_ida_pipeline <- function(
   # ==========================
   if (genome == "human") {
     org_db <- org.Hs.eg.db
-    ensembl <- tryCatch(
-      useEnsembl("ensembl", dataset = "hsapiens_gene_ensembl"),
-      error = function(e) {
-        flog.warn("BioMart connection failed for human: %s — GSEA will be skipped", e$message)
-        NULL
-      }
-    )
   } else if (genome == "mouse") {
     org_db <- org.Mm.eg.db
-    ensembl <- tryCatch(
-      useEnsembl("ensembl", dataset = "mmusculus_gene_ensembl"),
-      error = function(e) {
-        flog.warn("BioMart connection failed for mouse: %s — GSEA will be skipped", e$message)
-        NULL
-      }
-    )
   } else {
     flog.fatal("Invalid genome '%s'. Use 'mouse' or 'human'", genome)
     stop("Invalid genome specified. Use 'mouse' or 'human'")
@@ -273,7 +259,6 @@ run_ptm_ida_pipeline <- function(
                       out_dirs = out_dirs,
                       intensity_matrix_raw = ptm_matrix_raw,
                       peptide_metadata = ptm_peptide_metadata,
-                      ensembl=ensembl,
                       org_db=org_db
     )
     

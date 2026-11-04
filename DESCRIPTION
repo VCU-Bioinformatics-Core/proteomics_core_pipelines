@@ -36,7 +36,6 @@ Imports:
     ComplexHeatmap,
     circlize,
     DEP,
-    biomaRt,
     rmarkdown,
     knitr,
     glue,

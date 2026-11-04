@@ -81,22 +81,8 @@ run_proteome_da_pipeline <- function(
   # ==========================
   if (genome == "human") {
     org_db <- org.Hs.eg.db
-    ensembl <- tryCatch(
-      useEnsembl("ensembl", dataset = "hsapiens_gene_ensembl"),
-      error = function(e) {
-        flog.warn("BioMart connection failed for human: %s — GSEA will be skipped", e$message)
-        NULL
-      }
-    )
   } else if (genome == "mouse") {
     org_db <- org.Mm.eg.db
-    ensembl <- tryCatch(
-      useEnsembl("ensembl", dataset = "mmusculus_gene_ensembl"),
-      error = function(e) {
-        flog.warn("BioMart connection failed for mouse: %s — GSEA will be skipped", e$message)
-        NULL
-      }
-    )
   } else {
     flog.fatal("Invalid genome '%s'. Use 'mouse' or 'human'", genome)
     stop("Invalid genome specified. Use 'mouse' or 'human'")
@@ -142,20 +128,9 @@ run_proteome_da_pipeline <- function(
     dplyr::select(uniprotswissprot = PG.ProteinAccessions, gene_name = PG.Genes) %>%
     distinct(uniprotswissprot, .keep_all = TRUE)
 
-  flog.info("Fetching Ensembl IDs from BioMart for GSEA annotation")
   primary_accessions <- sub(";.*", "", protein_metadata$uniprotswissprot)
-  ensembl_map <- tryCatch({
-    getBM(
-      attributes = c("uniprotswissprot", "ensembl_gene_id"),
-      filters    = "uniprotswissprot",
-      values     = unique(primary_accessions),
-      mart       = ensembl
-    ) %>%
-      distinct(uniprotswissprot, .keep_all = TRUE)
-  }, error = function(e) {
-    flog.warn("BioMart Ensembl ID lookup failed: %s — continuing without Ensembl IDs", e$message)
-    data.frame(uniprotswissprot = character(), ensembl_gene_id = character())
-  })
+  ensembl_map <- map_uniprot_ids(primary_accessions, org_db) %>%
+    dplyr::select(uniprotswissprot, ensembl_gene_id)
   protein_metadata <- protein_metadata %>%
     mutate(primary_accession = sub(";.*", "", uniprotswissprot)) %>%
     left_join(ensembl_map, by = c("primary_accession" = "uniprotswissprot")) %>%

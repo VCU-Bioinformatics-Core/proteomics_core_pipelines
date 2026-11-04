@@ -207,9 +207,47 @@ global_ftest_blocked <- function(mat, group, block) {
        correlation = corfit$consensus.correlation)
 }
 
+#' @title Map UniProt Accessions to Ensembl Gene IDs and Gene Symbols
+#' @details Looks the accessions up offline in the organism annotation package
+#'   (\code{org.Hs.eg.db} or \code{org.Mm.eg.db}) instead of querying BioMart, so the
+#'   mapping needs no network access and is fixed by the package version. Isoform
+#'   suffixes (e.g. \code{"P02768-2"}) are ignored for the lookup. When an accession
+#'   maps to several genes, the first one with an Ensembl ID is kept.
+#' @param uniprot_ids Character vector of UniProt accessions.
+#' @param org_db An \code{OrgDb} object, e.g. \code{org.Hs.eg.db}.
+#' @return Data frame with one row per mapped accession and columns
+#'   \code{uniprotswissprot}, \code{ensembl_gene_id} and \code{hgnc_symbol} (the gene
+#'   symbol from \code{org_db}; MGI symbols for mouse). The column names match the
+#'   BioMart attributes used previously.
+map_uniprot_ids <- function(uniprot_ids, org_db) {
+  ids  <- unique(na.omit(as.character(uniprot_ids)))
+  keys <- unique(sub("-\\d+$", "", ids))
+  found <- tryCatch(
+    suppressMessages(AnnotationDbi::select(org_db, keys = keys, keytype = "UNIPROT",
+                                           columns = c("ENSEMBL", "SYMBOL"))),
+    error = function(e) {
+      flog.warn("No UniProt accession found in %s: %s", org_db$packageName, e$message)
+      NULL
+    }
+  )
+  if (is.null(found)) {
+    return(data.frame(uniprotswissprot = character(), ensembl_gene_id = character(),
+                      hgnc_symbol = character()))
+  }
+  found <- found[order(is.na(found$ENSEMBL)), ]
+  found <- found[!duplicated(found$UNIPROT) & !(is.na(found$ENSEMBL) & is.na(found$SYMBOL)), ]
+  mapping <- data.frame(uniprotswissprot = ids, key = sub("-\\d+$", "", ids)) %>%
+    dplyr::inner_join(found, by = c("key" = "UNIPROT")) %>%
+    dplyr::select(uniprotswissprot, ensembl_gene_id = ENSEMBL, hgnc_symbol = SYMBOL)
+  flog.info("Mapped %d of %d UniProt accessions to Ensembl gene IDs with %s (offline)",
+            sum(!is.na(mapping$ensembl_gene_id)), length(ids), org_db$packageName)
+  mapping
+}
+
 #' @title Record the Code Version Used for a Run
 #' @details Collects the pipeline version, the git commit of the loaded code and the
-#'   versions of the packages doing the statistics, so the report states exactly which
+#'   versions of the packages doing the statistics and the UniProt-to-Ensembl mapping
+#'   (org.Hs.eg.db / org.Mm.eg.db), so the report states exactly which
 #'   code produced the results. Called when the pipeline runs (not when the report is
 #'   rendered), so re-rendering a report later does not change it. Git details are
 #'   \code{"unavailable"} when git or the repository cannot be found (e.g. an
@@ -247,7 +285,10 @@ get_code_version <- function() {
     "Analysis run" = format(Sys.time(), "%Y-%m-%d %H:%M:%S %Z"),
     "R"            = paste(R.version$major, R.version$minor, sep = "."),
     "limma"        = pkg_version("limma"),
-    "DEP"          = pkg_version("DEP"))
+    "DEP"          = pkg_version("DEP"),
+    "clusterProfiler" = pkg_version("clusterProfiler"),
+    "org.Hs.eg.db" = pkg_version("org.Hs.eg.db"),
+    "org.Mm.eg.db" = pkg_version("org.Mm.eg.db"))
 }
 
 #' @title R Markdown for the Code Version Section of a Report

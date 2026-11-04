@@ -197,16 +197,16 @@ generate_ma_plot_ptm <- function(data, exp_name, ctrl_name, highlighted_ids = NU
 #' @details Filters to significant PTM peptides (\code{adj.P.Val < p} and
 #'   \code{|logFC| >= lfc}), then collapses to one representative logFC per UniProt ID
 #'   by selecting the peptide with the smallest adjusted p-value. Maps UniProt IDs to
-#'   Ensembl gene IDs via BioMart and drops entries without a mapping.
-#'
-#'   Requires the \code{ensembl} mart object to be available in the calling environment
-#'   (not passed as a parameter — relies on lexical scoping from the pipeline runner).
+#'   Ensembl gene IDs with \code{\link{map_uniprot_ids}} (offline, from \code{org_db})
+#'   and drops entries without a mapping.
 #' @param limma_results Data frame of PTM limma results. Must contain \code{adj.P.Val},
 #'   \code{logFC}, and \code{peptide_id}. If \code{uniprot_id} is absent it is derived
 #'   by joining \code{peptide_metadata} and splitting \code{PG.UniProtIds} on \code{";"}.
 #' @param peptide_metadata Data frame with columns \code{peptide_id} and
 #'   \code{PG.UniProtIds} used as a fallback join when \code{uniprot_id} is missing from
 #'   \code{limma_results}.
+#' @param org_db \code{OrgDb} annotation package (e.g. \code{org.Hs.eg.db}) used to map
+#'   UniProt IDs to Ensembl IDs and gene symbols.
 #' @param p Numeric. Adjusted p-value threshold. Default \code{0.05}.
 #' @param lfc Numeric. Minimum absolute log2 fold-change threshold. Default \code{0.58}.
 #' @return Named list with elements:
@@ -217,9 +217,9 @@ generate_ma_plot_ptm <- function(data, exp_name, ctrl_name, highlighted_ids = NU
 #'     \item{counts}{Named list of diagnostic counts: \code{n_sig_peptides},
 #'       \code{n_sig_uniprots}, \code{n_mapped}.}
 #'   }
-#'   Returns \code{NULL} if no significant peptides are found, BioMart fails, or no
-#'   Ensembl IDs are mapped.
-aggregate_ptm_for_gsea <- function(limma_results, peptide_metadata, ensembl, p = 0.05, lfc = 0.58) {
+#'   Returns \code{NULL} if no significant peptides are found or no Ensembl IDs are
+#'   mapped.
+aggregate_ptm_for_gsea <- function(limma_results, peptide_metadata, org_db, p = 0.05, lfc = 0.58) {
   # uniprot_id is already present on limma_results (joined upstream in
   # run_analysis_ptm); if for any reason it is absent, fall back to
   # joining peptide_metadata and deriving it from PG.UniProtIds
@@ -252,25 +252,8 @@ aggregate_ptm_for_gsea <- function(limma_results, peptide_metadata, ensembl, p =
     ungroup() %>%
     dplyr::select(uniprot_id, logFC)
 
-  # Map UniProt IDs to Ensembl IDs via biomart (same approach as regular pipeline)
-  if (is.null(ensembl)) {
-    flog.warn("BioMart mart object is NULL — skipping Ensembl mapping for PTM GSEA")
-    return(NULL)
-  }
-  mapping <- tryCatch(
-    getBM(
-      attributes = c("uniprotswissprot", "ensembl_gene_id", "hgnc_symbol"),
-      filters    = "uniprotswissprot",
-      values     = unique(aggregated$uniprot_id),
-      mart       = ensembl
-    ) %>% distinct(uniprotswissprot, .keep_all = TRUE),
-    error = function(e) {
-      flog.error("BioMart query failed in PTM GSEA aggregation: %s",
-                 e$message)
-      NULL
-    }
-  )
-  if (is.null(mapping)) return(NULL)
+  # Map UniProt IDs to Ensembl IDs (same approach as the protein pipeline)
+  mapping <- map_uniprot_ids(aggregated$uniprot_id, org_db)
 
   aggregated <- aggregated %>%
     left_join(mapping, by = c("uniprot_id" = "uniprotswissprot")) %>%
@@ -316,8 +299,8 @@ aggregate_ptm_for_gsea <- function(limma_results, peptide_metadata, ensembl, p =
 #'   \code{PG.UniProtIds} for annotation joins. Pass \code{NULL} to skip.
 #' @param ont_option Character. GO ontology for GSEA: \code{"BP"} (default), \code{"MF"},
 #'   or \code{"CC"}.
-#' @param ensembl A \code{Mart} object from \code{biomaRt::useMart} for gene symbol
-#'   annotation. Pass \code{NULL} to skip BioMart lookup.
+#' @param org_db \code{OrgDb} annotation package (e.g. \code{org.Hs.eg.db}) used for
+#'   gene symbols, Ensembl IDs and GSEA.
 #' @param skip_gsea Logical. If \code{TRUE}, GSEA is skipped entirely. Default
 #'   \code{FALSE}.
 #' @param heatmap_norm Character. \code{"zscore"} (default) or \code{"intensity"} for
@@ -335,7 +318,7 @@ aggregate_ptm_for_gsea <- function(limma_results, peptide_metadata, ensembl, p =
 #'       \code{NULL} if the fit did not use blocking.}
 #'   }
 #'   Returns \code{NULL} if the analysis fails entirely.
-run_analysis_ptm <- function(comparison, limma_params, normalized_counts, out_dirs, intensity_matrix_raw = NULL, peptide_metadata = NULL, ont_option = "BP", ensembl=NULL, skip_gsea = FALSE, heatmap_norm = "zscore", color1 = "#D55E00", color2 = "#0072B2") {
+run_analysis_ptm <- function(comparison, limma_params, normalized_counts, out_dirs, intensity_matrix_raw = NULL, peptide_metadata = NULL, ont_option = "BP", org_db = NULL, skip_gsea = FALSE, heatmap_norm = "zscore", color1 = "#D55E00", color2 = "#0072B2") {
   tryCatch({
     flog.info("=== Starting PTM analysis for comparison: %s ===", comparison$name)
 
@@ -347,19 +330,8 @@ run_analysis_ptm <- function(comparison, limma_params, normalized_counts, out_di
     if (!is.null(peptide_metadata)) {
       limma_results <- limma_results %>% left_join(peptide_metadata, by = "peptide_id") %>%
         mutate(uniprot_id = sapply(strsplit(PG.UniProtIds, ";"), `[`, 1))
-      annotation <- tryCatch({
-        m <- getBM(
-          attributes = c("uniprotswissprot", "hgnc_symbol"),
-          filters    = "uniprotswissprot",
-          values     = unique(na.omit(limma_results$uniprot_id)),
-          mart       = ensembl
-        )
-        distinct(m, uniprotswissprot, .keep_all = TRUE)
-      }, error = function(e) {
-        flog.error("BioMart annotation failed for PTM comparison '%s': %s",
-                   comparison$name, e$message)
-        data.frame(uniprotswissprot = character(), hgnc_symbol = character())
-      })
+      annotation <- map_uniprot_ids(limma_results$uniprot_id, org_db) %>%
+        dplyr::select(uniprotswissprot, hgnc_symbol)
       limma_results <- limma_results %>%
         left_join(annotation, by = c("uniprot_id" = "uniprotswissprot"))
     }
@@ -429,7 +401,7 @@ run_analysis_ptm <- function(comparison, limma_params, normalized_counts, out_di
     } else {
       flog.info("Running PTM GSEA for %s", comparison$name)
       agg_result <- tryCatch(
-        aggregate_ptm_for_gsea(limma_results, peptide_metadata),
+        aggregate_ptm_for_gsea(limma_results, peptide_metadata, org_db),
         error = function(e) {
           flog.error("PTM GSEA aggregation failed for '%s': %s",
                      comparison$name, e$message)
