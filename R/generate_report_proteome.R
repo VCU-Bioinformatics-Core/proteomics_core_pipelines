@@ -379,7 +379,12 @@ if (!isTRUE(anova_summary$skipped)) {{
     anova_path <- file.path(out_dirs$anova, "global_anova.csv")
     if (file.exists(anova_path)) {{
       anova_df <- read.csv(anova_path)
-      if (!is.null(anova_summary$block_correlation)) {{
+      if (identical(anova_summary$blocking_method, "fixed effect")) {{
+        cat("Because samples share a **BlockingID**, the one-way ANOVA was replaced by a limma",
+            "moderated F-test across all", anova_summary$n_groups, "groups with the block added as a",
+            "fixed effect (`~ group + block`) to identify features that vary significantly beyond any",
+            "single pairwise comparison. P-values were adjusted using the Benjamini-Hochberg (BH) method.\n\n")
+      }} else if (!is.null(anova_summary$block_correlation)) {{
         cat("Because samples share a **BlockingID**, the one-way ANOVA was replaced by a limma",
             "moderated F-test across all", anova_summary$n_groups, "groups that treats samples from the",
             "same block as correlated (within-block correlation",
@@ -457,6 +462,7 @@ for (i in seq_along(comparisons)) {{
       down_daps <- sum(!is.na(res_df$adj.P.Val) & res_df$adj.P.Val < 0.05 & res_df$logFC <= -0.58)
 
       gsea_status <- ifelse(!is.null(results[[i]]$gsea), "Yes", "No")
+  Blocking = character(),
 
       summary_table <- rbind(summary_table, data.frame(
         Comparison = comparisons[[i]]$name,
@@ -481,6 +487,8 @@ plot, heatmap, table of top hits, and GSEA results (shown as both a bubble plot 
 
 ### Summary of Comparisions
 
+        Blocking = switch(results[[i]]$blocking_method %||% "none", "fixed effect" = "Fixed effect",
+                          correlation = "Correlation", NA_character_),
 Briefly, we report the following:
 
 - Total number of comparisons analyzed: `r length(comparisons)`
@@ -494,9 +502,11 @@ down this count accordingly. The **GSEA_Performed** column indicates whether GSE
 for each case.
 
 ```{{r display-summary-table}}
-# Display the summary table; the correlation column is only shown when BlockingID was used
-blocking_used <- !all(is.na(summary_table$Within_Block_Correlation)) || !is.null(anova_summary$block_correlation)
-if (all(is.na(summary_table$Within_Block_Correlation))) {{
+# Display the summary table; the blocking columns are only shown when BlockingID was used
+blocking_used <- !all(is.na(summary_table$Blocking)) || !is.null(anova_summary$blocking_method) ||
+  !is.null(anova_summary$block_correlation)
+if (all(is.na(summary_table$Blocking))) {{
+  summary_table$Blocking <- NULL
   summary_table$Within_Block_Correlation <- NULL
 }} else {{
   summary_table$Within_Block_Correlation <- ifelse(is.na(summary_table$Within_Block_Correlation), "N/A",
@@ -506,15 +516,20 @@ kable(summary_table, caption = "")
 ```
 
 ```{{r blocking-note, results="asis"}}
-if ("Within_Block_Correlation" %in% colnames(summary_table)) {{
-  cat("Samples sharing a **BlockingID** (e.g. several samples from the same patient) were treated as",
-      "correlated. **Within_Block_Correlation** is the correlation between samples of the same block,",
-      "estimated with `duplicateCorrelation` (limma) and used in the fit of that comparison: values near 0",
-      "mean samples from the same block behave almost independently, values near 1 mean they are",
-      "nearly identical. **N/A** means the comparison was fitted without blocking because no block had more than one sample in it.\n\n")
+if ("Blocking" %in% colnames(summary_table)) {{
+  cat("Samples sharing a **BlockingID** (e.g. several samples from the same patient) were not treated",
+      "as independent. **Blocking** gives the approach used in each comparison. *Fixed effect*: the",
+      "blocks spanned both groups, so the block was added to the model (`~ group + block`) and the",
+      "groups were compared within blocks. *Correlation*: the blocks were nested in the groups (e.g. each",
+      "patient in a single group), so the correlation between samples of the same block was estimated with",
+      "`duplicateCorrelation` (limma) and used in the fit; it is shown in **Within_Block_Correlation**",
+      "(near 0: samples from the same block behave almost independently; near 1: nearly identical).",
+      "**N/A** means not applicable: no block had more than one sample in the comparison, or the",
+      "comparison used a fixed effect, which has no correlation.\n\n")
 }}
 ```
 
+  summary_table$Blocking[is.na(summary_table$Blocking)] <- "N/A"
 ### Query Differential Expression Hits Across All Analyses
 
 Use the search boxes below to look up any protein. **Protein Name** is the gene symbol; **UniProt ID** is the Swiss-Prot accession. **Significant Comparisons** lists every comparison in which the protein was significant (adj. p-value < 0.05 and |FC| ≥ 1.5), or "Not Significant" if it did not meet that threshold in any comparison. Use the column search boxes (row below the header) to filter by protein name or UniProt ID — each column search box filters independently.
@@ -828,7 +843,7 @@ a down-shifted Gaussian distribution centered at the low end of the observed
 intensity distribution.
 
 Differential abundance analysis was carried out using limma v 1.44.0 [2].
-`r if (blocking_used) "Samples from the same block (BlockingID, e.g. the same patient) were treated as correlated: the within-block correlation was estimated with the duplicateCorrelation function of limma and included in the linear model fit." else ""`
+`r if (blocking_used) "Samples from the same block (BlockingID, e.g. the same patient) were not treated as independent. When the blocks spanned the groups being compared, the block was included as a fixed effect in the linear model, so groups were compared within blocks; otherwise, the within-block correlation was estimated with the duplicateCorrelation function of limma and included in the linear model fit." else ""`
 Proteins were considered significantly differentially abundant (DAP) when they
 exhibited an absolute log₂ fold-change ≥ 0.58 (1.5-fold) and an adjusted P-value
 (FDR) < 0.05 (correction done with a Benjamini Hochberg). Volcano plots and

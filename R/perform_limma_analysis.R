@@ -9,8 +9,11 @@
 #'     \item{design}{Model matrix as produced by \code{model.matrix}.}
 #'     \item{block}{Optional vector (one per sample) of block IDs, e.g. patients
 #'       contributing several samples. When any block has more than one sample, the
-#'       within-block correlation is estimated with \code{duplicateCorrelation} and
-#'       used in \code{lmFit}. \code{NULL} fits without blocking.}
+#'       blocks enter the model as fixed effects (\code{~ group + block}, see
+#'       \code{\link{add_block_effects}}) when they span the compared groups;
+#'       otherwise the within-block correlation is estimated with
+#'       \code{duplicateCorrelation} and used in \code{lmFit}. \code{NULL} fits
+#'       without blocking.}
 #'   }
 #' @param exp Character. Column name in \code{limma_params$design} for the experimental group.
 #' @param ctrl Character. Column name in \code{limma_params$design} for the control group.
@@ -18,34 +21,47 @@
 #'   per group. Default \code{2}. (Informational; filtering is expected upstream.)
 #' @return Data frame of limma results from \code{topTable} sorted by p-value, with columns
 #'   including \code{logFC}, \code{AveExpr}, \code{t}, \code{P.Value}, \code{adj.P.Val},
-#'   \code{B}. When blocking was used, the estimated within-block correlation is
-#'   attached as \code{attr(, "block_correlation")} (\code{NULL} otherwise). Stops with
-#'   an error if the analysis fails.
+#'   \code{B}. \code{attr(, "blocking_method")} is \code{"fixed effect"},
+#'   \code{"correlation"} or \code{NULL} (no blocking), and
+#'   \code{attr(, "block_correlation")} holds the estimated within-block correlation
+#'   for \code{"correlation"} (\code{NULL} otherwise). Stops with an error if the
+#'   analysis fails.
 perform_limma_analysis <- function(limma_params, exp, ctrl, min_valid_samples=2) {
   tryCatch({
     flog.info("Performing limma analysis: %s vs %s", exp, ctrl)
 
-    # Build contrast
-    contrast_matrix <- makeContrasts(contrasts = paste0(exp, "-", ctrl),
-                                     levels = colnames(limma_params$design))
-
-    # Fit linear model; samples sharing a block (e.g. patient) are correlated, so the
-    # within-block correlation is estimated and used in the fit
-    block <- limma_params$block
+    # Fit linear model; samples sharing a block (e.g. patient) are correlated. Blocks
+    # that span the compared groups enter as fixed effects (a within-block comparison);
+    # blocks nested in groups cannot, so their correlation is estimated instead
+    design <- limma_params$design
+    block  <- limma_params$block
     if (!is.null(block) && !any(duplicated(block))) {
       flog.info("No block has more than one sample in this comparison; fitting without blocking")
       block <- NULL
     }
     block_correlation <- NULL
+    blocking_method   <- NULL
+    design_fe <- if (is.null(block)) NULL else add_block_effects(design, block)
     if (is.null(block)) {
-      fit <- lmFit(limma_params$E, limma_params$design)
+      fit <- lmFit(limma_params$E, design)
+    } else if (!is.null(design_fe)) {
+      blocking_method <- "fixed effect"
+      design <- design_fe
+      flog.info("Blocks span the compared groups: fitting ~ group + block (%d residual df)",
+                nrow(design) - ncol(design))
+      fit <- lmFit(limma_params$E, design)
     } else {
-      corfit <- duplicateCorrelation(limma_params$E, limma_params$design, block = block)
+      blocking_method <- "correlation"
+      corfit <- duplicateCorrelation(limma_params$E, design, block = block)
       block_correlation <- corfit$consensus.correlation
-      flog.info("Within-block correlation (duplicateCorrelation): %.3f", block_correlation)
-      fit <- lmFit(limma_params$E, limma_params$design,
-                   block = block, correlation = block_correlation)
+      flog.info("Blocks nested in groups: within-block correlation (duplicateCorrelation): %.3f",
+                block_correlation)
+      fit <- lmFit(limma_params$E, design, block = block, correlation = block_correlation)
     }
+
+    # Build contrast
+    contrast_matrix <- makeContrasts(contrasts = paste0(exp, "-", ctrl),
+                                     levels = colnames(design))
     fit2 <- contrasts.fit(fit, contrast_matrix)
     fit2 <- eBayes(fit2, robust = TRUE)
 
@@ -54,6 +70,7 @@ perform_limma_analysis <- function(limma_params, exp, ctrl, min_valid_samples=2)
     flog.info("Limma analysis complete: %d results", nrow(res))
     res <- as.data.frame(res)
     attr(res, "block_correlation") <- block_correlation
+    attr(res, "blocking_method")   <- blocking_method
     return(res)
   }, error = function(e) {
     flog.error("Limma analysis failed: %s", e$message)

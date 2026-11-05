@@ -273,6 +273,7 @@ run_proteome_da_pipeline <- function(
     }
     anova_padj    <- p.adjust(anova_pvals, method = "BH")
     n_anova_sig   <- sum(anova_padj < 0.05, na.rm = TRUE)
+  anova_method      <- NULL
     n_anova_total <- nrow(mat)
     anova_df <- data.frame(
       Protein     = rownames(mat),
@@ -284,9 +285,11 @@ run_proteome_da_pipeline <- function(
   } else {
     n_anova_sig <- n_anova_total <- NULL
   }
+      anova_method      <- ftest$method
   anova_summary <- list(n_groups = n_anova_groups, n_sig = n_anova_sig,
                         n_total = n_anova_total, skipped = skip_anova,
-                        block_correlation = anova_correlation)
+                        block_correlation = anova_correlation,
+                        blocking_method = anova_method)
 
   # ==========================
   # Global heatmap + imputation figures

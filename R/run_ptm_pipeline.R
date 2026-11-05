@@ -267,6 +267,7 @@ run_ptm_pipeline <- function(
   flog.info("Running one-way ANOVA")
   n_anova_groups <- length(unique(sample_info$condition))
   anova_correlation <- NULL
+  anova_method      <- NULL
   if (skip_anova) {
     flog.info("Skipping ANOVA (--skip-anova flag set)")
     n_anova_sig <- n_anova_total <- NULL
@@ -278,6 +279,7 @@ run_ptm_pipeline <- function(
       ftest             <- global_ftest_blocked(mat, group, limma_params$block)
       anova_pvals       <- ftest$pvals
       anova_correlation <- ftest$correlation
+      anova_method      <- ftest$method
     } else {
       anova_pvals <- apply(mat, 1, function(x) {
         tryCatch(summary(aov(x ~ group))[[1]][["Pr(>F)"]][1], error = function(e) NA_real_)
@@ -298,7 +300,8 @@ run_ptm_pipeline <- function(
   }
   anova_summary <- list(n_groups = n_anova_groups, n_sig = n_anova_sig,
                         n_total = n_anova_total, skipped = skip_anova,
-                        block_correlation = anova_correlation)
+                        block_correlation = anova_correlation,
+                        blocking_method = anova_method)
 
   # ==========================
   # Global heatmap + imputation figures

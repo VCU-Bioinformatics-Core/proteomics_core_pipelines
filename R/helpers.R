@@ -187,24 +187,36 @@ read_blocking_id <- function(samplesheet) {
 #' @details Replaces the per-feature one-way ANOVA when samples share a
 #'   \code{BlockingID}. A classical ANOVA with an \code{Error(block)} term has no
 #'   single group p-value when groups differ both within blocks (e.g. tissue) and
-#'   between blocks (e.g. responders), so a limma moderated F-test is used instead:
-#'   \code{~group} is fitted with the within-block correlation from
-#'   \code{duplicateCorrelation}, and all group coefficients are tested jointly.
+#'   between blocks (e.g. responders), so a limma moderated F-test of all group
+#'   coefficients is used instead. As in \code{\link{perform_limma_analysis}}, blocks
+#'   enter as fixed effects (\code{~ group + block}) when the design allows it, and
+#'   otherwise \code{~group} is fitted with the within-block correlation from
+#'   \code{duplicateCorrelation}.
 #' @param mat Numeric matrix (features x samples) of log2 intensities.
 #' @param group Factor (one per sample) of group labels.
 #' @param block Vector (one per sample) of block IDs.
-#' @return Named list with \code{pvals} (one per row of \code{mat}, in row order)
-#'   and \code{correlation} (the within-block correlation used).
+#' @return Named list with \code{pvals} (one per row of \code{mat}, in row order),
+#'   \code{method} (\code{"fixed effect"} or \code{"correlation"}) and
+#'   \code{correlation} (the within-block correlation used, \code{NULL} for a fixed
+#'   effect).
 global_ftest_blocked <- function(mat, group, block) {
-  design <- model.matrix(~ group)
-  corfit <- duplicateCorrelation(mat, design, block = block)
-  flog.info("Global F-test within-block correlation (duplicateCorrelation): %.3f",
-            corfit$consensus.correlation)
-  fit <- eBayes(lmFit(mat, design, block = block, correlation = corfit$consensus.correlation),
-                robust = TRUE)
-  tt  <- topTable(fit, coef = 2:ncol(design), number = Inf, sort.by = "none")
+  design    <- model.matrix(~ group)
+  design_fe <- add_block_effects(design, block)
+  correlation <- NULL
+  if (!is.null(design_fe)) {
+    flog.info("Global F-test: fitting ~ group + block (%d residual df)",
+              nrow(design_fe) - ncol(design_fe))
+    fit <- eBayes(lmFit(mat, design_fe), robust = TRUE)
+  } else {
+    corfit <- duplicateCorrelation(mat, design, block = block)
+    correlation <- corfit$consensus.correlation
+    flog.info("Global F-test within-block correlation (duplicateCorrelation): %.3f", correlation)
+    fit <- eBayes(lmFit(mat, design, block = block, correlation = correlation), robust = TRUE)
+  }
+  tt <- topTable(fit, coef = 2:ncol(design), number = Inf, sort.by = "none")
   list(pvals = setNames(tt$P.Value, rownames(tt))[rownames(mat)],
-       correlation = corfit$consensus.correlation)
+       method = if (is.null(design_fe)) "correlation" else "fixed effect",
+       correlation = correlation)
 }
 
 #' @title Map UniProt Accessions to Ensembl Gene IDs and Gene Symbols
@@ -234,6 +246,28 @@ map_uniprot_ids <- function(uniprot_ids, org_db) {
     return(data.frame(uniprotswissprot = character(), ensembl_gene_id = character(),
                       hgnc_symbol = character()))
   }
+
+#' @title Add Blocks to a Design as Fixed Effects
+#' @details Appends one treatment-coded column per block (all but the first) to
+#'   \code{design}, i.e. \code{~ group + block}. This is the preferred way to handle
+#'   blocks when they span the groups being compared (e.g. each patient sampled in
+#'   both tissues): every comparison is then made within patients, and nothing has
+#'   to be estimated from the few blocks, unlike \code{duplicateCorrelation}. It is
+#'   impossible when blocks are nested in groups (e.g. each patient is either a
+#'   responder or not), because block and group effects are then confounded; that
+#'   shows up as a rank-deficient design.
+#' @param design Model matrix (samples x coefficients) for the groups.
+#' @param block Vector (one per sample) of block IDs.
+#' @return The extended design, or \code{NULL} when it is rank deficient or leaves no
+#'   residual degrees of freedom.
+add_block_effects <- function(design, block) {
+  block_terms <- model.matrix(~ factor(block))[, -1, drop = FALSE]
+  colnames(block_terms) <- make.unique(make.names(paste0("Block_", levels(factor(block))[-1])))
+  design_fe <- cbind(design, block_terms)
+  if (qr(design_fe)$rank < ncol(design_fe) || nrow(design_fe) <= ncol(design_fe)) return(NULL)
+  design_fe
+}
+
   found <- found[order(is.na(found$ENSEMBL)), ]
   found <- found[!duplicated(found$UNIPROT) & !(is.na(found$ENSEMBL) & is.na(found$SYMBOL)), ]
   mapping <- data.frame(uniprotswissprot = ids, key = sub("-\\d+$", "", ids)) %>%
