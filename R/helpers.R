@@ -183,6 +183,79 @@ read_blocking_id <- function(samplesheet) {
   block
 }
 
+#' @title Parse the --exclude-imputed Option
+#' @details \code{"All"} (any case) excludes proteins with at least one imputed value,
+#'   an integer \code{N >= 1} excludes proteins with at least \code{N} imputed values,
+#'   and a fraction \code{0 < f < 1} excludes proteins whose imputed share is at least
+#'   \code{f}. \code{"1"} is the count 1, not 100\%. Stops on any other value.
+#' @param value Character (or numeric) option value, or \code{NULL}.
+#' @return \code{NULL} when \code{value} is \code{NULL} (no exclusion), otherwise
+#'   \code{list(label, type = "count" | "fraction", threshold)}.
+parse_exclude_imputed <- function(value) {
+  if (is.null(value)) return(NULL)
+  label <- trimws(as.character(value))
+  if (tolower(label) == "all") return(list(label = "All", type = "count", threshold = 1))
+  num <- suppressWarnings(as.numeric(label))
+  if (!is.na(num) && num >= 1 && num == round(num)) {
+    return(list(label = label, type = "count", threshold = num))
+  }
+  if (!is.na(num) && num > 0 && num < 1) {
+    return(list(label = label, type = "fraction", threshold = num))
+  }
+  msg <- sprintf(paste("Invalid --exclude-imputed value '%s'. Use 'All', an integer >= 1",
+                       "(number of imputed values) or a fraction between 0 and 1."), label)
+  flog.fatal(msg)
+  stop(msg)
+}
+
+#' @title Select Proteins Passing the --exclude-imputed Rule
+#' @details A value counts as imputed when it is missing in the pre-imputation
+#'   matrix. Imputed values are counted over all samplesheet samples, so the same
+#'   proteins are excluded from every comparison.
+#' @param raw Pre-imputation matrix (features x samples), aligned to the samplesheet.
+#' @param rows Row names to evaluate (the rows of the imputed matrix).
+#' @param rule Output of \code{\link{parse_exclude_imputed}}.
+#' @return Logical vector along \code{rows}; \code{TRUE} keeps the protein. Stops
+#'   if no protein is kept.
+select_analysis_proteins <- function(raw, rows, rule) {
+  n_imp <- rowSums(is.na(raw[rows, , drop = FALSE]))
+  if (rule$type == "count" && rule$threshold > ncol(raw)) {
+    flog.warn("--exclude-imputed %s is larger than the number of samples (%d); no protein can be excluded",
+              rule$label, ncol(raw))
+  }
+  value <- if (rule$type == "fraction") n_imp / ncol(raw) else n_imp
+  keep  <- value < rule$threshold
+  flog.info("--exclude-imputed %s: excluding %d of %d proteins from the analyses",
+            rule$label, sum(!keep), length(keep))
+  if (!any(keep)) {
+    msg <- sprintf("--exclude-imputed %s excludes every protein", rule$label)
+    flog.fatal(msg)
+    stop(msg)
+  }
+  keep
+}
+
+#' @title Add Blocks to a Design as Fixed Effects
+#' @details Appends one treatment-coded column per block (all but the first) to
+#'   \code{design}, i.e. \code{~ group + block}. This is the preferred way to handle
+#'   blocks when they span the groups being compared (e.g. each patient sampled in
+#'   both tissues): every comparison is then made within patients, and nothing has
+#'   to be estimated from the few blocks, unlike \code{duplicateCorrelation}. It is
+#'   impossible when blocks are nested in groups (e.g. each patient is either a
+#'   responder or not), because block and group effects are then confounded; that
+#'   shows up as a rank-deficient design.
+#' @param design Model matrix (samples x coefficients) for the groups.
+#' @param block Vector (one per sample) of block IDs.
+#' @return The extended design, or \code{NULL} when it is rank deficient or leaves no
+#'   residual degrees of freedom.
+add_block_effects <- function(design, block) {
+  block_terms <- model.matrix(~ factor(block))[, -1, drop = FALSE]
+  colnames(block_terms) <- make.unique(make.names(paste0("Block_", levels(factor(block))[-1])))
+  design_fe <- cbind(design, block_terms)
+  if (qr(design_fe)$rank < ncol(design_fe) || nrow(design_fe) <= ncol(design_fe)) return(NULL)
+  design_fe
+}
+
 #' @title Global F-Test Across Groups With Blocking
 #' @details Replaces the per-feature one-way ANOVA when samples share a
 #'   \code{BlockingID}. A classical ANOVA with an \code{Error(block)} term has no
@@ -246,28 +319,6 @@ map_uniprot_ids <- function(uniprot_ids, org_db) {
     return(data.frame(uniprotswissprot = character(), ensembl_gene_id = character(),
                       hgnc_symbol = character()))
   }
-
-#' @title Add Blocks to a Design as Fixed Effects
-#' @details Appends one treatment-coded column per block (all but the first) to
-#'   \code{design}, i.e. \code{~ group + block}. This is the preferred way to handle
-#'   blocks when they span the groups being compared (e.g. each patient sampled in
-#'   both tissues): every comparison is then made within patients, and nothing has
-#'   to be estimated from the few blocks, unlike \code{duplicateCorrelation}. It is
-#'   impossible when blocks are nested in groups (e.g. each patient is either a
-#'   responder or not), because block and group effects are then confounded; that
-#'   shows up as a rank-deficient design.
-#' @param design Model matrix (samples x coefficients) for the groups.
-#' @param block Vector (one per sample) of block IDs.
-#' @return The extended design, or \code{NULL} when it is rank deficient or leaves no
-#'   residual degrees of freedom.
-add_block_effects <- function(design, block) {
-  block_terms <- model.matrix(~ factor(block))[, -1, drop = FALSE]
-  colnames(block_terms) <- make.unique(make.names(paste0("Block_", levels(factor(block))[-1])))
-  design_fe <- cbind(design, block_terms)
-  if (qr(design_fe)$rank < ncol(design_fe) || nrow(design_fe) <= ncol(design_fe)) return(NULL)
-  design_fe
-}
-
   found <- found[order(is.na(found$ENSEMBL)), ]
   found <- found[!duplicated(found$UNIPROT) & !(is.na(found$ENSEMBL) & is.na(found$SYMBOL)), ]
   mapping <- data.frame(uniprotswissprot = ids, key = sub("-\\d+$", "", ids)) %>%

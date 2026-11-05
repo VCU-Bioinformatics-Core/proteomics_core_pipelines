@@ -30,6 +30,11 @@
 #'   methods. Default \code{0.01}.
 #' @param imputation_seed Integer. Random seed for reproducible imputation.
 #'   Default \code{42}.
+#' @param exclude_imputed Character or \code{NULL}. Excludes proteins with imputed
+#'   values from limma, the PCA, the ANOVA and the global heatmap: \code{"All"}
+#'   (any imputed value), an integer \code{N} (\code{N} or more imputed values) or a
+#'   fraction (that share or more imputed), counted over all samplesheet samples.
+#'   See \code{\link{parse_exclude_imputed}}. Default \code{NULL} (no exclusion).
 #' @param heatmap_top_n Integer. Number of top variable proteins to include
 #'   in the global heatmap. Default \code{1000}.
 #' @param heatmap_norm Character. Normalisation applied before heatmap
@@ -65,6 +70,7 @@ run_proteome_da_pipeline <- function(
   imputation_method = "DEP-MinProb",
   imputation_q      = 0.01,
   imputation_seed   = 42,
+  exclude_imputed   = NULL,
   heatmap_top_n     = 1000,
   heatmap_norm      = "zscore",
   gsea_ont          = "BP",
@@ -75,6 +81,7 @@ run_proteome_da_pipeline <- function(
 ) {
   setup_logging(out_dir, run_id = run_id)
   flog.info("Pipeline started: runID=%s, genome=%s, outdir=%s", run_id, genome, out_dir)
+  exclude_rule <- parse_exclude_imputed(exclude_imputed)
 
   # ==========================
   # Load annotation DB
@@ -205,6 +212,17 @@ run_proteome_da_pipeline <- function(
   write.csv(intensity_matrix_raw, file.path(out_dirs$data, "protein_raw_matrix.csv"))
   flog.info("Pre-imputation intensity matrix written to %s", file.path(out_dirs$data, "protein_raw_matrix.csv"))
 
+  # Proteins analysed downstream (limma, PCA, ANOVA, global heatmap); the imputation
+  # figures keep every protein
+  analysis_matrix <- intensity_matrix
+  if (!is.null(exclude_rule)) {
+    keep <- select_analysis_proteins(intensity_matrix_raw, rownames(intensity_matrix), exclude_rule)
+    analysis_matrix <- intensity_matrix[keep, , drop = FALSE]
+  }
+  write.csv(analysis_matrix, file.path(out_dirs$data, "protein_analysis_matrix.csv"))
+  flog.info("Analysis matrix (%d proteins) written to %s", nrow(analysis_matrix),
+            file.path(out_dirs$data, "protein_analysis_matrix.csv"))
+
   # ==========================
   # Limma design matrix + analysis loop
   # ==========================
@@ -212,12 +230,12 @@ run_proteome_da_pipeline <- function(
   design      <- model.matrix(~0 + condition, data = sample_info)
   colnames(design) <- levels(factor(sample_info$condition))
   rownames(design) <- as.character(sample_info$sample)
-  limma_params <- list(E = intensity_matrix, design = design, block = read_blocking_id(comparisons_raw))
+  limma_params <- list(E = analysis_matrix, design = design, block = read_blocking_id(comparisons_raw))
 
   results <- vector("list", length(comparisons))
   for (i in seq_along(comparisons)) {
     curr_result <- run_single_proteome_da_comparison(
-      comparisons[[i]], subset_limma_params(limma_params, comparisons[[i]]), intensity_matrix, out_dirs, intensity_matrix_raw, org_db=org_db,
+      comparisons[[i]], subset_limma_params(limma_params, comparisons[[i]]), analysis_matrix, out_dirs, intensity_matrix_raw, org_db=org_db,
       ont_option = gsea_ont, skip_gsea = skip_gsea, protein_metadata = protein_metadata,
       heatmap_norm = heatmap_norm, color1 = group_color1, color2 = group_color2
     )
@@ -228,7 +246,7 @@ run_proteome_da_pipeline <- function(
   # PCA
   # ==========================
   flog.info("Running Principal Component Analysis")
-  input_pca_matrix <- as.matrix(intensity_matrix)
+  input_pca_matrix <- as.matrix(analysis_matrix)
   finite_rows      <- apply(input_pca_matrix, 1, function(x) all(is.finite(x)))
   input_pca_matrix <- t(input_pca_matrix[finite_rows, ])
   pca_results  <- prcomp(input_pca_matrix, rank. = 3)
@@ -255,17 +273,19 @@ run_proteome_da_pipeline <- function(
   flog.info("Running one-way ANOVA")
   n_anova_groups <- length(unique(sample_info$condition))
   anova_correlation <- NULL
+  anova_method      <- NULL
   if (skip_anova) {
     flog.info("Skipping ANOVA (--skip-anova flag set)")
     n_anova_sig <- n_anova_total <- NULL
   } else if (n_anova_groups > 2) {
     group       <- factor(sample_info$condition)
-    mat         <- as.matrix(intensity_matrix)
+    mat         <- as.matrix(analysis_matrix)
     if (!is.null(limma_params$block) && any(duplicated(limma_params$block))) {
       flog.info("BlockingID present: using a limma moderated F-test with blocking instead of aov")
       ftest             <- global_ftest_blocked(mat, group, limma_params$block)
       anova_pvals       <- ftest$pvals
       anova_correlation <- ftest$correlation
+      anova_method      <- ftest$method
     } else {
       anova_pvals <- apply(mat, 1, function(x) {
         tryCatch(summary(aov(x ~ group))[[1]][["Pr(>F)"]][1], error = function(e) NA_real_)
@@ -273,7 +293,6 @@ run_proteome_da_pipeline <- function(
     }
     anova_padj    <- p.adjust(anova_pvals, method = "BH")
     n_anova_sig   <- sum(anova_padj < 0.05, na.rm = TRUE)
-  anova_method      <- NULL
     n_anova_total <- nrow(mat)
     anova_df <- data.frame(
       Protein     = rownames(mat),
@@ -285,7 +304,6 @@ run_proteome_da_pipeline <- function(
   } else {
     n_anova_sig <- n_anova_total <- NULL
   }
-      anova_method      <- ftest$method
   anova_summary <- list(n_groups = n_anova_groups, n_sig = n_anova_sig,
                         n_total = n_anova_total, skipped = skip_anova,
                         block_correlation = anova_correlation,
@@ -295,7 +313,7 @@ run_proteome_da_pipeline <- function(
   # Global heatmap + imputation figures
   # ==========================
   flog.info("Generating global heatmap")
-  generate_global_heatmap(intensity_matrix, out_dirs, top_n = heatmap_top_n,
+  generate_global_heatmap(analysis_matrix, out_dirs, top_n = heatmap_top_n,
                           heatmap_norm = heatmap_norm, color1 = group_color1, color2 = group_color2)
 
   flog.info("Generating imputation figures")
@@ -341,8 +359,11 @@ run_proteome_da_pipeline <- function(
   imputation_params <- list(method = imputation_method, q = imputation_q)
   n_ensembl_mapped  <- sum(!is.na(protein_metadata$ensembl_gene_id))
   protein_counts    <- list(total = n_proteins_total, no_crap = n_proteins_no_crap,
-                            not_imputable = n_peptides_not_imputable, ensembl_mapped = n_ensembl_mapped)
+                            not_imputable = n_peptides_not_imputable, ensembl_mapped = n_ensembl_mapped,
+                            excluded_imputed = if (!is.null(exclude_rule)) nrow(intensity_matrix) - nrow(analysis_matrix),
+                            analysed = nrow(analysis_matrix))
   analysis_params   <- list(genome = genome, gsea_ont = gsea_ont, skip_gsea = skip_gsea,
+                            exclude_imputed = exclude_rule$label,
                             heatmap_top_n = heatmap_top_n, heatmap_norm = heatmap_norm,
                             color1 = group_color1, color2 = group_color2,
                             code_version = get_code_version())

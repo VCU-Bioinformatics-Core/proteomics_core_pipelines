@@ -148,6 +148,18 @@ This hybrid approach minimizes artificial noise while retaining the MNAR-aware b
 
 > **Note:** Additional custom imputation methods can be added to `workflow/custom_imputation.R` by defining a function named `impute_<method_name>()` and then passing `--imputation <method_name>` at runtime.
 
+### Excluding Imputed Proteins
+
+`--exclude-imputed` (protein pipeline only) removes proteins that relied too much on imputation. Imputed values are counted over all samplesheet samples, so the same proteins are dropped from every comparison:
+
+| Value | Excludes a protein when |
+|---|---|
+| `All` | at least one value was imputed |
+| integer `N` (e.g. `1`, `10`) | `N` or more values were imputed (`1` means one value, not 100%) |
+| fraction `f` between 0 and 1 (e.g. `0.5`) | a share `f` or more of its values was imputed |
+
+The excluded proteins are still imputed, but are left out of the limma comparisons (and so of the volcano, MA, heatmap and GSEA results), the PCA, the ANOVA and the global heatmap. The imputation figures keep every protein. The matrix used for these analyses is written to `data/protein_analysis_matrix.csv` (identical to `protein_imputed_matrix.csv` without the flag), and the report lists the number excluded in the Protein Filtering Summary. Without the flag nothing is excluded.
+
 ---
 
 ## Differential Abundance Analysis
@@ -271,6 +283,7 @@ Rscript de.regular.R \
 - `-i, --imputation`: Imputation method (default: `DEP-MinProb`). DEP methods: `DEP-MinProb`, `DEP-knn`, `DEP-bpca`, `DEP-QRILC`, `DEP-man`. Custom methods defined in `workflow/custom_imputation.R` (e.g. `3by3`). Use `none` to skip.
 - `-q, --imputation-q`: Quantile cutoff for the left-censored distribution used by `DEP-MinProb` and `DEP-QRILC` (default: `0.01`)
 - `--seed`: Random seed for reproducibility of stochastic imputation methods (default: `42`)
+- `--exclude-imputed`: Exclude proteins with imputed values from limma, PCA, ANOVA and the global heatmap: `All`, an integer count or a fraction (default: no exclusion; see [Excluding Imputed Proteins](#excluding-imputed-proteins))
 - `--heatmap-norm`: Heatmap row normalization — `zscore` (z-score normalize rows) or `none` (raw intensity) (default: `zscore`)
 - `--heatmap-top-n`: Number of top proteins by CV to show in the global heatmap (default: `1000`)
 - `--gsea-ont`: Gene Ontology category for GSEA: `BP`, `MF`, `CC`, or `ALL` (default: `BP`)
@@ -346,6 +359,7 @@ The pipeline generates an output directory (specified by `--outdir`) with the fo
 ```
 
 **Key output files:**
+- `protein_analysis_matrix.csv` — imputed matrix used for limma, PCA, ANOVA and the global heatmap (proteins removed by `--exclude-imputed` left out)
 - `[comparison]_limma.csv` — full limma results (logFC, pvalue, padj, imputation_category per protein)
 - `[comparison]_go_analysis_.csv` — GSEA Gene Ontology results (NES, pvalue, p.adjust, leading edge)
 - `global_anova.csv` — one-way ANOVA results across all groups (generated when >2 groups; a limma moderated F-test with blocking when the samplesheet has a `BlockingID`)

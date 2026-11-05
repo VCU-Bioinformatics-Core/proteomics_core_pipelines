@@ -47,6 +47,13 @@ option_list <- list(
               )),
   make_option(c("-q", "--imputation-q"), type = "double", default = 0.01,
               help = "q parameter for MinProb/QRILC: quantile cutoff [default= %default]"),
+  make_option(c("--exclude-imputed"), type = "character", default = NULL,
+              help = paste(
+                "Exclude proteins with imputed values from limma, PCA, ANOVA and the global heatmap.",
+                "'All': any imputed value; integer N: N or more imputed values;",
+                "fraction f (0-1): f or more of the values imputed.",
+                "[default= no exclusion]"
+              )),
   make_option(c("--seed"), type = "integer", default = 42,
               help = "Random seed for reproducibility [default= %default]"),
   make_option(c("--heatmap-top-n"), type = "integer", default = 1000,
@@ -82,6 +89,7 @@ run_proteome_da_pipeline(
   imputation_method = opt$imputation,
   imputation_q      = opt$`imputation-q`,
   imputation_seed   = opt$seed,
+  exclude_imputed   = opt$`exclude-imputed`,
   heatmap_top_n     = opt$`heatmap-top-n`,
   heatmap_norm      = opt$`heatmap-norm`,
   gsea_ont          = opt$`gsea-ont`,

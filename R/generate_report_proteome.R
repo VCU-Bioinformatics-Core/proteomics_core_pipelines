@@ -118,6 +118,17 @@ analysis_params <- rds_data[[10]]
 anova_summary <- rds_data[[11]]
 color1 <- if (!is.null(analysis_params$color1)) analysis_params$color1 else "#D55E00"
 color2 <- if (!is.null(analysis_params$color2)) analysis_params$color2 else "#0072B2"
+# --exclude-imputed rule in words, NULL when no proteins were excluded
+exclude_label <- analysis_params$exclude_imputed
+exclude_desc  <- if (is.null(exclude_label)) NULL else
+  if (exclude_label == "All") "at least one imputed value" else
+  if (as.numeric(exclude_label) < 1) paste0(as.numeric(exclude_label) * 100, "% or more of their values imputed") else
+  paste(exclude_label, "or more imputed values")
+# Optional Pipeline list item, appended to the Imputation item (an empty line would loosen the list)
+exclude_item  <- if (is.null(exclude_desc)) "" else
+  paste0("\n1. **Exclusion of imputed proteins**: Proteins with ", exclude_desc,
+         " across all samples (`--exclude-imputed ", exclude_label,
+         "`) were excluded from the differential abundance tests, PCA, ANOVA and global heatmap.")
 ```
 
 ## Overview
@@ -141,7 +152,7 @@ or downstream Ingenuity Pathway Analysis (IPA), please see the output directorie
 
 For this analysis we used the following steps:
 
-1. **Imputation**: Missing values were imputed prior to differential abundance testing.
+1. **Imputation**: Missing values were imputed prior to differential abundance testing.`r exclude_item`
 2. **Differential abundance**: Limma was used to identify differentially abundant proteins.
 3. **Functional analysis**: Gene Set Enrichment Analysis (GSEA) was performed using clusterProfiler.
 4. **Thresholds**: Proteins with adjusted p-value < 0.05 and |FC| >= 1.5 (equivalent to log2(FC) = 0.58) were considered differentially abundant.
@@ -239,6 +250,11 @@ if (!is.null(protein_counts)) {{
     counts <- c(counts, protein_counts$not_imputable)
     steps  <- c(steps,  "Curated proteins (used downstream)")
     counts <- c(counts, protein_counts$no_crap - protein_counts$not_imputable)
+  }}
+  if (!is.null(protein_counts$excluded_imputed)) {{
+    steps  <- c(steps,  paste0("Excluded for imputation (`--exclude-imputed ", exclude_label, "`)"),
+                        "Proteins analysed (DA, PCA, ANOVA, heatmap)")
+    counts <- c(counts, protein_counts$excluded_imputed, protein_counts$analysed)
   }}
   summary_df <- data.frame(Step = steps, Count = counts, stringsAsFactors = FALSE)
   knitr::kable(summary_df)
@@ -446,6 +462,7 @@ summary_table <- data.frame(
   Downregulated = integer(),
   `# Ensembl Mapped` = integer(),
   GSEA_Performed = character(),
+  Blocking = character(),
   Within_Block_Correlation = numeric(),
   stringsAsFactors = FALSE,
   check.names = FALSE
@@ -462,7 +479,6 @@ for (i in seq_along(comparisons)) {{
       down_daps <- sum(!is.na(res_df$adj.P.Val) & res_df$adj.P.Val < 0.05 & res_df$logFC <= -0.58)
 
       gsea_status <- ifelse(!is.null(results[[i]]$gsea), "Yes", "No")
-  Blocking = character(),
 
       summary_table <- rbind(summary_table, data.frame(
         Comparison = comparisons[[i]]$name,
@@ -471,6 +487,8 @@ for (i in seq_along(comparisons)) {{
         Downregulated = down_daps,
         `# Ensembl Mapped` = n_ensembl_mapped,
         GSEA_Performed = gsea_status,
+        Blocking = switch(results[[i]]$blocking_method %||% "none", "fixed effect" = "Fixed effect",
+                          correlation = "Correlation", NA_character_),
         Within_Block_Correlation = if (!is.null(results[[i]]$block_correlation)) round(results[[i]]$block_correlation, 3) else NA_real_,
         stringsAsFactors = FALSE,
         check.names = FALSE
@@ -487,8 +505,6 @@ plot, heatmap, table of top hits, and GSEA results (shown as both a bubble plot 
 
 ### Summary of Comparisions
 
-        Blocking = switch(results[[i]]$blocking_method %||% "none", "fixed effect" = "Fixed effect",
-                          correlation = "Correlation", NA_character_),
 Briefly, we report the following:
 
 - Total number of comparisons analyzed: `r length(comparisons)`
@@ -509,6 +525,7 @@ if (all(is.na(summary_table$Blocking))) {{
   summary_table$Blocking <- NULL
   summary_table$Within_Block_Correlation <- NULL
 }} else {{
+  summary_table$Blocking[is.na(summary_table$Blocking)] <- "N/A"
   summary_table$Within_Block_Correlation <- ifelse(is.na(summary_table$Within_Block_Correlation), "N/A",
                                                    format(summary_table$Within_Block_Correlation))
 }}
@@ -529,7 +546,6 @@ if ("Blocking" %in% colnames(summary_table)) {{
 }}
 ```
 
-  summary_table$Blocking[is.na(summary_table$Blocking)] <- "N/A"
 ### Query Differential Expression Hits Across All Analyses
 
 Use the search boxes below to look up any protein. **Protein Name** is the gene symbol; **UniProt ID** is the Swiss-Prot accession. **Significant Comparisons** lists every comparison in which the protein was significant (adj. p-value < 0.05 and |FC| ≥ 1.5), or "Not Significant" if it did not meet that threshold in any comparison. Use the column search boxes (row below the header) to filter by protein name or UniProt ID — each column search box filters independently.
@@ -841,6 +857,7 @@ acquisition (DDA) experiments are commonly attributed to a missing-not-at-random
 detection threshold. To address this, remaining missing values were imputed from
 a down-shifted Gaussian distribution centered at the low end of the observed
 intensity distribution.
+`r if (!is.null(exclude_desc)) paste0("After imputation, proteins with ", exclude_desc, " across all samples were excluded from the differential abundance, principal component, ANOVA and global heatmap analyses.") else ""`
 
 Differential abundance analysis was carried out using limma v 1.44.0 [2].
 `r if (blocking_used) "Samples from the same block (BlockingID, e.g. the same patient) were not treated as independent. When the blocks spanned the groups being compared, the block was included as a fixed effect in the linear model, so groups were compared within blocks; otherwise, the within-block correlation was estimated with the duplicateCorrelation function of limma and included in the linear model fit." else ""`
